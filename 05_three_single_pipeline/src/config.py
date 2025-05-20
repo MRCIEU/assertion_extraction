@@ -11,7 +11,7 @@ CLAUDE_MODEL = "claude-3-haiku-20240307"
 LLMAPI_MODEL = "llama3-8b"
 
 # File Paths
-CSV_PATH = "../02_extract_results_CITATIONS/raw_abstracts.csv"
+CSV_PATH = "../02.1_extract_results_CITATIONS/raw_abstracts.csv"
 FIND_DIR     = "finding"
 COMP_DIR = "completion"
 ASSR_DIR    = "assertion"
