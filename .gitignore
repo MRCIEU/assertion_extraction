@@ -16,3 +16,5 @@ nltk_data/
 parse_failures.jsonl
 
 *.npy
+*.pt
+*.pkl
