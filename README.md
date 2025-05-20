@@ -1,6 +1,6 @@
 # Assertion Extraction from Biomedical Abstracts
 
-This repository contains all code, configuration, and modules for an experimental pipeline to extract scientific assertions (subject–predicate–object triples) from biomedical literature. The core focus is on evaluating and comparing different large language models (LLMs) for multi-stage information extraction.
+This repository contains all code, configuration, and modules for an experimental pipeline to extract scientific assertions (subject–predicate–object triples) from biomedical literature. The core focus is on evaluating and comparing different LLMs for multi-stage information extraction.
 
 ---
 
@@ -9,7 +9,7 @@ This repository contains all code, configuration, and modules for an experimenta
 The pipeline is divided into three main stages:
 
 1. **Finding Detection** – Identify which sentences in an abstract contain scientific findings.
-2. **Completion / Resolution** – Convert finding sentences into standalone factual statements.
+2. **Completion and Resolution** – Convert finding sentences into standalone factual statements.
 3. **Assertion Extraction** – Convert standalone statements into structured triples: (subject, predicate, object), with optional conditions.
 
 ---
