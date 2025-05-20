@@ -27,8 +27,6 @@ The pipeline is divided into three main stages:
 | `05_three_single_pipeline/`       | **Main pipeline experiment. Includes finding → completion → assertion**.   |
 | `.gitignore`                      | Specifies excluded file types (e.g. `.npy`, `.pt`).                         |
 | `environment.yml`                 | Conda environment file with all required dependencies.                      |
-| `README.md`                       | This project overview and usage instructions.                              |
-
 ---
 
 ## Current Main Experiment: `05_three_single_pipeline/`
