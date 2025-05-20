@@ -15,3 +15,4 @@ nltk_data/
 *.jsonl
 parse_failures.jsonl
 
+*.npy
