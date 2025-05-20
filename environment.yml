@@ -1,0 +1,21 @@
+name: hf-hpc
+channels:
+  - conda-forge
+dependencies:
+  - tqdm
+  - python=3.10
+  - openai
+  - pandas
+  - pip
+  - spacy
+  - pydantic[version='>=1.10']
+  - jupyter
+  - scikit-learn
+  - torchvision
+  - cpuonly
+  - torchaudio
+  - pytorch
+  - transformers
+  - matplotlib
+  - seaborn
+prefix: /user/home/nd23942/miniforge3/envs/hf-hpc

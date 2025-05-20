@@ -1,0 +1,17 @@
+# Ignore Python cache
+__pycache__/
+*.pyc
+
+# Ignore Jupyter checkpoints
+.ipynb_checkpoints/
+
+# Ignore local Conda environment
+miniforge3/
+Miniforge3-Linux-x86_64.sh
+nltk_data/
+
+# Output/Temporary File
+*.log
+*.jsonl
+parse_failures.jsonl
+

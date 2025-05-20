@@ -1,0 +1,8 @@
+              precision    recall  f1-score   support
+
+  background     0.9445    0.9570    0.9507     15249
+     finding     0.9539    0.9406    0.9472     14423
+
+    accuracy                         0.9490     29672
+   macro avg     0.9492    0.9488    0.9490     29672
+weighted avg     0.9491    0.9490    0.9490     29672
