@@ -45,7 +45,7 @@ Additional utilities:
 
 ---
 
-## 🛠️ Environment Setup
+## Environment Setup
 
 ```bash
 conda env create -f environment.yml
