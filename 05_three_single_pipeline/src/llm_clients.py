@@ -2,7 +2,7 @@ import openai, backoff, random, time
 from openai import OpenAI
 import anthropic
 from src.logger import log_api_call
-from src.utils import estimate_openai_cost
+from src.utils import estimate_cost, estimate_tokens
 
 # GPT Client
 class GPTClient:
@@ -28,7 +28,7 @@ class GPTClient:
             prompt_tokens=usage.prompt_tokens,
             response_tokens=usage.completion_tokens,
             duration_sec=t1 - t0,
-            cost_usd=estimate_openai_cost(self.model, usage.total_tokens)
+            cost_usd=estimate_cost(self.model, usage.total_tokens)
         )
         return resp.choices[0].message.content
 
@@ -42,23 +42,30 @@ class ClaudeClient:
     def run(self, messages: list[dict], task_id: str = "unknown") -> str:
         system_msg = messages[0]["content"]
         chat_msgs = messages[1:]
+
+        # Token estimate logic BEFORE any try block
+        full_prompt = system_msg + "\n" + "\n".join(m["content"] for m in chat_msgs)
+        estimated_tokens = estimate_tokens(full_prompt)
+
         t0 = time.time()
         resp = self.client.messages.create(
             model=self.model,
             system=system_msg,
+            messages=chat_msgs,
             max_tokens=2048,
-            temperature=0.0,
-            messages=chat_msgs
+            temperature=0.0
         )
         t1 = time.time()
+
         log_api_call(
             model=self.model,
             task_id=task_id,
-            prompt_tokens=0,  # Anthropic no return token usage
+            prompt_tokens=estimated_tokens,
             response_tokens=0,
             duration_sec=t1 - t0,
-            cost_usd=None
+            cost_usd=estimate_cost(self.model, estimated_tokens)
         )
+
         return resp.content[0].text
 
 # Llama API Client
@@ -92,7 +99,7 @@ class LlamaAPIClient:
             prompt_tokens=usage.prompt_tokens if usage else 0,
             response_tokens=usage.completion_tokens if usage else 0,
             duration_sec=t1 - t0,
-            cost_usd=None
+            cost_usd=estimate_cost(self.model, usage.total_tokens) if usage else None
         )
         return resp.choices[0].message.content
 
