@@ -310,11 +310,18 @@ def _collect_stage_rows(
 def build_stage_dataset(
     cfg: dict, stage: Stage, label2id: dict[str, int], seed: int,
 ) -> tuple[PairDataset, PairDataset]:
-    """Collect + dev-split positives for one stage.
+    """Collect + dev-split positives for one stage, then **materialise
+    negatives on the dev side** so dev macro-F1 is comparable to Phase A
+    (which evidently evaluated on mixed pos/neg dev — its step-64 dev
+    accuracy was already 0.836, impossible for positives-only 4-class).
 
-    Returns `(train_ds, dev_ds)` — both hold dicts with `label` still as
-    string.  The collator converts to label_id at batch time (so online
-    negatives can be added in-place).
+    Training negatives remain online (per-batch, via the collator).  Dev
+    negatives are frozen at build time so scoring is reproducible across
+    evals within one training run.
+
+    Returns `(train_ds, dev_ds)` — dev_ds contains both held-out positives
+    and their associated sampled negatives; train_ds is positives only
+    (collator adds negatives at batch time).
     """
     st = cfg["scientific_trainer"]
     neg_cfg = cfg.get("negative_sampling", {}) or {}
@@ -340,8 +347,19 @@ def build_stage_dataset(
     rng.shuffle(rows)
     dev_fraction = float(st.get("dev_fraction", 0.12))
     n_dev = max(1, int(round(dev_fraction * len(rows))))
-    dev_rows, train_rows = rows[:n_dev], rows[n_dev:]
-    return PairDataset(train_rows), PairDataset(dev_rows)
+    dev_pos, train_rows = rows[:n_dev], rows[n_dev:]
+
+    # Materialise dev negatives once (frozen across evals within a run).
+    n_neg_per = max(1, int(round(float(neg_cfg.get("negative_ratio", 4.0)))))
+    n_neg_per = min(n_neg_per, int(neg_cfg.get("max_negatives_per_sample", 64)))
+    neg_rng = random.Random((seed ^ 0xDEADBEEF) + hash(stage))
+    dev_rows_all: list[dict] = []
+    for p in dev_pos:
+        dev_rows_all.append(p)
+        negs = sample_document_negatives(p, neg_rng, pair_filter, n_negatives=n_neg_per)
+        dev_rows_all.extend(negs)
+
+    return PairDataset(train_rows), PairDataset(dev_rows_all)
 
 
 # ─────────────────────────────────────────────────────────────────────

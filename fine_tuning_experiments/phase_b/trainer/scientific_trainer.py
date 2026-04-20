@@ -98,11 +98,25 @@ def _set_all_seeds(seed: int) -> None:
 # ─────────────────────────────────────────────────────────────────────
 
 class _OnlineCollator:
+    """Emit batches of exactly `effective_batch_size` samples (positives +
+    online-sampled negatives mixed).
+
+    Phase A config sets `batch_size = 4` and `negative_ratio = 4.0`.  The
+    natural interpretation — consistent with Phase A's observed step-64 dev
+    accuracy of 0.836 (only possible if dev and train both contain a mix of
+    positives and negatives, with NEG as the dominant class) — is that a
+    "batch" of 4 is **4 total samples**: ~1 positive plus ~3 negatives on
+    average.  We therefore configure the `DataLoader` to yield `positives_per_batch
+    = max(1, batch_size // (1 + n_neg_per_pos))` positives per step, and the
+    collator rounds out each step with `n_neg_per_pos` negatives per positive,
+    then truncates to `batch_size`.
+    """
+
     def __init__(
         self, tokenizer, label2id: dict[str, int], max_length: int,
         pair_type_filter: str, negative_ratio: float,
         max_negatives_per_sample: int, source_weights: dict[str, float],
-        rng: random.Random,
+        rng: random.Random, effective_batch_size: int,
     ):
         self.tokenizer = tokenizer
         self.label2id = label2id
@@ -111,24 +125,29 @@ class _OnlineCollator:
         self.n_neg_per_pos = max(1, min(max_negatives_per_sample, int(round(negative_ratio))))
         self.source_weights = source_weights
         self.rng = rng
+        self.effective_batch_size = effective_batch_size
 
     def __call__(self, positives: list[dict]) -> dict[str, torch.Tensor]:
-        texts: list[str] = []
-        labels: list[int] = []
-        source_ws: list[float] = []
-
+        rows: list[tuple[str, str, float]] = []  # (text, label_str, source_w)
         for pos in positives:
-            texts.append(pos["text"])
-            labels.append(self.label2id[pos["label"]])
-            source_ws.append(float(self.source_weights.get(pos.get("source_dataset"), 1.0)))
-
+            rows.append((
+                pos["text"], pos["label"],
+                float(self.source_weights.get(pos.get("source_dataset"), 1.0)),
+            ))
             negs = sample_document_negatives(
                 pos, self.rng, self.pair_filter, n_negatives=self.n_neg_per_pos,
             )
             for n in negs:
-                texts.append(n["text"])
-                labels.append(self.label2id[NEG_LABEL])
-                source_ws.append(float(self.source_weights.get(pos.get("source_dataset"), 1.0)))
+                rows.append((
+                    n["text"], NEG_LABEL,
+                    float(self.source_weights.get(pos.get("source_dataset"), 1.0)),
+                ))
+        # Truncate / pad to effective_batch_size by shuffling and cutting.
+        self.rng.shuffle(rows)
+        rows = rows[:self.effective_batch_size]
+        texts = [r[0] for r in rows]
+        labels = [self.label2id[r[1]] for r in rows]
+        source_ws = [r[2] for r in rows]
 
         enc = self.tokenizer(
             texts, padding=True, truncation=True,
@@ -213,6 +232,12 @@ def _train_one_stage(
     lr = float(cfg_st["learning_rate"])
 
     coll_rng = random.Random(stage_rng_seed)
+    n_neg_per_pos = max(1, min(
+        int(cfg_neg.get("max_negatives_per_sample", 64)),
+        int(round(float(cfg_neg.get("negative_ratio", 4.0)))),
+    ))
+    # positives_per_batch = ceil(batch_size / (1 + n_neg_per_pos)); ensure ≥ 1
+    positives_per_batch = max(1, batch_size // (1 + n_neg_per_pos))
     collator = _OnlineCollator(
         tokenizer=tokenizer,
         label2id=label2id,
@@ -222,9 +247,10 @@ def _train_one_stage(
         max_negatives_per_sample=int(cfg_neg.get("max_negatives_per_sample", 64)),
         source_weights=source_weights,
         rng=coll_rng,
+        effective_batch_size=batch_size,
     )
     dataloader = DataLoader(
-        train_ds, batch_size=batch_size, shuffle=True, collate_fn=collator,
+        train_ds, batch_size=positives_per_batch, shuffle=True, collate_fn=collator,
         generator=torch.Generator().manual_seed(stage_rng_seed),
     )
 
