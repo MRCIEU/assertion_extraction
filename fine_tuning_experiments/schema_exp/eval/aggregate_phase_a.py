@@ -105,7 +105,6 @@ def load_runs() -> list[dict[str, Any]]:
         biored = d["biored_test"]
         bc = d["bc5cdr_test"]
         kb = d["kb_surface"]
-        # Flatten per-head F1 into columns (names vary by schema; we keep them separate)
         per_label = biored.get("per_label", {})
         flat: dict[str, Any] = {
             "run_id": d["run_id"],
@@ -122,11 +121,18 @@ def load_runs() -> list[dict[str, Any]]:
             "bc5cdr_drug_disease_f1": bc["drug_disease_f1"],
             "bc5cdr_macro_f1": bc["macro_f1"],
             "bc5cdr_n": bc["n"],
-            # KB surface
+            # KB surface — legacy (deprecated but kept for backwards-compat)
             "kb_surface_mean": kb["kb_surface_mean"],
-            "kb_surface_matched": kb["kb_surface_matched"],
-            "kb_surface_50": kb["kb_surface_50"],
-            "kb_nonneg_rate": kb["kb_nonneg_rate"],
+            "kb_surface_50": kb.get("kb_surface_50"),
+            "kb_nonneg_rate": kb.get("kb_nonneg_rate"),
+            # KB surface — v1.0 correctness-aware metrics (§11.7.1)
+            "kb_hit_A_setvalued":     kb.get("kb_hit_A_setvalued"),
+            "kb_hit_A_singlelabel":   kb.get("kb_hit_A_singlelabel"),
+            "kb_pmass_B_setvalued":   kb.get("kb_pmass_B_setvalued"),
+            "kb_pmass_B_singlelabel": kb.get("kb_pmass_B_singlelabel"),
+            "kb_auc_C_setvalued":     kb.get("kb_auc_C_setvalued"),
+            "kb_auc_C_singlelabel":   kb.get("kb_auc_C_singlelabel"),
+            "n_targets_evaluable":    kb.get("n_targets_evaluable"),
             # Per-head F1 in BioRED
             **{f"biored_f1__{lab}": stats["f1"] for lab, stats in per_label.items()},
             **{f"biored_support__{lab}": stats["support"] for lab, stats in per_label.items()},
@@ -140,7 +146,13 @@ def load_runs() -> list[dict[str, Any]]:
 # ───────────────────────────────────────────────────────────────────
 
 PRIMARY_METRICS = [
-    "kb_surface_mean", "kb_surface_matched", "kb_surface_50", "kb_nonneg_rate",
+    # v1.0 correctness-aware KB metrics (§11.7.1)
+    "kb_hit_A_setvalued", "kb_hit_A_singlelabel",
+    "kb_pmass_B_setvalued", "kb_pmass_B_singlelabel",
+    "kb_auc_C_setvalued", "kb_auc_C_singlelabel",
+    # Legacy KB metric (deprecated, kept for continuity)
+    "kb_surface_mean", "kb_surface_50", "kb_nonneg_rate",
+    # Benchmark metrics
     "biored_macro_f1", "biored_macro_f1_ex_neg",
     "bc5cdr_drug_disease_f1", "bc5cdr_macro_f1",
 ]
@@ -189,34 +201,32 @@ def aggregate(rows: list[dict[str, Any]]) -> dict[str, Any]:
             cell[m] = {"mean": mean, "sd": sd, "se": se, "n": len(vs)}
         out["by_encoder"][enc] = cell
 
-    # Permutation tests: schema pairs on KB_surface_mean (pooled across encoders)
+    # Permutation tests on schema pairs for primary-interest metrics
     tests: list[dict[str, Any]] = []
-    kb_by_schema = {s: [r["kb_surface_mean"] for r in grp_s[s]] for s in SCHEMAS}
-    for a, b in [("Sflat", "Spair"), ("Sflat", "Smech"), ("Spair", "Smech")]:
-        diff, lo, hi, p = permutation_test(kb_by_schema[a], kb_by_schema[b])
-        tests.append({
-            "metric": "kb_surface_mean",
-            "a": a, "b": b,
-            "mean_a": statistics.mean(kb_by_schema[a]) if kb_by_schema[a] else None,
-            "mean_b": statistics.mean(kb_by_schema[b]) if kb_by_schema[b] else None,
-            "diff": diff, "ci_lo": lo, "ci_hi": hi,
-            "p_value": p,
-            "cohens_d": cohens_d(kb_by_schema[a], kb_by_schema[b]),
-            "n_a": len(kb_by_schema[a]), "n_b": len(kb_by_schema[b]),
-        })
-    # Also BioRED macro_f1_ex_neg
-    for a, b in [("Sflat", "Spair"), ("Sflat", "Smech"), ("Spair", "Smech")]:
-        va = [r["biored_macro_f1_ex_neg"] for r in grp_s[a]]
-        vb = [r["biored_macro_f1_ex_neg"] for r in grp_s[b]]
-        diff, lo, hi, p = permutation_test(va, vb)
-        tests.append({
-            "metric": "biored_macro_f1_ex_neg", "a": a, "b": b,
-            "mean_a": statistics.mean(va) if va else None,
-            "mean_b": statistics.mean(vb) if vb else None,
-            "diff": diff, "ci_lo": lo, "ci_hi": hi,
-            "p_value": p, "cohens_d": cohens_d(va, vb),
-            "n_a": len(va), "n_b": len(vb),
-        })
+    perm_metrics = [
+        "kb_hit_A_setvalued",           # §11.7.1.1 primary KB metric
+        "kb_hit_A_singlelabel",         # sensitivity (matters only for S_mech)
+        "kb_pmass_B_setvalued",         # Method B robustness
+        "kb_auc_C_setvalued",           # Method C robustness
+        "kb_surface_mean",              # legacy (retained for continuity with Phase A v5)
+        "biored_macro_f1_ex_neg",       # benchmark
+        "bc5cdr_drug_disease_f1",       # benchmark
+    ]
+    for metric in perm_metrics:
+        by_schema_vals = {s: [r[metric] for r in grp_s[s] if r.get(metric) is not None] for s in SCHEMAS}
+        if not all(by_schema_vals.values()):
+            continue
+        for a, b in [("Sflat", "Spair"), ("Sflat", "Smech"), ("Spair", "Smech")]:
+            diff, lo, hi, p = permutation_test(by_schema_vals[a], by_schema_vals[b])
+            tests.append({
+                "metric": metric, "a": a, "b": b,
+                "mean_a": statistics.mean(by_schema_vals[a]) if by_schema_vals[a] else None,
+                "mean_b": statistics.mean(by_schema_vals[b]) if by_schema_vals[b] else None,
+                "diff": diff, "ci_lo": lo, "ci_hi": hi,
+                "p_value": p,
+                "cohens_d": cohens_d(by_schema_vals[a], by_schema_vals[b]),
+                "n_a": len(by_schema_vals[a]), "n_b": len(by_schema_vals[b]),
+            })
     out["permutation_tests"] = tests
     return out
 
@@ -300,16 +310,23 @@ def render_report(rows: list[dict], agg: dict, sel: dict) -> str:
              f"**Selected SC\\*:** `{sel['selected_SC_star']}`  (primary candidate: `{sel['primary_candidate']}`)",
              ""]
 
-    lines += ["## 1. KB surface (primary schema-selection metric)", ""]
-    lines += ["| Schema | n | KB_surface_mean | KB_surface_matched | KB_nonneg_rate |",
-              "|---|---|---|---|---|"]
+    lines += ["## 1. KB metrics — v1.0 correctness-aware (§11.7.1)", ""]
+    lines += ["| Schema | n | Method A set_valued | Method A single_label | Method B set_valued | Method C set_valued | Legacy KB_surface_mean |",
+              "|---|---|---|---|---|---|---|"]
     for sch in SCHEMAS:
         c = agg["by_schema"][sch]
+        def fmt(key: str) -> str:
+            v = c.get(key)
+            if v is None or v.get("mean") is None or (isinstance(v["mean"], float) and math.isnan(v["mean"])):
+                return "—"
+            return f"{v['mean']:.4f} ± {v['se']:.4f}"
         lines.append(
             f"| {sch} | {c['n']} "
-            f"| {c['kb_surface_mean']['mean']:.4f} ± {c['kb_surface_mean']['se']:.4f} "
-            f"| {c['kb_surface_matched']['mean']:.4f} ± {c['kb_surface_matched']['se']:.4f} "
-            f"| {c['kb_nonneg_rate']['mean']:.4f} ± {c['kb_nonneg_rate']['se']:.4f} |"
+            f"| {fmt('kb_hit_A_setvalued')} "
+            f"| {fmt('kb_hit_A_singlelabel')} "
+            f"| {fmt('kb_pmass_B_setvalued')} "
+            f"| {fmt('kb_auc_C_setvalued')} "
+            f"| {fmt('kb_surface_mean')} |"
         )
     lines.append("")
 
@@ -326,7 +343,7 @@ def render_report(rows: list[dict], agg: dict, sel: dict) -> str:
         )
     lines.append("")
 
-    lines += ["## 3. Encoder × schema (KB_surface_mean)", ""]
+    lines += ["## 3. Encoder × schema (Method A set_valued; §11.7.1.1 primary)", ""]
     header = "| encoder | " + " | ".join(SCHEMAS) + " |"
     sep = "|---" * (len(SCHEMAS) + 1) + "|"
     lines += [header, sep]
@@ -334,8 +351,8 @@ def render_report(rows: list[dict], agg: dict, sel: dict) -> str:
         cells = [f"{enc}"]
         for sch in SCHEMAS:
             c = agg["by_encoder_schema"].get(f"{enc}_{sch}")
-            if c:
-                cells.append(f"{c['kb_surface_mean']['mean']:.4f} ± {c['kb_surface_mean']['se']:.4f}")
+            if c and c.get("kb_hit_A_setvalued") and c["kb_hit_A_setvalued"].get("mean") is not None:
+                cells.append(f"{c['kb_hit_A_setvalued']['mean']:.4f} ± {c['kb_hit_A_setvalued']['se']:.4f}")
             else:
                 cells.append("—")
         lines.append("| " + " | ".join(cells) + " |")
