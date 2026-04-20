@@ -4,10 +4,6 @@ Code accompanying an in-progress study on **heterogeneous supervision and evalua
 
 This repository contains source code only. Generated artifacts (training data shards, model checkpoints, evaluation results, run logs) live on the cluster filesystem and are not version-controlled. The full design document (research questions, statistical plan, hypothesis registry) is maintained locally and is not part of this repository.
 
-## Status
-
-- **Phase A (exploratory pilot)** — completed. 120 runs spanning 4 encoders × 3 candidate schemas × 10 seeds.
-- **Phase B (confirmatory factorial)** — design locked. Implementation pending: trainer rewrite, schema-aligned evaluation metrics, dual-schema (S_pair + S_flat) full factorial, mixed-effects analysis for RQ4.
 
 ## Directory layout
 
@@ -29,22 +25,3 @@ The main currently-active code paths are:
 - `schema_exploration/` — schema label functions and data package remapping.
 - `oncology_projection/` — MeSH C04 keyword/MeSH projection of T2 oncology subset.
 - `dataset_inventory/audit/` — raw data audits and leakage validation.
-
-## Known limitations (to be addressed in Phase B)
-
-- The training stack under `fine_tuning_experiments/train/` previously depended on `.pyc`-only modules with no `.py` source. Those compiled artifacts were removed during cleanup. Phase B will re-implement the trainer in clean `.py` source with an integration test and a bridge-equivalence run against Phase A's saved checkpoints.
-- Several modules in legacy subdirectories (`dataset_inventory/parsers/`, `dataset_inventory/downloaders/`, etc.) still rely on bytecode-only artifacts; they are not required for Phase B and will be re-derived as needed.
-
-## Running
-
-All training and evaluation are launched via `sbatch` scripts under each subproject. Environment variables required:
-
-```
-PROJECT_1_DATA_ROOT     cluster path to data + runs
-PYTHONPATH              path to the repository root
-HF_HOME                 HuggingFace model cache
-```
-
-## License
-
-TBD
