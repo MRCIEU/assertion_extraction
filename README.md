@@ -1,4 +1,4 @@
-# Cancer Assertion Extraction — Code Repository
+# Cancer Assertion Extraction
 
 Code accompanying an in-progress study on **heterogeneous supervision and evaluation validity for cancer-focused biomedical relation extraction**.
 
