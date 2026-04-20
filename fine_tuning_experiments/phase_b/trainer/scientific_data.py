@@ -372,11 +372,23 @@ def inverse_freq_family_softmax_weights(
 ) -> dict[str, float]:
     """inverse_freq_family_softmax: per-source weight proportional to
     `source_weight_cfg[s] / log(1 + count[s])`, normalised so that the
-    weights over the active (nonzero-cfg) sources softmax to 1.
+    **mean weight over active sources is 1.0** (i.e., the per-sample loss
+    scale is preserved; only the relative weighting across sources
+    matters for gradient direction).
+
+    Setting mean=1 instead of sum=1 is critical for matching Phase A
+    convergence speed: Phase A configs set source_weights = {biored:1.0,
+    drugprot:1.0, bc5cdr:1.0} meaning "down-weight nothing", so the
+    effective per-sample loss scale must not be reduced by the number
+    of sources.  A sum=1 normalisation would divide global loss by
+    ~N_sources and effectively reduce LR by the same factor (observed
+    as ~0.28 T1 macro-F1 gap in bridge equivalence smoke #2).
     """
     active = {s: w for s, w in source_weights_cfg.items() if w > 0 and source_counts.get(s, 0) > 0}
     if not active:
         return {}
     raw = {s: w / math.log(1 + source_counts[s]) for s, w in active.items()}
-    total = sum(raw.values())
-    return {s: v / total for s, v in raw.items()} if total else {s: 0.0 for s in raw}
+    mean_raw = sum(raw.values()) / len(raw) if raw else 1.0
+    if mean_raw == 0:
+        return {s: 0.0 for s in raw}
+    return {s: v / mean_raw for s, v in raw.items()}
