@@ -193,10 +193,17 @@ def _dev_eval(
         golds.extend(labs)
     if not preds:
         return {"dev_accuracy": 0.0, "dev_macro_f1": 0.0}
+    # Match Phase A: macro-F1 over classes present in gold ∪ pred only
+    # (scikit's default behaviour when `labels=` is not supplied).  Computing
+    # macro over the full 4/8/13-class label space penalises early training
+    # disproportionately (empty classes score F1=0) and produces a very
+    # different trajectory — bridge equivalence smoke #2 had dev F1=0.27 at
+    # step 256 where Phase A had F1=0.82 at step 64, almost entirely because
+    # Phase A averaged over the 2-3 classes that the undertrained model was
+    # actually predicting.
     return {
         "dev_accuracy": float(accuracy_score(golds, preds)),
-        "dev_macro_f1": float(f1_score(golds, preds, labels=list(label2id.values()),
-                                        average="macro", zero_division=0)),
+        "dev_macro_f1": float(f1_score(golds, preds, average="macro", zero_division=0)),
     }
 
 
@@ -287,7 +294,10 @@ def _train_one_stage(
             scheduler.step()
             log.loss_hist.append(float(loss.detach().cpu().item()))
 
-            if step >= min_updates and step % eval_every == 0:
+            # Evaluate from the first `eval_every` boundary; `min_updates`
+            # only gates early-stopping (not eval itself) — matches Phase A
+            # which has dev entries from step 64 despite min_updates=256.
+            if step % eval_every == 0:
                 dev = _dev_eval(
                     model, tokenizer, dev_rows, label2id,
                     max_length=int(cfg_st["max_length"]), batch_size=batch_size,
@@ -303,7 +313,8 @@ def _train_one_stage(
                     evals_without_improvement = 0
                 else:
                     evals_without_improvement += 1
-                if evals_without_improvement >= patience:
+                # Early stopping is gated by `min_updates` (eval is not).
+                if step >= min_updates and evals_without_improvement >= patience:
                     best_stopped_early = True
                     break
                 model.train()
