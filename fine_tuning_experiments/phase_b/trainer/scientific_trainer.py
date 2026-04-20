@@ -200,9 +200,9 @@ class StageLog:
 def _train_one_stage(
     stage: str, model, tokenizer, label2id: dict[str, int],
     train_ds: PairDataset, dev_rows: list[dict],
-    cfg_st: dict, source_weights: dict[str, float], rng: random.Random,
-    device: torch.device, ckpt_dir: Path, stage_best_pt_name: str,
-    stage_end_pt_name: str, stage_rng_seed: int,
+    cfg_st: dict, cfg_neg: dict, source_weights: dict[str, float],
+    rng: random.Random, device: torch.device, ckpt_dir: Path,
+    stage_best_pt_name: str, stage_end_pt_name: str, stage_rng_seed: int,
 ) -> StageLog:
     max_updates = int(cfg_st["max_updates"])
     batch_size = int(cfg_st["batch_size"])
@@ -217,9 +217,9 @@ def _train_one_stage(
         tokenizer=tokenizer,
         label2id=label2id,
         max_length=int(cfg_st["max_length"]),
-        pair_type_filter=cfg_st["pair_type_filter"],
-        negative_ratio=float(cfg_st["negative_ratio"]),
-        max_negatives_per_sample=int(cfg_st["max_negatives_per_sample"]),
+        pair_type_filter=cfg_neg["pair_type_filter"],
+        negative_ratio=float(cfg_neg.get("negative_ratio", 4.0)),
+        max_negatives_per_sample=int(cfg_neg.get("max_negatives_per_sample", 64)),
         source_weights=source_weights,
         rng=coll_rng,
     )
@@ -392,7 +392,8 @@ def run_scientific_training(cfg: dict, exp_id: str, run_dir: Path) -> None:
         active = st.get(active_key, [])
         shard_map = cfg["training_data_paths"].get(stage_key, {}) or {}
         shard_paths.extend(Path(shard_map[s]) for s in active if s in shard_map)
-    label2id = derive_label_space(shard_paths, st["pair_type_filter"])
+    neg_cfg = cfg.get("negative_sampling", {}) or {}
+    label2id = derive_label_space(shard_paths, neg_cfg["pair_type_filter"])
     labels_ordered = sorted(label2id, key=lambda k: label2id[k])
     num_labels = len(label2id)
 
@@ -418,7 +419,11 @@ def run_scientific_training(cfg: dict, exp_id: str, run_dir: Path) -> None:
     ) or {s: 1.0 for s in src_counts}
 
     # ── Determine schedule ────────────────────────────────────────────────
+    # Accept both "T1_to_T2" (Phase A) and "T1_to_T2_staged" (Phase B) as the
+    # two-stage schedule name.  "T1_flat" / "T1_only" / "T1_biored_only" are
+    # single-stage schedules; everything else falls back to single-stage T1.
     schedule = cfg.get("schedule", "T1_to_T2_staged")
+    staged_schedules = {"T1_to_T2", "T1_to_T2_staged"}
     stages_executed: list[str] = []
 
     # ── Stage T1 ──────────────────────────────────────────────────────────
@@ -426,7 +431,8 @@ def run_scientific_training(cfg: dict, exp_id: str, run_dir: Path) -> None:
     dev_rows_t1 = list(dev_t1._rows)  # noqa: SLF001
     log_t1 = _train_one_stage(
         "T1", model, tokenizer, label2id, train_t1, dev_rows_t1,
-        cfg_st=st, source_weights=source_weights, rng=random.Random(seed + 1),
+        cfg_st=st, cfg_neg=neg_cfg,
+        source_weights=source_weights, rng=random.Random(seed + 1),
         device=device, ckpt_dir=ckpt_dir,
         stage_best_pt_name="stage_t1_best.pt",
         stage_end_pt_name="stage_t1_end.pt",
@@ -436,13 +442,14 @@ def run_scientific_training(cfg: dict, exp_id: str, run_dir: Path) -> None:
 
     # ── Stage T2 (if staged schedule) ────────────────────────────────────
     log_t2: StageLog | None = None
-    if schedule == "T1_to_T2_staged":
+    if schedule in staged_schedules:
         train_t2, dev_t2 = build_stage_dataset(cfg, "T2", label2id, seed)
         dev_rows_t2 = list(dev_t2._rows)  # noqa: SLF001
         # Re-initialise optimiser/scheduler implicitly (handled inside _train_one_stage)
         log_t2 = _train_one_stage(
             "T2", model, tokenizer, label2id, train_t2, dev_rows_t2,
-            cfg_st=st, source_weights=source_weights, rng=random.Random(seed + 2),
+            cfg_st=st, cfg_neg=neg_cfg,
+            source_weights=source_weights, rng=random.Random(seed + 2),
             device=device, ckpt_dir=ckpt_dir,
             stage_best_pt_name="stage_t2_best.pt",
             stage_end_pt_name="stage_t2_end.pt",

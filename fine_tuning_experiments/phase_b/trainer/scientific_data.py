@@ -317,7 +317,8 @@ def build_stage_dataset(
     negatives can be added in-place).
     """
     st = cfg["scientific_trainer"]
-    pair_filter = legal_endpoints(st["pair_type_filter"])
+    neg_cfg = cfg.get("negative_sampling", {}) or {}
+    pair_filter = legal_endpoints(neg_cfg["pair_type_filter"])
     active_shards_key = {"T1": "active_t1_shards", "T2": "active_t2_shards",
                          "T3": "active_t3_shards", "T4": "active_t4_shards"}.get(stage, "")
     if not active_shards_key:
