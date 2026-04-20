@@ -451,9 +451,16 @@ def run_scientific_training(cfg: dict, exp_id: str, run_dir: Path) -> None:
                 d = json.loads(line)
                 s = d.get("source_dataset", "unknown")
                 src_counts[s] += len(d.get("relations") or [])
-    source_weights = inverse_freq_family_softmax_weights(
-        source_weights_cfg, dict(src_counts),
-    ) or {s: 1.0 for s in src_counts}
+    # NOTE (bridge-equivalence hotfix): Phase A config has source_weights =
+    # {biored: 1.0, drugprot: 1.0, bc5cdr: 1.0} which we interpret as
+    # "all sources equally weighted" — i.e. no down-weighting.  The
+    # inverse_freq_family_softmax_weights function produces non-uniform
+    # weights (typically 0.7–1.4 range with mean=1), which appeared to
+    # destabilise T1 convergence in bridge equivalence smoke runs #2–#4.
+    # Use plain uniform weights from the config.
+    source_weights = {s: float(w) for s, w in (source_weights_cfg or {}).items() if w > 0}
+    if not source_weights:
+        source_weights = {s: 1.0 for s in src_counts}
 
     # ── Determine schedule ────────────────────────────────────────────────
     # Accept both "T1_to_T2" (Phase A) and "T1_to_T2_staged" (Phase B) as the
