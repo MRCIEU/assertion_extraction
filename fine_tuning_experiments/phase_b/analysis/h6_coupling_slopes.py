@@ -58,14 +58,18 @@ import numpy as np
 # ─────────────────────────────────────────────────────────────────────
 
 _PHASE_A_RE = re.compile(r"^PA_([A-Z]+)_([A-Za-z]+)_s(\d+)$")
-_PHASE_B_RE = re.compile(r"^PB_([A-Z]+)_([A-Za-z0-9]+)_([A-Za-z0-9]+)_([A-Za-z0-9]+)_s(\d+)$")
+# Post-lock amendment 2026-04-16 (Appendix B row 2): arch axis dropped.
+# Phase B run_id layout is now PB_{enc}_{upd}_{sched}_s{NN} (3 factor tokens).
+_PHASE_B_RE = re.compile(r"^PB_([A-Z]+)_([A-Za-z0-9]+)_([A-Za-z0-9]+)_s(\d+)$")
 
 
 @dataclass
 class Run:
     """One trained-model observation (seed-level).  The `cell_key` is the
     coarsest grouping that still preserves within-cell seed variance;
-    matching 10 seeds/cell for Phase A and Phase B."""
+    matching 10 seeds/cell for Phase A and 20 seeds/cell for Phase B
+    (see Appendix B amendment 2026-04-16; arch axis dropped, seeds
+    doubled to preserve total compute)."""
     run_id: str
     phase: str           # "A" or "B"
     cell_key: str        # e.g. "PA_BL_Sflat"  or  "PB_BL_base_standard_T1_to_T2_Spair"
@@ -85,11 +89,16 @@ def _parse_phase_a_run(run_id: str) -> tuple[str, str, int] | None:
     return m.group(1), m.group(2), int(m.group(3))
 
 
-def _parse_phase_b_run(run_id: str) -> tuple[str, str, str, str, int] | None:
+def _parse_phase_b_run(run_id: str) -> tuple[str, str, str, int] | None:
+    """Parse Phase B run_id of form `PB_{encoder}_{update}_{schedule}_s{NN}`.
+
+    Returns (encoder, update, schedule, seed) or None.  The arch axis was
+    dropped per Appendix B amendment 2026-04-16.
+    """
     m = _PHASE_B_RE.match(run_id)
     if not m:
         return None
-    return m.group(1), m.group(2), m.group(3), m.group(4), int(m.group(5))
+    return m.group(1), m.group(2), m.group(3), int(m.group(4))
 
 
 def runs_from_eval_dir(eval_dir: Path) -> list[Run]:
@@ -123,11 +132,11 @@ def runs_from_eval_dir(eval_dir: Path) -> list[Run]:
                 kb_auc_C=_opt_float(kb.get("kb_auc_C_setvalued")),
             ))
         elif pb is not None:
-            enc, arch, upd, sched, seed = pb
+            enc, upd, sched, seed = pb
             # Phase B is S_pair-only; carry schema="Spair" by convention.
             out.append(Run(
                 run_id=run_id, phase="B",
-                cell_key=f"PB_{enc}_{arch}_{upd}_{sched}",
+                cell_key=f"PB_{enc}_{upd}_{sched}",
                 encoder=enc, schema="Spair", seed=seed,
                 biored_f1=float(x), kb_hit_A=float(y),
                 kb_pmass_B=_opt_float(kb.get("kb_pmass_B_setvalued")),
@@ -465,7 +474,8 @@ def beta_config(
     runs: Sequence[Run], rng: np.random.Generator | None = None,
     n_boot: int = 5000,
 ) -> dict[str, Any] | None:
-    """OLS across 36 Phase B cell means.  Returns None if no Phase B data."""
+    """OLS across 18 Phase B cell means (post-lock amendment 2026-04-16;
+    was 36 under the original factorial).  Returns None if no Phase B data."""
     rng = rng or np.random.default_rng(20260416)
     cell_means = _cell_means_B(runs)
     if not cell_means:
@@ -474,11 +484,11 @@ def beta_config(
     x = np.array([p[1][0] for p in points])
     y = np.array([p[1][1] for p in points])
     b, se, lo, hi = _ols_slope_with_wald_ci(x, y)
-    # Cluster bootstrap: resample whole cells (each with its 10-seed
-    # composition; since we operate on cell means the composition affects
-    # only the mean's sampling variance, already captured in se).  The
-    # cell-resampling bootstrap is the right object for the between-cell
-    # slope.
+    # Cluster bootstrap: resample whole cells (each with its 20-seed
+    # composition under the amended factorial; since we operate on cell
+    # means the composition affects only the mean's sampling variance,
+    # already captured in se).  The cell-resampling bootstrap is the right
+    # object for the between-cell slope.
     cell_runs = defaultdict(list)
     for r in runs:
         if r.phase == "B":
@@ -507,7 +517,7 @@ def beta_config(
         "bootstrap_ci_lo": float(boot_lo), "bootstrap_ci_hi": float(boot_hi),
         "ci_lo": float(boot_lo), "ci_hi": float(boot_hi),
         "ci_width": float(boot_hi - boot_lo),
-        "method": "OLS on 36 Phase B cell means; Wald + cluster bootstrap (5000)",
+        "method": "OLS on Phase B cell means (18 cells under amended factorial, Appendix B 2026-04-16); Wald + cluster bootstrap (5000)",
     }
 
 

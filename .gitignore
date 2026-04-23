@@ -42,6 +42,10 @@ checkpoints/
 # Documentation drafts (kept locally only; canonical paper-design doc is not uploaded)
 *.md
 !README.md
+# Exception: the frozen lock-time snapshot is git-tracked as a GitHub-visible
+# reference for reviewers (see paper_development_design.md Appendix B row 3,
+# 2026-04-16). The evolving paper_development_design.md remains ignored.
+!paper_development_design_locked_v1.md
 
 # ID lists and submission records (regenerable)
 phase_*_ids.txt
