@@ -7,15 +7,24 @@ Phase A-eval — aggregate all 120 per-run evaluation JSONs into:
   3. phase_a_schema_selection.json  (applies the pre-registered SC* rule)
   4. phase_a_report.md          (human-readable summary)
 
-Pre-registered schema selection rule (see paper_development_design.md §3.1):
+Pre-registered schema selection rule (paper_development_design.md §6.6):
 
-  SC* = argmax KB_surface_mean over {S_flat, S_pair, S_mech},
-        subject to:  every head F1 > 0.05  AND  N_train ≥ 50 per head
-        with statistical check p(SC* vs S_flat permutation) < 0.10
-        tie-break: simpler schema (Occam)
+  Primary metric:  kb_hit_A_setvalued (§4.5, §11.7.1).
+  Decision tree:
+    Outcome 1 — single schema dominates.  One schema is strictly higher on
+      kb_hit_A_setvalued with 95% bootstrap CI non-overlapping the second-best,
+      AND is not worse on BioRED macro-F1 (ex-NEG) by more than Cohen's d of 0.3.
+      → Phase B runs that schema only.
+    Outcome 2 — dual schema required.  Top two schemas within Cohen's d 0.3
+      on kb_hit_A_setvalued, OR disagree in direction between kb_hit_A and
+      BioRED macro-F1 (ex-NEG).  → Phase B runs both as parallel factorials.
+    Outcome 3 — null.  No schema separates on any primary metric beyond
+      within-cell SD.  → Phase B retains S_pair alone and Phase A is a null.
 
-KB_surface_mean is pooled across all 40 runs (4 encoders × 10 seeds) per schema
-for the primary decision; per-encoder stratification is reported as a robustness check.
+Metrics are pooled across all 40 runs (4 encoders × 10 seeds) per schema for
+the primary decision; per-encoder stratification is reported as a robustness
+check.  The legacy KB_surface_mean is retained in the aggregate output for
+continuity but is not used for schema selection.
 """
 from __future__ import annotations
 
@@ -95,13 +104,32 @@ def cohens_d(a: list[float], b: list[float]) -> float:
 # Load per-run evals
 # ───────────────────────────────────────────────────────────────────
 
+EVAL_VERSION_FILE = SCRIPT_DIR / "EVAL_VERSION.txt"
+
+
+def _expected_eval_version() -> str:
+    return EVAL_VERSION_FILE.read_text().strip()
+
+
 def load_runs() -> list[dict[str, Any]]:
     rows = []
+    expected_ev = _expected_eval_version()
+    mismatched: list[str] = []
+    unstamped: list[str] = []
     for run_dir in sorted(RUNS_ROOT.glob("PA_*")):
         ev = run_dir / "eval" / "phase_a_eval.json"
         if not ev.exists():
             continue
         d = json.loads(ev.read_text())
+        rec_ev = d.get("eval_version")
+        if rec_ev is None:
+            # §4.6 read gate — every eval JSON must carry eval_version.
+            # Unstamped records are refused.
+            unstamped.append(run_dir.name)
+            continue
+        if rec_ev != expected_ev:
+            mismatched.append(f"{run_dir.name}: eval_version={rec_ev!r} vs expected={expected_ev!r}")
+            continue
         biored = d["biored_test"]
         bc = d["bc5cdr_test"]
         kb = d["kb_surface"]
@@ -138,6 +166,22 @@ def load_runs() -> list[dict[str, Any]]:
             **{f"biored_support__{lab}": stats["support"] for lab, stats in per_label.items()},
         }
         rows.append(flat)
+    if unstamped:
+        print(f"[eval_version] REFUSED {len(unstamped)} unstamped runs:")
+        for name in unstamped:
+            print(f"  - {name}")
+        print(
+            "[eval_version] Re-evaluate the refused runs against the current "
+            "eval pipeline (see eval/sbatch/phase_a_eval.sbatch)."
+        )
+    if mismatched:
+        print("[eval_version] REFUSED runs (eval_version disagrees with expected):")
+        for m in mismatched:
+            print(f"  - {m}")
+        print(
+            "[eval_version] Re-evaluate the refused runs against the current "
+            "eval pipeline or roll EVAL_VERSION.txt back to the pinned value."
+        )
     return rows
 
 
@@ -232,14 +276,75 @@ def aggregate(rows: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def schema_selection(rows: list[dict[str, Any]], agg: dict[str, Any]) -> dict[str, Any]:
-    """Apply the pre-registered SC* selection rule."""
+    """Apply the pre-registered §6.6 SC* decision tree on kb_hit_A_setvalued."""
     by_schema = agg["by_schema"]
-    # Primary ranking: by KB_surface_mean
-    ranking = sorted(SCHEMAS, key=lambda s: -by_schema[s]["kb_surface_mean"]["mean"])
-    candidate = ranking[0]
+    PRIMARY = "kb_hit_A_setvalued"
+    BENCH = "biored_macro_f1_ex_neg"
 
-    # Head F1 feasibility: each schema must have every head with F1 > 0.05
-    # Compute from per-run per-head values
+    # Per-schema pooled kb_hit_A means and bootstrap 95% CIs.
+    # Data organised by (encoder, seed) cell to support paired bootstrap.
+    per_schema_vals: dict[str, list[float]] = {s: [] for s in SCHEMAS}
+    per_schema_bench: dict[str, list[float]] = {s: [] for s in SCHEMAS}
+    # cells[(encoder, seed)][schema] = (primary_value, bench_value)
+    cells: dict[tuple[str, int], dict[str, tuple[float, float]]] = defaultdict(dict)
+    for r in rows:
+        if r.get(PRIMARY) is not None:
+            per_schema_vals[r["schema"]].append(r[PRIMARY])
+        if r.get(BENCH) is not None:
+            per_schema_bench[r["schema"]].append(r[BENCH])
+        key = (r["encoder"], r["seed"])
+        cells[key][r["schema"]] = (r.get(PRIMARY), r.get(BENCH))
+
+    def bootstrap_ci(xs: list[float], n: int = 10000, seed: int = 20260416) -> tuple[float, float]:
+        if not xs:
+            return float("nan"), float("nan")
+        rng = random.Random(seed)
+        boots = [statistics.mean([rng.choice(xs) for _ in xs]) for _ in range(n)]
+        boots.sort()
+        return boots[int(0.025 * n)], boots[int(0.975 * n)]
+
+    means = {s: statistics.mean(per_schema_vals[s]) for s in SCHEMAS}
+    cis = {s: bootstrap_ci(per_schema_vals[s]) for s in SCHEMAS}
+    ranking = sorted(SCHEMAS, key=lambda s: -means[s])
+    top, runner_up = ranking[0], ranking[1]
+
+    # §6.6 "CI non-overlapping" clause — paired bootstrap at (encoder, seed)
+    # level, B = 10000.  Resampling the 40 cells jointly controls for
+    # between-cell encoder variance (which H7 estimates at 17% of kb_hit_A SS)
+    # and yields a narrower, correctly-calibrated CI than unpaired pooling.
+    def bootstrap_paired_diff_ci(
+        cells: dict[tuple[str, int], dict[str, tuple[float, float]]],
+        sa: str, sb: str, *, metric_idx: int,
+        n: int = 10000, seed: int = 20260416,
+    ) -> tuple[float, float]:
+        paired = [
+            (vals[sa][metric_idx], vals[sb][metric_idx])
+            for vals in cells.values()
+            if sa in vals and sb in vals
+            and vals[sa][metric_idx] is not None
+            and vals[sb][metric_idx] is not None
+        ]
+        if not paired:
+            return float("nan"), float("nan")
+        rng = random.Random(seed)
+        n_cells = len(paired)
+        boots: list[float] = []
+        for _ in range(n):
+            idxs = [rng.randrange(n_cells) for _ in range(n_cells)]
+            boots.append(statistics.mean(paired[i][0] - paired[i][1] for i in idxs))
+        boots.sort()
+        return boots[int(0.025 * n)], boots[int(0.975 * n)]
+
+    diff_lo, diff_hi = bootstrap_paired_diff_ci(cells, top, runner_up, metric_idx=0)
+    diff_ci_excludes_zero = (diff_lo > 0.0) or (diff_hi < 0.0)
+    # Paired diff CI on the BioRED ex-NEG guard (report alongside the primary)
+    bench_diff_lo, bench_diff_hi = bootstrap_paired_diff_ci(cells, top, runner_up, metric_idx=1)
+
+    # Cohen's d on kb_hit_A (top vs runner-up) and on BioRED ex-NEG (for the "not worse" clause)
+    d_kb = cohens_d(per_schema_vals[top], per_schema_vals[runner_up])
+    d_bench = cohens_d(per_schema_bench[top], per_schema_bench[runner_up])
+
+    # Per-head feasibility (heads with test support > 0 only)
     per_schema_heads: dict[str, dict[str, list[float]]] = {s: defaultdict(list) for s in SCHEMAS}
     for r in rows:
         sch = r["schema"]
@@ -248,11 +353,9 @@ def schema_selection(rows: list[dict[str, Any]], agg: dict[str, Any]) -> dict[st
                 lab = key.replace("biored_f1__", "")
                 if lab == "__NEGATIVE__":
                     continue
-                # Only count heads with non-zero support on BioRED test
                 support = r.get(f"biored_support__{lab}", 0)
                 if support > 0:
                     per_schema_heads[sch][lab].append(v)
-
     head_f1_report: dict[str, Any] = {}
     for sch in SCHEMAS:
         heads = per_schema_heads[sch]
@@ -264,38 +367,66 @@ def schema_selection(rows: list[dict[str, Any]], agg: dict[str, Any]) -> dict[st
             "all_above_0.05": all(v > 0.05 for v in head_means.values()) if head_means else False,
         }
 
-    # Permutation p-values against Sflat
-    pvals_vs_sflat = {t["b"]: t for t in agg["permutation_tests"]
-                      if t["metric"] == "kb_surface_mean" and t["a"] == "Sflat"}
-    pvals_vs_sflat["Sflat"] = {"p_value": None}
-
-    # Applied rule
-    reason = []
-    final = candidate
-    if candidate != "Sflat":
-        p = pvals_vs_sflat[candidate]["p_value"]
-        if p is not None and p >= 0.10:
-            reason.append(f"{candidate} vs Sflat permutation p={p:.4f} ≥ 0.10 → "
-                          "fall back to simpler schema (Sflat)")
-            final = "Sflat"
-        else:
-            reason.append(f"{candidate} vs Sflat permutation p={p:.4f} < 0.10 — selection holds")
+    # Decision tree (§6.6)
+    reason: list[str] = []
+    if diff_ci_excludes_zero and d_bench > -0.3:
+        outcome = "Outcome 1 (single schema)"
+        final = top
+        reason.append(
+            f"{top} vs {runner_up}: paired kb_hit_A diff 95% CI = "
+            f"[{diff_lo:+.4f}, {diff_hi:+.4f}] excludes zero; Cohen's d = {d_kb:+.3f}"
+        )
+        reason.append(
+            f"{top} vs {runner_up} on BioRED ex-NEG: Cohen's d = {d_bench:+.3f} > -0.3 "
+            "(not worse on benchmark)"
+        )
+    elif abs(d_kb) < 0.3:
+        outcome = "Outcome 2 (dual schema — within d=0.3 on kb_hit_A)"
+        final = f"{top}+{runner_up}"
+        reason.append(
+            f"{top} vs {runner_up}: |Cohen's d on kb_hit_A| = {abs(d_kb):.3f} < 0.3"
+        )
+    elif d_bench < -0.3:
+        outcome = "Outcome 2 (dual schema — direction disagreement kb_hit_A vs BioRED)"
+        final = f"{top}+{runner_up}"
+        reason.append(
+            f"{top} higher on kb_hit_A (d={d_kb:+.3f}) but worse on BioRED ex-NEG "
+            f"(d={d_bench:+.3f} < -0.3)"
+        )
     else:
-        reason.append("Sflat has highest KB_surface_mean; no statistical test needed")
+        outcome = "Outcome 3 (null / fallback to Spair per §6.6)"
+        final = "Spair"
+        reason.append(
+            f"{top} vs {runner_up}: diff CI = [{diff_lo:+.4f}, {diff_hi:+.4f}] "
+            f"includes zero; Cohen's d = {d_kb:+.3f}; bench d = {d_bench:+.3f}"
+        )
 
-    if not head_f1_report[final]["all_above_0.05"]:
-        reason.append(f"{final} has at least one head with mean F1 ≤ 0.05 — flagging "
-                      "feasibility concern (does not force fallback under current rule)")
+    if not head_f1_report[top]["all_above_0.05"]:
+        reason.append(
+            f"{top} has at least one active head with mean F1 ≤ 0.05 — feasibility note "
+            "(does not override §6.6 decision; see §6.9 per-head table)"
+        )
 
     return {
-        "ranking_by_kb_surface_mean": ranking,
-        "primary_candidate": candidate,
-        "applied_rule": "argmax KB_surface_mean subject to permutation p<0.10 vs Sflat; "
-                        "tie-break to simpler schema (Occam).",
+        "primary_metric": PRIMARY,
+        "ranking_by_primary": ranking,
+        "pooled_means": means,
+        "bootstrap_95ci": {s: list(cis[s]) for s in SCHEMAS},
+        "top_vs_runner_up": {
+            "top": top,
+            "runner_up": runner_up,
+            "paired_diff_95ci": [diff_lo, diff_hi],
+            "paired_diff_ci_excludes_zero": diff_ci_excludes_zero,
+            "paired_diff_95ci_bench_ex_neg": [bench_diff_lo, bench_diff_hi],
+            "cohens_d_primary": d_kb,
+            "cohens_d_bench_ex_neg": d_bench,
+            "pairing_structure": "paired at (encoder, seed) cell, n_cells=40, B=10000",
+        },
+        "applied_rule": "§6.6 decision tree on kb_hit_A_setvalued with BioRED ex-NEG guard",
         "selected_SC_star": final,
+        "outcome": outcome,
         "selection_reason": reason,
         "head_f1_feasibility": head_f1_report,
-        "permutation_p_vs_sflat": {k: v["p_value"] for k, v in pvals_vs_sflat.items()},
     }
 
 
@@ -307,7 +438,7 @@ def render_report(rows: list[dict], agg: dict, sel: dict) -> str:
     lines = ["# Phase A-eval Report",
              "",
              f"**Runs evaluated:** {len(rows)} / 120",
-             f"**Selected SC\\*:** `{sel['selected_SC_star']}`  (primary candidate: `{sel['primary_candidate']}`)",
+             f"**Selected SC\\*:** `{sel['selected_SC_star']}`  ({sel['outcome']})",
              ""]
 
     lines += ["## 1. KB metrics — v1.0 correctness-aware (§11.7.1)", ""]
@@ -379,9 +510,11 @@ def render_report(rows: list[dict], agg: dict, sel: dict) -> str:
             lines.append(f"  - {lab}: F1 = {f1:.4f}")
         lines.append("")
 
-    lines += ["## 6. Schema selection decision", ""]
-    lines += [f"- Ranking by KB_surface_mean: {' > '.join(sel['ranking_by_kb_surface_mean'])}",
+    lines += ["## 6. Schema selection decision (§6.6)", ""]
+    lines += [f"- Primary metric: `{sel['primary_metric']}`",
+              f"- Ranking: {' > '.join(sel['ranking_by_primary'])}",
               f"- Applied rule: {sel['applied_rule']}",
+              f"- Outcome: **{sel['outcome']}**",
               f"- Selected SC\\*: **{sel['selected_SC_star']}**",
               ""]
     for r in sel["selection_reason"]:

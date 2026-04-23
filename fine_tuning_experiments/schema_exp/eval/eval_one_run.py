@@ -49,10 +49,20 @@ from fine_tuning_experiments.schema_exp.eval.schema_expected_label import (  # n
 )
 
 EVAL_INPUTS = SCRIPT_DIR / "inputs"
+EVAL_VERSION_FILE = SCRIPT_DIR / "EVAL_VERSION.txt"
 
 # Abstention sweep grid for Method C (pre-specified; §11.7.1 of paper design).
 _METHOD_C_TAU_GRID = [round(0.05 * i, 2) for i in range(21)]  # 0.00, 0.05, ..., 1.00
 _PROJECTION_MODES = ("set_valued", "single_label")
+
+
+def _load_eval_version() -> str:
+    """Canonical version string pinned for the eval pipeline (§7.8).
+
+    A mismatch between the file content and the trainer-pinned constant
+    (see `_try_inline_eval` in `scientific_trainer.py`) aborts training.
+    """
+    return EVAL_VERSION_FILE.read_text().strip()
 
 
 # ───────────────────────────────────────────────────────────────────
@@ -381,15 +391,24 @@ def main() -> None:
     ap.add_argument("--batch-size", type=int, default=16)
     ap.add_argument("--overwrite", action="store_true",
                     help="Re-run even if phase_a_eval.json already exists")
+    ap.add_argument("--out", type=Path, default=None,
+                    help="Optional explicit output path for the eval JSON "
+                    "(default: <run_dir>/eval/phase_a_eval.json). Used by "
+                    "re-evaluation workflows that must not overwrite existing files.")
     args = ap.parse_args()
 
     run_dir: Path = args.run_dir.resolve()
     assert run_dir.is_dir(), f"Not a directory: {run_dir}"
     ids = parse_run_id(run_dir)
 
-    out_dir = run_dir / "eval"
-    out_dir.mkdir(exist_ok=True)
-    out_json = out_dir / "phase_a_eval.json"
+    if args.out is not None:
+        out_json = args.out.resolve()
+        out_dir = out_json.parent
+        out_dir.mkdir(parents=True, exist_ok=True)
+    else:
+        out_dir = run_dir / "eval"
+        out_dir.mkdir(exist_ok=True)
+        out_json = out_dir / "phase_a_eval.json"
     if out_json.exists() and not args.overwrite:
         print(f"SKIP (exists): {out_json}")
         return
@@ -413,6 +432,7 @@ def main() -> None:
     print(f"  loaded checkpoint in {t_load:.1f}s n_labels={len(label2id)}")
 
     result: dict[str, Any] = {
+        "eval_version": _load_eval_version(),
         "run_id": run_dir.name,
         "encoder_key": ids["encoder_key"],
         "schema_key": ids["schema_key"],

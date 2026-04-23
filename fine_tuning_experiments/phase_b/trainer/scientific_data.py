@@ -15,9 +15,10 @@ was destroyed during cleanup; see §6 of the contract for unknowns resolved):
   membership, sort alphabetically, append `__NEGATIVE__` last.
 
 - **Internal dev split**: seed-controlled random 12 % holdout of the gold
-  positive pool per stage; negatives are sampled per-batch from the
-  training split only (the dev split is all-positive to match Phase A
-  observed dev_metrics).
+  positive pool per stage; frozen materialised negatives are added to dev
+  for both stages at the config's `negative_ratio` (attempt 5 committed
+  baseline, reverted to after attempt 6's asymmetric-dev experiment failed
+  both stages — see §11.16.5.7 / §11.16.6).
 
 - **Online negative sampling**: each batch, for every positive drawn, sample
   `negative_ratio` same-document non-gold pairs subject to
@@ -190,15 +191,33 @@ def _doc_gold_positives(
 def derive_label_space(
     shard_paths: Iterable[Path], pair_type_filter: str,
 ) -> dict[str, int]:
-    """Stable alphabetic order of non-NEG labels, `__NEGATIVE__` appended last."""
-    pair_filter = legal_endpoints(pair_type_filter)
+    """Stable alphabetic order of non-NEG labels, `__NEGATIVE__` appended last.
+
+    Labels are enumerated over every `mapped_label` value in gold relations
+    before applying `pair_type_filter` — i.e. a label is included in the
+    classifier head as long as it appears anywhere in the gold relations,
+    even if every instance of that label has (head, tail) entity-pair types
+    outside `pair_type_filter`.  Rationale: for S_pair the label
+    `ASSOCIATION_GENERAL` is populated mostly by DRUG-DRUG or VARIANT-VARIANT
+    entity pairs which `spair_legal_endpoints` excludes; if we filtered
+    before enumeration, the S_pair head would silently drop to 7 classes,
+    diverging from the schema definition.  Tests:
+    `fine_tuning_experiments/phase_b/trainer/tests/test_label_space.py`.
+    """
+    pair_filter_arg = pair_type_filter  # retained for debugging / log
     labels: set[str] = set()
     for path in shard_paths:
         for doc in _iter_docs(Path(path)):
-            for row in _doc_gold_positives(doc, pair_filter):
-                labels.add(row["label"])
-    ordered = sorted(lab for lab in labels if lab != NEG_LABEL)
+            for rel in (doc.get("relations") or []):
+                lab = rel.get("mapped_label")
+                if not lab:
+                    continue
+                if lab == NEG_LABEL:
+                    continue
+                labels.add(lab)
+    ordered = sorted(labels)
     ordered.append(NEG_LABEL)
+    _ = pair_filter_arg
     return {lab: i for i, lab in enumerate(ordered)}
 
 
@@ -310,18 +329,21 @@ def _collect_stage_rows(
 def build_stage_dataset(
     cfg: dict, stage: Stage, label2id: dict[str, int], seed: int,
 ) -> tuple[PairDataset, PairDataset]:
-    """Collect + dev-split positives for one stage, then **materialise
-    negatives on the dev side** so dev macro-F1 is comparable to Phase A
-    (which evidently evaluated on mixed pos/neg dev — its step-64 dev
-    accuracy was already 0.836, impossible for positives-only 4-class).
+    """Collect + dev-split positives for one stage, then materialise
+    negatives on the dev side so dev macro-F1 is evaluated on a pos/neg
+    mixture for both stages.  Training negatives remain online (per-batch,
+    via the collator); dev negatives are frozen at build time so scoring
+    is reproducible across evals within a run.
 
-    Training negatives remain online (per-batch, via the collator).  Dev
-    negatives are frozen at build time so scoring is reproducible across
-    evals within one training run.
+    This version (attempt 5 = committed baseline) uses the same mixed dev
+    composition for T1 and T2.  An earlier attempt 6 tried positives-only
+    T1 dev (to test the "all-positive T1 dev" reconstruction hypothesis)
+    and failed both stages — see §11.16.5.7 and §11.16.6 of the paper
+    design document.  Do not reintroduce stage-conditional dev composition
+    without a new pre-committed protocol.
 
-    Returns `(train_ds, dev_ds)` — dev_ds contains both held-out positives
-    and their associated sampled negatives; train_ds is positives only
-    (collator adds negatives at batch time).
+    Returns `(train_ds, dev_ds)`.  train_ds is positives-only; dev_ds is
+    positives plus their materialised negatives.
     """
     st = cfg["scientific_trainer"]
     neg_cfg = cfg.get("negative_sampling", {}) or {}
@@ -349,7 +371,6 @@ def build_stage_dataset(
     n_dev = max(1, int(round(dev_fraction * len(rows))))
     dev_pos, train_rows = rows[:n_dev], rows[n_dev:]
 
-    # Materialise dev negatives once (frozen across evals within a run).
     n_neg_per = max(1, int(round(float(neg_cfg.get("negative_ratio", 4.0)))))
     n_neg_per = min(n_neg_per, int(neg_cfg.get("max_negatives_per_sample", 64)))
     neg_rng = random.Random((seed ^ 0xDEADBEEF) + hash(stage))

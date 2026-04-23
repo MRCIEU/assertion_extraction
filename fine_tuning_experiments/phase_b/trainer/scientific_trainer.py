@@ -51,10 +51,12 @@ Outputs (exhaustive, §3 of contract):
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import os
 import random
+import subprocess
 import time
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field, asdict
@@ -91,6 +93,39 @@ def _set_all_seeds(seed: int) -> None:
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
     os.environ["PYTHONHASHSEED"] = str(seed)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Reproducibility helpers
+# ─────────────────────────────────────────────────────────────────────
+
+def _collect_rng_state() -> dict[str, Any]:
+    """Snapshot every RNG stream we touch so a future evaluator can reproduce
+    the exact batch order / negative sample without rerunning training."""
+    return {
+        "python": random.getstate(),
+        "numpy": np.random.get_state(),
+        "torch_cpu": torch.get_rng_state(),
+        "torch_cuda": (
+            torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
+        ),
+    }
+
+
+def _config_sha256(cfg: dict) -> str:
+    blob = json.dumps(cfg, sort_keys=True, default=str).encode("utf-8")
+    return hashlib.sha256(blob).hexdigest()
+
+
+def _git_commit(cwd: Path) -> str | None:
+    try:
+        out = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"],
+            cwd=str(cwd), stderr=subprocess.DEVNULL, text=True,
+        )
+        return out.strip()
+    except Exception:
+        return None
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -229,6 +264,7 @@ def _train_one_stage(
     cfg_st: dict, cfg_neg: dict, source_weights: dict[str, float],
     rng: random.Random, device: torch.device, ckpt_dir: Path,
     stage_best_pt_name: str, stage_end_pt_name: str, stage_rng_seed: int,
+    loss_log_path: Path | None = None,
 ) -> StageLog:
     max_updates = int(cfg_st["max_updates"])
     batch_size = int(cfg_st["batch_size"])
@@ -313,6 +349,21 @@ def _train_one_stage(
                     evals_without_improvement = 0
                 else:
                     evals_without_improvement += 1
+                if loss_log_path is not None:
+                    row = {
+                        "stage": stage,
+                        "step": step,
+                        "loss_recent_mean": float(
+                            np.mean(log.loss_hist[-eval_every:])
+                            if log.loss_hist else 0.0
+                        ),
+                        "lr": float(scheduler.get_last_lr()[0]),
+                        "dev_accuracy": float(dev.get("dev_accuracy", 0.0)),
+                        "dev_macro_f1": float(dev.get("dev_macro_f1", 0.0)),
+                        "is_best": best_step == step,
+                    }
+                    with loss_log_path.open("a") as fh:
+                        fh.write(json.dumps(row) + "\n")
                 # Early stopping is gated by `min_updates` (eval is not).
                 if step >= min_updates and evals_without_improvement >= patience:
                     best_stopped_early = True
@@ -320,6 +371,7 @@ def _train_one_stage(
                 model.train()
 
     log.steps = step
+    rng_snapshot = _collect_rng_state()
 
     # Stage-best checkpoint
     if best_state is not None:
@@ -332,7 +384,8 @@ def _train_one_stage(
                  "selection_metric": selection_metric,
                  "stopped_early": best_stopped_early,
                  "checkpoint_file": stage_best_pt_name,
-             }},
+             },
+             "rng_state": rng_snapshot},
             ckpt_dir / stage_best_pt_name,
         )
     # Stage-end checkpoint
@@ -346,7 +399,8 @@ def _train_one_stage(
              "selection_metric": selection_metric,
              "stopped_early": best_stopped_early,
              "checkpoint_file": stage_end_pt_name,
-         }},
+         },
+         "rng_state": rng_snapshot},
         ckpt_dir / stage_end_pt_name,
     )
 
@@ -405,6 +459,71 @@ def _write_predictions(
 # Public entry point
 # ─────────────────────────────────────────────────────────────────────
 
+_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+
+# Pinned eval-pipeline version the trainer was compiled against.  A mismatch
+# with `EVAL_VERSION.txt` at training time aborts the inline eval *before*
+# any `phase_a_eval.json` is written, so we never produce a silently-wrong-
+# version artifact that would later need re-running (§7.8 write gate).
+_EXPECTED_EVAL_VERSION = "1.0"
+_EVAL_VERSION_FILE = (
+    _PROJECT_ROOT / "fine_tuning_experiments" / "schema_exp" / "eval" / "EVAL_VERSION.txt"
+)
+
+
+def _write_dev_row_ids(dev_rows: list[dict], out_path: Path) -> None:
+    """Freeze the per-stage dev split membership for later re-evaluation or
+    dev-intersection analysis — any future code that wants to compare two
+    checkpoints on a common dev set can read these ID lists directly."""
+    rows = [
+        {
+            "sample_id": r.get("sample_id"),
+            "source_dataset": r.get("source_dataset"),
+            "label": r.get("label"),
+        }
+        for r in dev_rows
+    ]
+    out_path.write_text(json.dumps(rows, indent=2))
+
+
+def _assert_eval_version_pinned() -> None:
+    """Abort training *before* inline eval runs if the `EVAL_VERSION.txt`
+    file on disk disagrees with the version the trainer was compiled
+    against.  This is one of the two §7.8 write-gate enforcement points;
+    the other is the aggregator read gate.  A mismatch here means either
+    (a) the eval pipeline was bumped without bumping `_EXPECTED_EVAL_VERSION`
+    or (b) the trainer was bumped without re-running eval — either way the
+    resulting `phase_a_eval.json` would be stamped with a wrong version and
+    later need re-running, so we fail fast and loud."""
+    on_disk = _EVAL_VERSION_FILE.read_text().strip()
+    if on_disk != _EXPECTED_EVAL_VERSION:
+        raise RuntimeError(
+            f"EVAL_VERSION.txt mismatch: file={on_disk!r} but trainer expects "
+            f"{_EXPECTED_EVAL_VERSION!r}.  Either bump _EXPECTED_EVAL_VERSION "
+            "in scientific_trainer.py and re-run every eval, or roll "
+            "EVAL_VERSION.txt back to the pinned value.  Aborting before "
+            "inline eval to avoid writing a wrong-version phase_a_eval.json."
+        )
+
+
+def _try_inline_eval(run_dir: Path, exp_id: str) -> None:
+    """Run schema_exp/eval/eval_one_run on the freshly trained run so every
+    run directory self-contains BioRED / BC5CDR / KB metrics immediately
+    after training.  Invoked for every run that wants inline evaluation
+    (PA_* Phase A and PB_* Phase B, and the pre-submission paranoia smoke)."""
+    if not (exp_id.startswith("PA_") or exp_id.startswith("PB_")):
+        return
+    _assert_eval_version_pinned()
+    try:
+        subprocess.run(
+            ["python3.11", "-m", "fine_tuning_experiments.schema_exp.eval.eval_one_run",
+             "--run-dir", str(run_dir), "--overwrite"],
+            cwd=str(_PROJECT_ROOT), check=False,
+        )
+    except Exception as exc:
+        print(f"[inline eval] skipped for {exp_id}: {exc}")
+
+
 def run_scientific_training(cfg: dict, exp_id: str, run_dir: Path) -> None:
     """Top-level trainer dispatch.  Matches Phase A signature exactly.
 
@@ -418,6 +537,10 @@ def run_scientific_training(cfg: dict, exp_id: str, run_dir: Path) -> None:
     st = cfg["scientific_trainer"]
     seed = int(cfg.get("seed", 1))
     _set_all_seeds(seed)
+
+    loss_log_path = metrics_dir / "loss_history.jsonl"
+    if loss_log_path.exists():
+        loss_log_path.unlink()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model_name = st["model_name"]
@@ -473,6 +596,7 @@ def run_scientific_training(cfg: dict, exp_id: str, run_dir: Path) -> None:
     # ── Stage T1 ──────────────────────────────────────────────────────────
     train_t1, dev_t1 = build_stage_dataset(cfg, "T1", label2id, seed)
     dev_rows_t1 = list(dev_t1._rows)  # noqa: SLF001
+    _write_dev_row_ids(dev_rows_t1, metrics_dir / "dev_row_ids_t1.json")
     log_t1 = _train_one_stage(
         "T1", model, tokenizer, label2id, train_t1, dev_rows_t1,
         cfg_st=st, cfg_neg=neg_cfg,
@@ -481,6 +605,7 @@ def run_scientific_training(cfg: dict, exp_id: str, run_dir: Path) -> None:
         stage_best_pt_name="stage_t1_best.pt",
         stage_end_pt_name="stage_t1_end.pt",
         stage_rng_seed=seed + 101,
+        loss_log_path=loss_log_path,
     )
     stages_executed.append("T1")
 
@@ -489,6 +614,7 @@ def run_scientific_training(cfg: dict, exp_id: str, run_dir: Path) -> None:
     if schedule in staged_schedules:
         train_t2, dev_t2 = build_stage_dataset(cfg, "T2", label2id, seed)
         dev_rows_t2 = list(dev_t2._rows)  # noqa: SLF001
+        _write_dev_row_ids(dev_rows_t2, metrics_dir / "dev_row_ids_t2.json")
         # Re-initialise optimiser/scheduler implicitly (handled inside _train_one_stage)
         log_t2 = _train_one_stage(
             "T2", model, tokenizer, label2id, train_t2, dev_rows_t2,
@@ -498,6 +624,7 @@ def run_scientific_training(cfg: dict, exp_id: str, run_dir: Path) -> None:
             stage_best_pt_name="stage_t2_best.pt",
             stage_end_pt_name="stage_t2_end.pt",
             stage_rng_seed=seed + 202,
+            loss_log_path=loss_log_path,
         )
         stages_executed.append("T2")
 
@@ -516,7 +643,8 @@ def run_scientific_training(cfg: dict, exp_id: str, run_dir: Path) -> None:
          "label2id": label2id,
          "stage": stages_executed[-1],
          "model_name": model_name,
-         "best_checkpoint_meta": best_stage.best_checkpoint},
+         "best_checkpoint_meta": best_stage.best_checkpoint,
+         "rng_state": _collect_rng_state()},
         ckpt_dir / "last.pt",
     )
 
@@ -586,7 +714,9 @@ def run_scientific_training(cfg: dict, exp_id: str, run_dir: Path) -> None:
         "schema_id": cfg.get("schema_id"),
         "seed": seed,
         "generated_utc": datetime.now(timezone.utc).isoformat(),
-        "git_commit": None,
+        "git_commit": _git_commit(_PROJECT_ROOT),
+        "config_sha256": _config_sha256(cfg),
+        "trainer_source": "fine_tuning_experiments.phase_b.trainer.scientific_trainer",
         "ft_data_root": cfg.get("ft_data_root"),
         "scientific_trainer": {
             k: st.get(k) for k in [
@@ -616,3 +746,6 @@ def run_scientific_training(cfg: dict, exp_id: str, run_dir: Path) -> None:
         "stub": False,
     }
     (run_dir / "run_manifest.json").write_text(json.dumps(manifest, indent=2))
+
+    # ── Inline v1.0 eval (BioRED / BC5CDR / KB audit) ───────────────────
+    _try_inline_eval(run_dir, exp_id)
