@@ -311,4 +311,132 @@ submission for exactly this reason.
 
 ---
 
+### B.8 — LoRA pre-registered learning rate produces degenerate collapse; amended to LoRA-optimal 3 × 10⁻⁴ (2026‑04‑25)
+
+| Date | Trigger | Scope affected | Description |
+|---|---|---|---|
+| 2026‑04‑24/25 | **Empirical discovery** during the v2 LoRA pilot retrain (SLURM `4260475`) that the pre-registered conservative LoRA learning rate induces complete model collapse, making H4 an undefined test. | §7.3 design axis (LoRA specification), §7.6 "conservative LR" rationale, §7.2 H4 decision rule. | See (a)–(f) below. |
+
+**(a) Observation — bit-identical degenerate minimum across 35 seeds**.
+All LoRA runs launched under the pre-registered specification
+(rank = 16, α = 32, dropout = 0.05, target modules = {query, value},
+`modules_to_save = {classifier}`, bias = none,
+`learning_rate = 2 × 10⁻⁵` matched to the FT cell) converged, by step
+64 of the 2,048‑step budget, to an "always predict `__NEGATIVE__`"
+policy.  Dev macro-F1 was bit-identical at
+`0.12624584717607973` for **every** seed and **every** one of the 32
+evaluation checkpoints per seed (steps 64, 128, …, 2048).
+Test-set metrics were equally degenerate: the 7 non-negative label
+F1 values were all exactly zero on both BioRED and BC5CDR for all 26
+completed LR runs (see
+`runs/phase_b_degenerate_lr_archive/lr2e5_preamendment_20260424T160804Z/archive_inventory.csv`).
+
+**(b) Mechanism — training was happening, but only towards the
+majority-class basin**.  Direct inspection of unmerged
+`stage_t1_best.pt` and `stage_t1_end.pt` state-dicts
+(`PB_PB_LR_T1B_s01`) established the trainer wiring is correct:
+
+| Parameter group | n | Changed between best & end? |
+|---|---|---|
+| LoRA adapters (`lora_A`, `lora_B` on Q/V, 12 layers) | 48 | **Yes** (max |Δ| 8 × 10⁻³) |
+| `classifier.modules_to_save.default.{weight,bias}` | 2 | **Yes** (max |Δ| 1.4 × 10⁻²) |
+| `*.base_layer.weight` (frozen Q/V originals) | 48 | No (bit-equal) |
+| Other encoder params (layer norm, FFN, attention output, K-projection) | 144 | No (bit-equal) |
+| Embeddings (word, position, token-type, LN) | 5 | No (bit-equal) |
+| Pooler | 2 | No (bit-equal) |
+
+The encoder is therefore **strictly frozen**, and adapters plus
+classifier head are the only trainable tensors — exactly as the
+declarative LoRA specification requires.  The training loss
+nevertheless decreases monotonically (2.2 → 0.2) because cross-entropy
+is minimised by inflating the `__NEGATIVE__` logit only.  At
+LR = 2 × 10⁻⁵ the combined capacity of 48 rank-16 adapters on Q/V
+plus the 2 classifier tensors (≈ 0.541% of total parameters) is
+insufficient to rotate the decision geometry out of the majority-class
+basin before the early-stopping-plus-fixed-budget clock expires.
+Full FT at the same LR escapes easily because 100% of parameters
+optimise concurrently.
+
+**(c) Why the pre-registered decision rule is undefined here, not
+"confirmed"**.  The original §7.6 spec labelled LR = 2 × 10⁻⁵ as
+"conservative / not LoRA-optimal", anticipating that LoRA would
+**underperform** FT by some measurable margin.  The realised outcome
+(identical `0.12624…` across every seed) gives the LoRA arm **zero
+variance**; the pre-registered H4 test (paired-*t* + Wilcoxon,
+Cohen's *d* ≥ 0.5) has a zero denominator (*d* → ∞) and is formally
+undefined, not "confirmed with very large effect".  The pre-registration
+lock does not permit a post-hoc change to the decision rule to cope
+with this, but it explicitly requires transparent amendment when an
+unanticipated degenerate regime is observed.
+
+**(d) Amendment — single-hyperparameter correction**.  The LoRA cell
+learning rate is changed from `2 × 10⁻⁵` to **`3 × 10⁻⁴`**, which is
+the default value published for LoRA fine-tuning in Hu et al. (2021,
+§4.1, Table 4) and the PEFT-library reference configuration.  No
+other LoRA specification is altered: rank, α, dropout, target modules,
+`modules_to_save`, bias, optimiser, warmup, scheduler, clipping,
+batch size, sequence length, max updates, early-stopping patience,
+selection metric, and all seeds remain exactly as locked.  Smoke
+validation `PB_PB_LR_T1B_s99` (SLURM `4268377`) is the precondition
+for the bulk retrain: non-degeneracy requires (i) dev macro-F1 > 0.20
+at some step ≤ 512, (ii) variation across the first 8 evaluation
+points > 10⁻⁴, (iii) at least one evaluation point with non-zero
+`dev_macro_f1_excluding_negative`.
+
+**(e) Disposition of the 35 degenerate runs (20 T1B + 15 T1F)**.
+Archived — not deleted — under
+`/lus/lfs1aip2/projects/b5ac/project_1/fine_tuning_experiments/runs/phase_b_degenerate_lr_archive/lr2e5_preamendment_20260424T160804Z/`
+with `excluded: degenerate_pre_amendment` in
+`archive_inventory.csv` (35 rows, schema: `experiment_id, encoder,
+update_regime, schedule, seed, has_best, has_eval,
+biored_macro_f1, bc5cdr_macro_f1, exclusion_flag, reason`).  They
+are **not** entered into any Phase B analysis, aggregation CSV, or
+paper table, and H4 / H6 / H7 are computed exclusively from the 180
+runs trained under the amended LR.
+
+**(f) Non-retention of the LR = 2 × 10⁻⁵ arm**.  The design space
+retains a **single** LoRA specification at the amended LR.  Keeping
+both arms (an "Option C" style dual comparison) would introduce a
+secondary narrative about the degenerate regime that is, scientifically,
+a pure methodological footnote (LoRA at this LR collapses; not a
+finding about parameter-efficient fine-tuning vs FT).  The
+archive is retained so any reviewer wishing to audit the amendment
+can reproduce (b)–(c) directly.
+
+**(g) Pre-registration impact (scope) and transparency**.  The
+amendment touches three clauses:
+
+| Clause | Before | After |
+|---|---|---|
+| §7.3 LoRA axis | LR matched to FT at 2 × 10⁻⁵ | LR = 3 × 10⁻⁴ (Hu et al. default) |
+| §7.6 "conservative LR" rationale | Anticipated LoRA underperforms FT meaningfully | Removed; replaced by "LoRA-optimal LR per amendment B.8" |
+| §7.2 H4 | Paired-*t* + Wilcoxon on matched-LR FT vs LoRA | Paired-*t* + Wilcoxon on FT(2 × 10⁻⁵) vs LoRA(3 × 10⁻⁴); the interpretation must explicitly note each arm uses its regime-optimal LR. |
+
+No other pre-registered clause is modified.  Sample size (20 seeds
+per cell, 9 non-RB cells × 20 + 10 RB), decision rules for H1, H2,
+H3, H5, H6, H7, multiple-comparison correction, factorial scope,
+mechanism-stratified slope definitions, bootstrap B, CI coverage,
+and all Phase A-derived calibration decisions are unchanged.
+
+**(h) Cost accounting**.  35 degenerate runs × ≈ 11 min each =
+≈ 6.4 GPU-hours already spent (archived).  Retrain of 180 LoRA runs
+at the amended LR, given the same per-run budget and 10× concurrency,
+is ≈ 25 GPU-hours.  Two PL FT seeds that were never trained (seeds
+17, 19 of `PB_PL_FT_T2`) are submitted in the same array for
+operational convenience.
+
+**(i) Independent and simultaneous action — FT eval backlog**.
+The 188 preserved FT runs (60 PB + 60 BL + 58 PL + 10 RB; two PL_FT_T2
+seeds pending (h) above) were trained pre-deletion but never
+evaluated through the Phase B eval pipeline (they carry
+`phase_a_eval.json` only).  Because every Phase B analysis script
+keys on `eval/phase_b_eval.json`, this gap blocks H1–H4, H6, H7
+regardless of the LoRA LR decision.  The FT eval backlog
+(SLURM `4267321`, 188 tasks, ≈ 2 h wall at concurrency 15) was
+submitted on 2026‑04‑25 independently of this amendment and
+produces only `phase_b_eval.json` and the KB-surface targets sidecar
+per run — no training, no checkpoint writing, no scientific choice.
+
+---
+
 *End of Appendix B amendment log.*
