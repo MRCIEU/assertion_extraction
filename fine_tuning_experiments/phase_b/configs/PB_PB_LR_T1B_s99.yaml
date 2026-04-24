@@ -1,0 +1,111 @@
+experiment_id: PB_PB_LR_T1B_s99
+phase: phase_b_configuration_factorial
+schema_id: S_pair
+seed: 99
+encoder:
+  name: pubmedbert
+  pretrained_model_name_or_path: microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext
+minimal_trainer:
+  enabled: false
+scientific_trainer:
+  enabled: true
+  model_name: microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext
+  max_length: 384
+  batch_size: 4
+  learning_rate: 3.0e-04
+  max_pairs_per_shard: 2000
+  eval_every_steps: 64
+  dev_fraction: 0.12
+  use_online_negatives: true
+  active_t1_shards:
+  - biored
+  active_t2_shards: []
+  active_t3_shards: []
+  t4_max_lines: 1024
+  t4_max_steps: 128
+  t4_max_length: 256
+  t4_learning_rate: 5.0e-05
+  max_updates: 2048
+  early_stopping_patience: 10
+  early_stopping_min_updates: 256
+  selection_metric: macro_f1
+architecture: pipeline
+update_regime: lora
+schedule: T1_biored_only
+T3_mode: none
+T4_mode: none
+loss_mode: re_ce
+novelty_head: 'off'
+directionality_scaffold: 'off'
+source_weighting_policy: inverse_freq_family_softmax
+weak_supervision:
+  lambda_auxiliary: 0.0
+  lambda_distill: 0.0
+  never_treat_weak_as_gold: true
+negative_sampling:
+  negative_ratio: 4.0
+  max_negatives_per_sample: 64
+  pair_type_filter: spair_legal_endpoints
+  use_per_dataset_routing: true
+  exclude_merged_jsonl_for_training: true
+stage_weights:
+  T1: 1.0
+  T2: 1.0
+  T3: 0.15
+  T4: 0.5
+source_weights:
+  biored: 1.0
+  drugprot: 1.0
+  bc5cdr: 1.0
+  civic: 0.0
+  civicmine: 0.0
+  cancermine: 0.0
+  oncology_lung_pubmed: 1.0
+export:
+  save_stage_checkpoints: true
+  save_predictions: true
+  save_logits: true
+  save_per_example_provenance: true
+  prediction_format: jsonl_gz
+training_data_paths:
+  T1_shards:
+    biored: /lus/lfs1aip2/projects/b5ac/project_1/training_data_generation/data/processed/t1_biored_trn_Spair.jsonl
+    drugprot: /lus/lfs1aip2/projects/b5ac/project_1/training_data_generation/data/processed/t1_drugprot_trn_Spair.jsonl
+    bc5cdr: /lus/lfs1aip2/projects/b5ac/project_1/training_data_generation/data/processed/t1_bc5cdr_trn_Spair.jsonl
+  T2_shards:
+    biored: /lus/lfs1aip2/projects/b5ac/project_1/training_data_generation/data/processed/t2_biored_mesh_Spair.jsonl
+    drugprot: /lus/lfs1aip2/projects/b5ac/project_1/training_data_generation/data/processed/t2_drugprot_mesh_Spair.jsonl
+    bc5cdr: /lus/lfs1aip2/projects/b5ac/project_1/training_data_generation/data/processed/t2_bc5cdr_mesh_Spair.jsonl
+  T3:
+    civic: /lus/lfs1aip2/projects/b5ac/project_1/training_data_generation/data/processed/t3_civic_semantic_priors.jsonl
+    civicmine: /lus/lfs1aip2/projects/b5ac/project_1/training_data_generation/data/processed/t3_civicmine_weak_sentences.jsonl
+    cancermine: /lus/lfs1aip2/projects/b5ac/project_1/training_data_generation/data/processed/t3_cancermine_priors.jsonl
+  T4: /lus/lfs1aip2/projects/b5ac/project_1/training_data_generation/data/processed/t4_unlabeled_domain_adaptation.jsonl
+ft_data_root: /lus/lfs1aip2/projects/b5ac/project_1/fine_tuning_experiments
+phase_b_metadata:
+  encoder_key: PB
+  update_key: LR
+  schedule_key: T1B
+  encoder_note: 'PubMedBERT-base: biomedical domain, MLM on PubMed abstracts'
+  update_note: LoRA r=16, alpha=32, dropout=0.05 on attention Q/V; classifier fully
+    trained
+  schedule_note: T1 only, BioRED shard only (isolates single-corpus gold signal; no
+    MeSH staging)
+  role: primary
+  factorial_amendment_note: arch axis dropped and seeds doubled 10->20 per Appendix
+    B row 2 dated 2026-04-16.
+purpose: 'Phase B training-configuration factorial: PubMedBERT-base: biomedical domain,
+  MLM on PubMed abstracts | LoRA r=16, alpha=32, dropout=0.05 on attention Q/V; classifier
+  fully trained | T1 only, BioRED shard only (isolates single-corpus gold signal;
+  no MeSH staging) | schema=S_pair | seed=1'
+analyses: benchmark;kb_surface;per_head_f1;active_head_f1
+lora:
+  r: 16
+  alpha: 32
+  dropout: 0.05
+  target_modules:
+  - query
+  - value
+  modules_to_save:
+  - classifier
+  bias: none
