@@ -81,6 +81,76 @@ from fine_tuning_experiments.phase_b.trainer.scientific_data import (
     sample_document_negatives,
 )
 
+# ─────────────────────────────────────────────────────────────────────
+# LoRA (peft) support — v2 re-implementation after 2026-04-24 source-tree
+# deletion incident.  The v1 implementation was uncommitted and lost; v2
+# is functionally identical (LoRA r=16, α=32, dropout=0.05 on query/value
+# projections with classifier head fully trainable, as per paper
+# pre-registration §7.4 and Appendix B row 2 dated 2026-04-16).  Soft
+# import so unit tests on hosts without peft still pass for FT paths.
+# ─────────────────────────────────────────────────────────────────────
+try:
+    from peft import LoraConfig, get_peft_model  # type: ignore
+    _PEFT_AVAILABLE = True
+except ImportError:  # pragma: no cover — peft absent on some hosts
+    LoraConfig = None  # type: ignore
+    get_peft_model = None  # type: ignore
+    _PEFT_AVAILABLE = False
+
+
+def _lora_config_from_cfg(cfg: dict):
+    """Build a peft.LoraConfig from the YAML cfg.  Returns None for FT.
+
+    Accepts both `update_regime: lora` (top-level, Phase B canonical) and
+    `update_regime: full_finetune` (default).  LoRA hyperparameters live
+    in the top-level `lora:` block with keys: r, alpha, dropout,
+    target_modules, modules_to_save, bias.
+    """
+    regime = cfg.get("update_regime", "full_finetune")
+    if regime in (None, "full_finetune", "ft"):
+        return None
+    if regime != "lora":
+        raise ValueError(
+            f"update_regime={regime!r} is not supported (expected "
+            "'full_finetune' or 'lora')."
+        )
+    if not _PEFT_AVAILABLE:
+        raise RuntimeError(
+            "update_regime=lora requires the `peft` package.  "
+            "Install via `pip install peft` and rerun."
+        )
+    lora = cfg.get("lora") or {}
+    # Defend against YAML `bias: null` → str(None) = 'None' which peft
+    # rejects.  Accept only the three peft-supported strings.
+    bias_val = lora.get("bias", "none")
+    if bias_val is None:
+        bias_val = "none"
+    bias_val = str(bias_val)
+    if bias_val not in ("none", "all", "lora_only"):
+        raise ValueError(
+            f"lora.bias={bias_val!r} invalid (expected one of "
+            "'none', 'all', 'lora_only')."
+        )
+    return LoraConfig(
+        r=int(lora.get("r", 16)),
+        lora_alpha=int(lora.get("alpha", 32)),
+        lora_dropout=float(lora.get("dropout", 0.05)),
+        bias=bias_val,
+        task_type="SEQ_CLS",
+        target_modules=list(lora.get("target_modules", ["query", "value"])),
+        modules_to_save=list(lora.get("modules_to_save", ["classifier"])),
+    )
+
+
+def _describe_param_counts(model: "torch.nn.Module") -> dict:
+    total = sum(p.numel() for p in model.parameters())
+    trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    return {
+        "total_params": int(total),
+        "trainable_params": int(trainable),
+        "trainable_fraction": float(trainable / total) if total > 0 else 0.0,
+    }
+
 
 # ─────────────────────────────────────────────────────────────────────
 # Seeding
@@ -297,7 +367,11 @@ def _train_one_stage(
         generator=torch.Generator().manual_seed(stage_rng_seed),
     )
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
+    # Only optimise parameters with requires_grad=True.  For full FT this
+    # is all parameters (byte-identical behaviour to prior version); for
+    # LoRA this is LoRA adapter weights + modules_to_save (classifier).
+    trainable_params = [p for p in model.parameters() if p.requires_grad]
+    optimizer = torch.optim.AdamW(trainable_params, lr=lr)
     scheduler = get_linear_schedule_with_warmup(
         optimizer, num_warmup_steps=0, num_training_steps=max_updates,
     )
@@ -325,7 +399,7 @@ def _train_one_stage(
             loss = _weighted_ce_loss(logits, labels, source_weight)
             optimizer.zero_grad()
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            torch.nn.utils.clip_grad_norm_(trainable_params, max_norm=1.0)
             optimizer.step()
             scheduler.step()
             log.loss_hist.append(float(loss.detach().cpu().item()))
@@ -561,7 +635,37 @@ def run_scientific_training(cfg: dict, exp_id: str, run_dir: Path) -> None:
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     model = AutoModelForSequenceClassification.from_pretrained(
         model_name, num_labels=num_labels,
-    ).to(device)
+    )
+
+    # ── Optional LoRA wrap (update_regime=lora) ──────────────────────────
+    # peft wrapping MUST happen before .to(device) so adapter buffers go
+    # on the correct device.  For FT (lora_config is None) the model is
+    # moved to device unchanged, preserving byte-identical behaviour to
+    # the 190 existing FT runs.
+    lora_config = _lora_config_from_cfg(cfg)
+    lora_enabled = lora_config is not None
+    # Capture user-intent modules_to_save BEFORE peft mutates the config.
+    _user_modules_to_save_print = (
+        list((cfg.get("lora") or {}).get("modules_to_save", ["classifier"]))
+        if lora_enabled
+        else []
+    )
+    if lora_enabled:
+        # Log the config hyperparameters before wrapping to avoid peft's
+        # in-place mutation of target_modules / modules_to_save.
+        print(f"[LoRA] r={lora_config.r} alpha={lora_config.lora_alpha} "
+              f"dropout={lora_config.lora_dropout} "
+              f"target_modules={sorted(lora_config.target_modules)} "
+              f"modules_to_save={sorted(_user_modules_to_save_print)}",
+              flush=True)
+        model = get_peft_model(model, lora_config)
+    model = model.to(device)
+    param_counts = _describe_param_counts(model)
+    if lora_enabled:
+        print(f"[LoRA] trainable_params={param_counts['trainable_params']:,} "
+              f"/ total={param_counts['total_params']:,} "
+              f"({100 * param_counts['trainable_fraction']:.3f}%)",
+              flush=True)
 
     # ── Source weights (applied to per-sample CE loss) ────────────────────
     source_weights_cfg = cfg.get("source_weights", {}) or {}
@@ -635,20 +739,24 @@ def run_scientific_training(cfg: dict, exp_id: str, run_dir: Path) -> None:
         key=lambda L: (L.best_checkpoint or {}).get("best_selection_score", -1.0),
     )
     best_src = ckpt_dir / (best_stage.best_checkpoint["checkpoint_file"])
-    import shutil
-    shutil.copy(best_src, ckpt_dir / "best.pt")
-    # last = current model state
-    torch.save(
-        {"model_state_dict": {k: v.detach().cpu().clone() for k, v in model.state_dict().items()},
-         "label2id": label2id,
-         "stage": stages_executed[-1],
-         "model_name": model_name,
-         "best_checkpoint_meta": best_stage.best_checkpoint,
-         "rng_state": _collect_rng_state()},
-        ckpt_dir / "last.pt",
+
+    # Capture the user-intent modules_to_save BEFORE any peft call so
+    # lora_meta reflects the YAML config (peft mutates `lora_config
+    # .modules_to_save` in place during `get_peft_model`, appending the
+    # peft-internal module aliases; we store the original user list).
+    _user_modules_to_save = list(
+        (cfg.get("lora") or {}).get("modules_to_save", ["classifier"])
     )
 
-    # ── Predictions on the stage-last dev split ──────────────────────────
+    # ── Predictions MUST be written before any destructive merge below ──
+    # For LoRA, `model` is currently the live peft-wrapped model whose
+    # forward pass is mathematically identical to its merged form, so
+    # predictions are unaffected by whether we merge now or later.
+    # But `merge_and_unload()` is destructive: after it runs, the peft
+    # wrapper's internal state is invalidated and `model(**batch)` may
+    # no longer produce correct logits.  Writing predictions BEFORE the
+    # merge (and using the `model` variable that we don't mutate here)
+    # keeps the contract simple for both FT and LoRA.
     dev_for_pred = dev_rows_t2 if log_t2 is not None else dev_rows_t1
     _write_predictions(
         model, tokenizer, dev_for_pred, label2id,
@@ -656,6 +764,96 @@ def run_scientific_training(cfg: dict, exp_id: str, run_dir: Path) -> None:
         batch_size=int(st["batch_size"]),
         device=device,
         out_path=preds_dir / "predictions_scientific.jsonl",
+    )
+
+    if lora_enabled:
+        # Under LoRA, the stage-best .pt files hold peft-wrapped state
+        # dicts (base + LoRA adapters + modules_to_save).  The eval
+        # pipeline (fine_tuning_experiments/schema_exp/eval/eval_one_run
+        # .load_model_from_checkpoint) loads best.pt directly into an
+        # `AutoModelForSequenceClassification` with no peft dependency,
+        # so we must merge the adapters into the base weights before
+        # writing best.pt.  We build a fresh peft-wrapped model on CPU,
+        # load the best-stage state dict into it, call merge_and_unload
+        # (which collapses LoRA A @ B into the base linear weights),
+        # then save the resulting plain state dict in the same schema
+        # as full-FT best.pt so eval is indifferent to update regime.
+        #
+        # CRITICAL: we build a FRESH LoraConfig for the merge (rather
+        # than reusing the `lora_config` object) because peft's
+        # `get_peft_model` mutates its input config in place (appending
+        # to `modules_to_save`).  Reusing the mutated object would pass
+        # an already-expanded module list to the second `get_peft_model`
+        # call, with implementation-dependent results.
+        #
+        # weights_only=False is safe: we pickled rng_state (containing
+        # numpy arrays) ourselves; PyTorch 2.6+ otherwise refuses to
+        # unpickle numpy reconstruct globals under the new default.
+        best_ckpt_blob = torch.load(
+            best_src, map_location="cpu", weights_only=False,
+        )
+        _fresh_lora_cfg = _lora_config_from_cfg(cfg)
+        _fresh_base = AutoModelForSequenceClassification.from_pretrained(
+            model_name, num_labels=num_labels,
+        )
+        _fresh_peft = get_peft_model(_fresh_base, _fresh_lora_cfg)
+        _fresh_peft.load_state_dict(best_ckpt_blob["model_state_dict"], strict=True)
+        _merged_best = _fresh_peft.merge_and_unload()
+        merged_state = {
+            k: v.detach().cpu().clone() for k, v in _merged_best.state_dict().items()
+        }
+        torch.save(
+            {
+                "model_state_dict": merged_state,
+                "label2id": label2id,
+                "stage": best_stage.stage,
+                "model_name": model_name,
+                "best_checkpoint_meta": best_stage.best_checkpoint,
+                "rng_state": best_ckpt_blob.get("rng_state"),
+                "lora_meta": {
+                    "enabled": True,
+                    "r": lora_config.r,
+                    "alpha": lora_config.lora_alpha,
+                    "dropout": lora_config.lora_dropout,
+                    "bias": lora_config.bias,
+                    "target_modules": list(lora_config.target_modules),
+                    "modules_to_save": _user_modules_to_save,
+                    "merged_at_save": True,
+                    "trainer_version": "v2_2026-04-24_reimplemented",
+                    "note": (
+                        "best.pt stores a merged plain state dict; "
+                        "intermediate stage_*_best.pt files store the "
+                        "unmerged peft-wrapped state."
+                    ),
+                },
+            },
+            ckpt_dir / "best.pt",
+        )
+        del _fresh_base, _fresh_peft, _merged_best, best_ckpt_blob
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+        # last.pt: merge the LIVE peft model (destructive) and save.
+        # After this point, `model` is a plain un-wrapped model with
+        # merged weights.  We never train or predict on it again.
+        model = model.merge_and_unload()
+        last_state = {
+            k: v.detach().cpu().clone() for k, v in model.state_dict().items()
+        }
+    else:
+        import shutil
+        shutil.copy(best_src, ckpt_dir / "best.pt")
+        last_state = {
+            k: v.detach().cpu().clone() for k, v in model.state_dict().items()
+        }
+    torch.save(
+        {"model_state_dict": last_state,
+         "label2id": label2id,
+         "stage": stages_executed[-1],
+         "model_name": model_name,
+         "best_checkpoint_meta": best_stage.best_checkpoint,
+         "rng_state": _collect_rng_state()},
+        ckpt_dir / "last.pt",
     )
 
     # ── Metrics JSONs ────────────────────────────────────────────────────
@@ -700,11 +898,16 @@ def run_scientific_training(cfg: dict, exp_id: str, run_dir: Path) -> None:
     )
 
     # ── Training log ─────────────────────────────────────────────────────
+    _regime_label = "lora" if lora_enabled else "full_finetune"
     (run_dir / "training.log").write_text(
         "utc=" + datetime.now(timezone.utc).isoformat() + "\n"
         f"experiment_id={exp_id}\n"
         f"device={device.type}\n"
         f"stages={stages_executed}\n"
+        f"update_regime={_regime_label}\n"
+        f"total_params={param_counts['total_params']}\n"
+        f"trainable_params={param_counts['trainable_params']}\n"
+        f"trainable_fraction={param_counts['trainable_fraction']:.6f}\n"
         "checkpoints=" + str([p.name for p in sorted(ckpt_dir.glob('*.pt'))]) + "\n"
     )
 
@@ -735,6 +938,8 @@ def run_scientific_training(cfg: dict, exp_id: str, run_dir: Path) -> None:
         "phase": cfg.get("phase"),
         "phase_a_metadata": cfg.get("phase_a_metadata"),
         "phase_b_metadata": cfg.get("phase_b_metadata"),
+        "update_regime": "lora" if lora_enabled else "full_finetune",
+        "schedule": schedule,
         "resolved": {
             "schedule": schedule,
             "stages_executed": stages_executed,
@@ -742,6 +947,22 @@ def run_scientific_training(cfg: dict, exp_id: str, run_dir: Path) -> None:
             "checkpoints": [str(p) for p in sorted(ckpt_dir.glob("*.pt"))],
             "best_checkpoint_metric": st.get("selection_metric", "macro_f1"),
             "label2id": label2id,
+            "update_regime": "lora" if lora_enabled else "full_finetune",
+            "param_counts": param_counts,
+            "lora_meta": (
+                {
+                    "enabled": True,
+                    "r": lora_config.r,
+                    "alpha": lora_config.lora_alpha,
+                    "dropout": lora_config.lora_dropout,
+                    "bias": lora_config.bias,
+                    "target_modules": list(lora_config.target_modules),
+                    "modules_to_save": _user_modules_to_save,
+                    "trainer_version": "v2_2026-04-24_reimplemented",
+                }
+                if lora_enabled
+                else {"enabled": False}
+            ),
         },
         "stub": False,
     }
