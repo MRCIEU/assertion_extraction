@@ -40,8 +40,9 @@ fi
 echo ""
 echo "=== [1/3] Train at LR=3.0e-04 ==="
 /usr/bin/python3.11 -m fine_tuning_experiments.phase_b.trainer.run_experiment \
-    --config "$CFG" \
-    --run-root "$RUN_ROOT"
+    --experiment-id "${EXP_ID}" \
+    --config-path "${CFG}" \
+    --run-root "${RUN_ROOT}"
 
 if [ ! -f "$RUN_DIR/checkpoints/best.pt" ]; then
     echo "ERROR: training produced no best.pt" >&2
