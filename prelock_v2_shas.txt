@@ -1,0 +1,15 @@
+# phase_b_prelock_v2 SHA-256 manifest
+# Frozen 2026-04-27; tag: phase_b_prelock_v2
+#
+# Each line is the sha256sum of the file as committed at the prelock_v2
+# tag. The Appendix A block in paper_methods_draft.md references this
+# manifest by filename (not by SHA), so no self-reference recursion exists.
+# Algorithm: GNU coreutils sha256sum.
+#
+dada1d2d855eba5fdda160194442d2f63b72de8d917d7cb6afa1ae764aa92d6d  paper_methods_draft.md
+22449e9bf40dd79979348ec8d64d22a863462bec60b2e6805203b5f5ef656ece  paper_development_design.md
+7bfa766a07ca20c9f9369a51f6ae17679a777a6549348ee908546ad5024db09d  paper_development_design_locked_v1.md
+54021e1dd14844adeebf978e56cfee374f552633fbad9443b38c59e9fabf5063  fine_tuning_experiments/phase_b/analysis/analyze_phase_b.py
+a19ec36804bbef594403cf73b1ee2819f04697717db5afd9e5af317fe4acd7e6  fine_tuning_experiments/phase_b/analysis/tests/test_phase_b_analysis.py
+fc9762e6c34ea4409d95abbbd1f12768738dffdc178b56c0cfac3ee961f5b439  fine_tuning_experiments/phase_b/sbatch/phase_b_lora_d3_smoke.sbatch
+5717e7c840171019a4eeab5b79a7f894a4986eaff93d04ec5b12c9a189f594bf  fine_tuning_experiments/schema_exp/eval/EVAL_VERSION.txt

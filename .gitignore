@@ -46,6 +46,10 @@ checkpoints/
 # reference for reviewers (see paper_development_design.md Appendix B row 3,
 # 2026-04-16). The evolving paper_development_design.md remains ignored.
 !paper_development_design_locked_v1.md
+# Exception: the paper-ready scientific skeleton extracted at lock v2
+# (2026-04-27). Tracked so the prelock_v2 tag has a complete reproducibility
+# package on GitHub.
+!paper_methods_draft.md
 
 # ID lists and submission records (regenerable)
 phase_*_ids.txt

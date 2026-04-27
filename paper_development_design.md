@@ -311,11 +311,28 @@ submission for exactly this reason.
 
 ---
 
-### B.8 — LoRA pre-registered learning rate produces degenerate collapse; amended to LoRA-optimal 3 × 10⁻⁴ (2026‑04‑25)
+### B.8 — LoRA pre-registered learning rate produces degenerate collapse; amended to LoRA-optimal 3 × 10⁻⁴ (2026‑04‑25) — **RETRACTED 2026‑04‑27, see B.9**
+
+> **RETRACTION NOTICE (2026‑04‑27).**  This amendment's *causal claim* —
+> that LR = 2 × 10⁻⁵ was the reason LoRA collapsed and that LR = 3 × 10⁻⁴
+> (Hu et al. 2021 default) would restore non-degeneracy — was empirically
+> falsified by the smoke run `PB_PB_LR_T1B_s99` (SLURM `4268527`), which
+> trained at LR = 3 × 10⁻⁴ for the full 2,048-step budget and produced
+> the *same* bit-identical 100%-NEGATIVE collapse (dev macro-F1
+> = `0.12649945474372956` for all 32 evaluation checkpoints; dev set
+> 240 / 1168 positive predictions = 0).  Section (a)–(c) of B.8 (the
+> *observation* that the pre-registered LoRA cell collapses, and the
+> *evidence* that the trainer's wiring is correct) are retained as
+> historically accurate.  Section (d)–(g) (the *amendment* to LR
+> = 3 × 10⁻⁴ as the corrective action) are retracted: the LR change is
+> not the corrective action, because LR was not the root cause.  See
+> amendment **B.9** for (i) the empirical falsification, (ii) the
+> revised root-cause analysis (capacity + budget, not LR), and (iii)
+> the next-step plan (D3: budget probe).
 
 | Date | Trigger | Scope affected | Description |
 |---|---|---|---|
-| 2026‑04‑24/25 | **Empirical discovery** during the v2 LoRA pilot retrain (SLURM `4260475`) that the pre-registered conservative LoRA learning rate induces complete model collapse, making H4 an undefined test. | §7.3 design axis (LoRA specification), §7.6 "conservative LR" rationale, §7.2 H4 decision rule. | See (a)–(f) below. |
+| 2026‑04‑24/25 | **Empirical discovery** during the v2 LoRA pilot retrain (SLURM `4260475`) that the pre-registered conservative LoRA learning rate induces complete model collapse, making H4 an undefined test. | §7.3 design axis (LoRA specification), §7.6 "conservative LR" rationale, §7.2 H4 decision rule. | See (a)–(f) below. **(d)–(g) retracted 2026‑04‑27 — see B.9.** |
 
 **(a) Observation — bit-identical degenerate minimum across 35 seeds**.
 All LoRA runs launched under the pre-registered specification
@@ -436,6 +453,260 @@ regardless of the LoRA LR decision.  The FT eval backlog
 submitted on 2026‑04‑25 independently of this amendment and
 produces only `phase_b_eval.json` and the KB-surface targets sidecar
 per run — no training, no checkpoint writing, no scientific choice.
+
+### B.9 — LR change does not rescue LoRA; revised root cause (capacity + budget) and budget-probe plan D3 (2026‑04‑27)
+
+| Date | Trigger | Scope affected | Description |
+|---|---|---|---|
+| 2026‑04‑27 | Smoke `PB_PB_LR_T1B_s99` (SLURM `4268527`) at the B.8-amended LR = 3 × 10⁻⁴ produced the *same* degenerate 100%-NEGATIVE collapse over the full 2,048-step budget, **falsifying the LR-cause hypothesis of B.8**. | §7.3 LoRA spec, §7.6 LoRA rationale, §7.2 H4 decision rule, B.8(d)–(g). | See (a)–(g) below. |
+
+**(a) Falsifying observation — LR = 3 × 10⁻⁴ also collapses.**
+Single-seed pilot at the B.8-amended LR with all other hyperparameters
+held at the locked values (rank = 16, α = 32, dropout = 0.05,
+target = {query, value}, modules\_to\_save = {classifier}, bias = none,
+2,048 steps, batch = 16, max\_length = 384, AdamW, linear schedule
+from 3 × 10⁻⁴ to 0):
+
+| step | dev macro-F1 | acc | loss\_recent\_mean | lr |
+|---:|---:|---:|---:|---:|
+| 64   | 0.12649945… | 0.79452 | 1.045 | 2.91 × 10⁻⁴ |
+| 256  | 0.12649945… | 0.79452 | 0.926 | 2.62 × 10⁻⁴ |
+| 512  | 0.12649945… | 0.79452 | 0.910 | 2.25 × 10⁻⁴ |
+| 1024 | 0.12649945… | 0.79452 | 0.953 | 1.50 × 10⁻⁴ |
+| 2048 | 0.12649945… | 0.79452 | 0.898 | 0.00 |
+
+Predictions on the 1,168-row dev set: `[("__NEGATIVE__", 1168)]`,
+i.e. all 240 positive examples are misclassified as `__NEGATIVE__`.
+Bit-identical dev macro-F1 across 32 evaluation checkpoints is
+*identical in structure* to the LR = 2 × 10⁻⁵ collapse documented in
+B.8(a); only the literal F1 value differs in the 5th decimal
+(`0.12649945…` at LR = 3 × 10⁻⁴, `0.12624584…` at LR = 2 × 10⁻⁵),
+because the dev split sample order under seed 99 vs seeds 1–20 yields
+a slightly different all-NEGATIVE confusion matrix.  Both are the
+*same* trivial solution.
+
+**(b) Internal evidence — the model is training, but only away from
+positives.**  Direct comparison of `stage_t1_best.pt` (saved at the
+first-best step 64) and `stage_t1_end.pt` (step 2048) for
+`PB_PB_LR_T1B_s99`:
+
+| Parameter group | n | max \|Δ\| best→end | Trainable per spec? |
+|---|---:|---:|---|
+| LoRA `lora_A`, `lora_B` (Q/V × 12 layers) | 48 | 2.22 × 10⁻² | yes |
+| `classifier.modules_to_save.default.{w,b}` | 2 | 6.76 × 10⁻² | yes |
+| `*.base_layer.weight` (frozen Q/V originals) | 48 | 0.0 | no |
+| Other encoder (LN, FFN, K, attention output) | 144 | 0.0 | no |
+| Embeddings, pooler | 7 | 0.0 | no |
+| `classifier.original_module.{w,b}` (PEFT-frozen) | 2 | 0.0 | no |
+
+The LoRA-B norm grew from 0.31 (step 64) to 0.63 (step 2048), and
+the trainable classifier weight norm from 1.628 (step 64) to 1.862
+(step 2048) — i.e. **2× larger LoRA contribution and 14% larger
+classifier weight than at the B.8 LR**, confirming the optimiser is
+operating with substantially more signal at LR = 3 × 10⁻⁴.  The
+training loss none the less plateaus near 0.90 from step 256 onwards
+and the dev decision boundary never moves off `__NEGATIVE__`.
+
+**(c) Trainer-wiring claim re-verified independently.**  An offline
+unit experiment on a tiny 32-hidden-unit BERT loaded with the same
+PEFT 0.19.1 + Transformers 5.4.0 wraps the classifier with
+`peft.utils.other.ModulesToSaveWrapper`.  Forward inspection
+(`active_adapter = "default"`, `disable_adapters = False`,
+`active_adapters = ["default"]`) plus a destructive probe — adding
++1000 to a single class row of `modules_to_save["default"].weight`
+moved the corresponding output logit by +294, while the same
+modification on `original_module.weight` left output unchanged
+(diff = 1.5 × 10⁻⁵) — confirms forward routes through the trainable
+copy, not the frozen original.  **The trainer is not buggy.  The
+collapse is an optimisation property of the LoRA configuration on
+this data, not a routing artefact.**
+
+**(d) Revised root cause — capacity + budget, not LR.**  The
+diagnostic comparison that resolves B.8's wrong-LR hypothesis is the
+side-by-side trajectory of the matched FT cell and the LR cell:
+
+| step | FT (`PB_PB_FT_T1B_s01`, 100% trainable) | LoRA LR = 3 × 10⁻⁴ (`PB_PB_LR_T1B_s99`, 0.541% trainable) |
+|---:|---:|---:|
+| 64   | dev_f1 = 0.1267 (degenerate) | dev_f1 = 0.1265 (degenerate) |
+| 256  | dev_f1 = 0.1267 (degenerate) | dev_f1 = 0.1265 (degenerate) |
+| 448  | dev_f1 = 0.1267 (degenerate) | dev_f1 = 0.1265 (degenerate) |
+| 512  | **dev_f1 = 0.1330 (escape begins)** | dev_f1 = 0.1265 |
+| 640  | dev_f1 = 0.2018 | dev_f1 = 0.1265 |
+| 1024 | dev_f1 = 0.4441 | dev_f1 = 0.1265 |
+| 2048 | dev_f1 = 0.5134 | **dev_f1 = 0.1265 (still degenerate)** |
+
+Both regimes start in the *same* trivial all-NEGATIVE basin (this is
+a property of the loss surface under 4× negative sampling and a
+freshly-initialised classifier head, not of either regime
+specifically).  FT escapes around step 512 — early-escape rate
+across the 60 PB-encoder FT seeds is 19/20 (T1B), 20/20 (T1F),
+20/20 (T2) by step 1024 and 100% by step 2048 (see the FT eval
+backlog summary, B.8(i) confirmed).  LoRA at LR = 3 × 10⁻⁴ never
+escapes within the 2,048-step budget despite the optimiser running
+3× faster than at LR = 2 × 10⁻⁵.
+
+The right-causal claim is therefore **not** "LR was too low" but
+rather: at 0.541% trainable parameters (596K vs 110M), the LoRA
+configuration on Q/V projections + the trainable classifier head
+cannot rotate the encoder representation far enough off the all-
+NEGATIVE attractor in 2,048 steps regardless of LR.  Loss plateaus
+before the decision geometry changes.  This is consistent with
+LoRA's known sensitivity to budget and to target-module choice —
+restricting adaptation to attention Q/V (Hu et al. §3.2) leaves
+the FFN, K-projection, attention output, and embeddings frozen at
+their pre-trained values, so the only path out of the trivial basin
+is through the small Q/V perturbation pipe.
+
+**(e) Plan D3 — falsifiable budget probe (single-hyperparameter
+change relative to the *pre-lock* LoRA spec).**  Before drawing the
+final scientific conclusion, one further experiment is performed
+with **only one hyperparameter changed from the pre-registration
+lock**: `max_updates: 2048 → 4096`.  All other LoRA values revert
+to the pre-lock specification (LR = 2 × 10⁻⁵; B.8's LR change is
+retracted by the present amendment).  The smoke run is
+`PB_PB_LR_T1B_s99` (re-cycled experiment ID; the LR = 3 × 10⁻⁴
+incarnation is archived per (g) below).
+
+The pre-lock decision rule for "LoRA escapes degeneracy" is
+unchanged: dev macro-F1 > 0.20 by some step ≤ 1024 (corresponds
+to the FT escape window; the threshold itself is the
+B.8(d) operationalisation, not new), variation across the first
+8 evaluation points > 10⁻⁴, at least one evaluation point with
+non-zero `dev_macro_f1_excluding_negative`.
+
+**Decision tree from D3 outcome:**
+
+| D3 result | Action | Amendment chain |
+|---|---|---|
+| Smoke escapes (dev_f1 > 0.20 by step ≤ 1024 *and* > 0.30 at step 4096) | Submit the 180 LoRA bulk retrain at LR = 2 × 10⁻⁵, max\_updates = 4096; H4 then proceeds as pre-registered with the budget amendment B.9 footnoted. | B.8 retracted (this amendment), B.9 single-clause budget change, no further amendments. |
+| Smoke does not escape | LoRA arm is dropped from Phase B in its entirety: H4 is declared *empirically undefined* on this dataset under any budget probed within the GPU‑budget envelope; H1, H2, H3, H5, H6, H7 are unaffected (they are FT-only or do not stratify on update\_regime). | B.8 retracted, B.9 records the budget-probe falsification, and a separate amendment (B.10) is written at the time it is taken to drop the LoRA arm. |
+
+D3 is *the* falsifier.  No further hyperparameter search is
+conducted — multiple-axis tuning here would be cherry-picking under
+pre-registration.  The single new degree of freedom (max\_updates)
+is justified because the FT trajectory itself uses ≈ 94% of its
+2,048 budget to fully separate, and a 2× budget probe on the
+slower-converging cell is the minimum information-bearing follow-up.
+
+**(f) Scope of clauses changed by the present amendment.**
+
+| Clause | After B.8 (now retracted) | After B.9 (current state) |
+|---|---|---|
+| §7.3 LoRA cell LR | 3 × 10⁻⁴ | **2 × 10⁻⁵** (restored to pre-lock value) |
+| §7.3 LoRA cell `max_updates` | 2,048 (per pre-lock) | 2,048 *pending D3*; **4,096 if D3 escapes**; cell removed if D3 fails |
+| §7.6 "conservative LR" rationale | removed | restored to pre-lock wording |
+| §7.2 H4 decision rule | matched-LR FT vs LoRA at 3 × 10⁻⁴ | **paired-*t* + Wilcoxon, matched-LR FT(2e-5) vs LoRA(2e-5) at the budget chosen by D3**; if D3 fails, H4 is declared empirically undefined and reported as a methodological null |
+| Sample size, all other H1–H3, H5–H7 decisions, multiple-comparison correction, factorial scope | unchanged | unchanged |
+
+**(g) Disposition of the LR = 3 × 10⁻⁴ smoke run.**  The single run
+`PB_PB_LR_T1B_s99` (1 best.pt + 1 end.pt + 32 validation entries
++ 1,168-row predictions file) is moved to
+`runs/phase_b_degenerate_lr_archive/lr3e4_postB8_TIMESTAMP/`
+alongside the 35 LR = 2 × 10⁻⁵ runs from B.8(e), with
+`exclusion_flag: degenerate_pre_amendment_B9` and a one-line
+`reason` referencing the present retraction.  Total archived
+degenerate runs to date: **36** (35 at LR = 2 × 10⁻⁵, 1 at
+LR = 3 × 10⁻⁴).  None enter any Phase B analysis.
+
+**(h) Status of FT eval backlog (B.8(i) closed).**  All 188 FT
+runs have produced `phase_b_eval.json` from SLURM array `4267321`
+(188/188 with `eval/phase_b_eval.json`, 188/188 with
+`checkpoints/best.pt`).  Cell-level BioRED test
+`macro_f1_excluding_negative` medians:
+
+| cell | n | median | range |
+|---|---:|---:|---:|
+| BL_FT_T1B | 20 | 0.390 | [0.344, 0.417] |
+| BL_FT_T1F | 20 | 0.355 | [0.250, 0.382] |
+| BL_FT_T2  | 20 | 0.371 | [0.312, 0.407] |
+| PB_FT_T1B | 20 | 0.384 | [0.294, 0.418] |
+| PB_FT_T1F | 20 | 0.314 | [0.199, 0.361] |
+| PB_FT_T2  | 20 | 0.351 | [0.261, 0.404] |
+| PL_FT_T1B | 20 | 0.399 | [0.000, 0.466] |
+| PL_FT_T1F | 20 | 0.346 | [0.204, 0.386] |
+| PL_FT_T2  | 18 | 0.351 | [0.194, 0.406] |
+| RB_FT_T2  | 10 | 0.141 | [0.065, 0.204] |
+
+`RB_FT_T2` (random-baseline) sits well below all trained cells, as
+expected.  Three `PL_FT_T1B` seeds produce
+`macro_f1_excluding_negative = 0` and are flagged for individual
+inspection in the analysis stage but not excluded ex ante.  Two
+`PL_FT_T2` seeds (17, 19) are still un-trained and are submitted in
+the same array as the D3 outcome retrain (or, on D3 failure, in a
+2-task standalone array independently of the LoRA decision).
+**H1, H2, H3, H5, H6, H7 are not blocked by D3.**
+
+**(i) Cost accounting (cumulative).**
+
+| Phase | GPU-hours | Outcome |
+|---|---:|---|
+| 35 × LR = 2 × 10⁻⁵ degenerate runs (B.8(e)) | ≈ 6.4 | archived |
+| 1 × LR = 3 × 10⁻⁴ degenerate smoke (B.9(g)) | ≈ 0.07 | archived |
+| 188 × FT eval backlog (B.8(i)) | ≈ 5.0 wall, 1 GPU each ≈ 31.3 GPU-h | **complete, healthy** |
+| D3 smoke (1 run, max\_updates = 4096, LR = 2 × 10⁻⁵) | ≈ 0.4 | pending |
+| D3 success → 180 LoRA + 2 PL\_FT retrain | ≈ 50 (≈ 2× B.8 estimate due to 4,096 steps) | gated |
+| D3 failure → 2 PL\_FT\_T2 retrain only | ≈ 0.4 | gated |
+| **Cumulative committed** | **≈ 43** | (excluding the ≈ 50-h conditional retrain) |
+
+**(j) Documentation invariant.**  The pre-lock document
+`paper_development_design_locked_v1.md` is not modified by either
+B.8 or B.9; both are post-lock entries in this amendment log.  The
+D3 smoke configuration (`configs/PB_PB_LR_T1B_s99.yaml`) and the
+180 LoRA bulk-retrain configs will be edited in place in the
+*active* config tree (not the locked snapshot), with the change
+limited to `max_updates: 4096` and a revert of the LR field to
+`2.0e-05`.  A bulk-update script analogous to
+`scripts/update_lora_lr_to_3e4.py` will be added (and committed
+*before* the bulk retrain is launched) to perform the field swap
+deterministically.
+
+---
+
+## Appendix B — Post-lock amendment log (continued)
+
+### Amendments B.10 – B.23 (consolidated, lock v2)
+
+Frozen as `phase_b_prelock_v2` on 2026-04-27.
+
+Between `phase_b_prelock_v1` (2026-04-16) and `phase_b_prelock_v2`,
+the paper-ready scientific skeleton (`paper_methods_draft.md`) was
+extracted from the lock body, and the following 14 amendment items
+were applied. None alters Phase A's already-completed runs or their
+per-run JSON outputs; all are amendments to the analysis specification
+or to documentation prose. The locked v1 document remains untouched.
+
+| ID | Section | Amendment | Reason |
+|---|---|---|---|
+| B.10 | §3.1.1 | Schema upper-bound rationale split into design-time (DrugProt guidelines define 5 canonical sub-mechanisms) and post-hoc confirmation (5 dead BioRED heads at 13 labels). | Reviewer-facing precision: design-time argument was implicit; post-hoc evidence alone could read as data-driven. |
+| B.11 | §3.4 | Unmapped n=3 CIViC targets explicitly excluded from evaluable pool; KB metrics computed over n=162 (not n=165). | Verified that this matches eval pipeline behaviour (Phase A `phase_a_eval.json` already report `n_targets_evaluable=162`); align doc with code. |
+| B.12 | §4.5 | KB_hit_A_setvalued primary-metric pre-designation justified on three grounds (computable from `pred_label`; most direct interpretation; coincides with single_label on S_pair). | Reviewer-facing rationale; implicit before. |
+| B.13 | §6.9.3 | ANOVA "within-cell (seed)" column relabelled "residual" with explanatory footnote. | Statistical precision: residual is dominated by seed but not exclusively so. |
+| B.14 | §6.9.4 | Post-hoc reframe paragraph removed; finding stated directly without paper-history narrative. | Reviewer-facing concision. |
+| B.15 | §6.9.5 | Active-head pre-commitment logic chain made explicit (post-hoc head selection = metric shopping). | Reviewer-facing pre-commitment evidence. |
+| B.16 | §6.9.6 | ICC framing clarified — "rater" reading is a borrowed analogy; seeds are seed-level replicates. | Statistical precision. |
+| B.17 | §7.2 | Counter-finding clauses added for H2, H3, H5, H6, H7 (previously only H1, H4 had explicit counter-finding criteria). | Pre-commitment completeness; closes the "what would falsify each hypothesis" loop. |
+| B.18 | §7.2 | Effect-size threshold rationale (Δ ≥ 0.02 / 0.03; d ≥ 0.5) tied to one within-cell SD of the corresponding metric. | First-principles justification; thresholds were declared but not justified in v1. |
+| B.19 | §7.2.1 | H6 abstract-level claim mapping promoted from implicit table to dedicated sub-section with motivation. | Pre-commitment salience. |
+| B.20 | §7.3 | LoRA D3 budget probe acceptance criteria explicitly written into doc (3 all-must-pass criteria mirroring `phase_b_lora_d3_smoke.sbatch` exit-code logic). | Reviewer-facing pre-commitment of the LoRA gating decision. |
+| B.21 | §8.3.1 | H6 three-bin slope thresholds (β = 0.3 / 1.0) written down with first-principles justification (β = 1 = perfect-linear-proxy reference; β = 0.3 ≈ 6 % of KB SD per BioRED SD movement). | Pre-commitment of cut-offs that were referenced but not specified in v1. |
+| B.22 | §8.5 | R_B and R_A redefined as ratios of variance *shares* (dimensionless) with explicit formula; bootstrap protocol specified (5 000 cell-level resamples, percentile CI, deterministic seed 20260417). | Removes ambiguity between absolute SS and share ratios; aligns doc with already-implemented code in `analyze_phase_b.py::h7_variance_asymmetry`. |
+| B.23 | §8.6 | Ordinal-instability quantification formally specified (matching radius ρ = 0.03 pinned to Phase A SD; median ΔKB and rank-inversion rate as reported quantities; cluster-bootstrap CI with seed 20260418). | Removes circular dependency on Phase B SD; makes Figure F4(b) reproducible. |
+
+**Lock-v2 invariants (verified 2026-04-27):**
+
+- All 120 Phase A runs unchanged; per-run `phase_a_eval.json` inputs to analysis untouched.
+- All 180 Phase B FT runs unchanged.
+- D3 budget probe (`PB_LR_D3`, JobID 4399041) still queued; LoRA bulk gating outcome unaffected by any v2 amendment.
+- `analyze_phase_b.py` was extended with `bootstrap_RB()` and `ordinal_instability()` to implement B.22 and B.23; existing R_B point estimate, H6 slope code, and H7 ANOVA code are unchanged.
+- `tests/test_phase_b_analysis.py` validates the new routines on Phase A data: R_A bootstrap CI [1.544, 4.305] contains the paper-cited 2.29 (point estimate 2.282 from 2 000 resamples).
+
+**Pre-Phase-B-LoRA-bulk readiness checklist (all items closed):**
+
+- [x] All thresholds, cut-offs, and decision rules in v2 doc are pre-specified and have first-principles justification.
+- [x] Counter-finding criteria exist for every primary hypothesis (H1–H7).
+- [x] Analysis routines for every primary statistic exist and pass tests on Phase A.
+- [x] D3 acceptance criteria are encoded both in the sbatch exit-code logic and in the methods draft.
+- [x] No analysis decision remains contingent on Phase B data inspection.
 
 ---
 

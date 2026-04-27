@@ -47,13 +47,14 @@ from CellKey; H5 → deferred stub; anchors drop the "arch" qualifier.
 from __future__ import annotations
 
 import argparse
+import itertools
 import json
 import math
 import random
 import statistics
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Iterable, Sequence
 
 SCRIPT = Path(__file__).resolve()
 PHASE_B_DIR = SCRIPT.parent.parent      # .../phase_b
@@ -525,6 +526,378 @@ def h7_variance_asymmetry(rows: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 # -----------------------------------------------------------------------------
+# §8.5 R_B cluster-bootstrap percentile CI
+# §8.6 Ordinal-instability quantification
+#
+# These two modules are the pre-committed Phase B reporting routines whose
+# point estimates are emitted by `h7_variance_asymmetry` and the H6 slope
+# script respectively. They are kept here so that one invocation of
+# `analyze_phase_b.py` produces every Phase B confirmatory number the paper
+# needs, including R_B's bootstrap CI and the ordinal-instability headline
+# numbers (§8.5, §8.6 of `paper_methods_draft.md`).
+#
+# Both routines are designed to be agnostic to the specific factor set so
+# that the same code can be smoke-tested on Phase A (factors =
+# {schema, encoder}, 12 cells × 10 seeds, expected R_A ≈ 2.29) before
+# Phase B unblinds.
+# -----------------------------------------------------------------------------
+
+# Pre-specified per §8.6: matching radius ρ is pinned to the Phase A
+# within-cell BioRED ex-NEG SD; this is constant by design and must not
+# be recomputed from Phase B data.
+ORDINAL_RHO = 0.03
+RB_BOOTSTRAP_SEED = 20260417   # distinct from Phase A's 20260416
+ORDINAL_BOOTSTRAP_SEED = 20260418
+N_BOOTSTRAP_DEFAULT = 5000
+
+# Canonical factor sets ↔ §8.5 / §6.9.3.
+PHASE_B_FACTORS = ("encoder", "update", "schedule")
+PHASE_A_FACTORS = ("encoder", "schema")
+
+
+def _cell_id(row: dict[str, Any], factors: Sequence[str]) -> tuple:
+    return tuple(row[f] for f in factors)
+
+
+def _compute_lever_shares(rows: list[dict[str, Any]],
+                          metric: str,
+                          factors: Sequence[str]) -> dict[str, float] | None:
+    """Type-I-style sequential SS decomposition for one metric.
+
+    Returns the share (fraction of total SS) attributable to each main
+    factor and to each two-way interaction, mirroring `_ss_decomp` inside
+    `h7_variance_asymmetry` but parametric in `factors` so that it can
+    also be applied to Phase A.
+
+    Returns None if `ss_total == 0` (degenerate metric column on this
+    sample, e.g. a bootstrap resample where the metric collapses to a
+    constant).
+    """
+    ys = [r[metric] for r in rows if r.get(metric) is not None]
+    if len(ys) < 2:
+        return None
+    grand = statistics.mean(ys)
+    ss_tot = sum((y - grand) ** 2 for y in ys)
+    if ss_tot <= 0:
+        return None
+
+    shares: dict[str, float] = {}
+
+    for f in factors:
+        by_level: dict[Any, list[float]] = defaultdict(list)
+        for r in rows:
+            if r.get(metric) is not None:
+                by_level[r[f]].append(r[metric])
+        ss_f = sum(len(vs) * (statistics.mean(vs) - grand) ** 2
+                   for vs in by_level.values() if vs)
+        shares[f] = ss_f / ss_tot
+
+    for fa, fb in itertools.combinations(factors, 2):
+        by_cell: dict[tuple, list[float]] = defaultdict(list)
+        for r in rows:
+            if r.get(metric) is not None:
+                by_cell[(r[fa], r[fb])].append(r[metric])
+        ss_ab = sum(len(vs) * (statistics.mean(vs) - grand) ** 2
+                    for vs in by_cell.values() if vs)
+        # Two-way share = SS(cell of {A,B}) − SS(A) − SS(B), clipped at 0.
+        shares[f"{fa}_x_{fb}"] = max(0.0, ss_ab / ss_tot - shares[fa] - shares[fb])
+
+    return shares
+
+
+def _R_from_shares(shares_num: dict[str, float] | None,
+                   shares_den: dict[str, float] | None) -> float | None:
+    if shares_num is None or shares_den is None:
+        return None
+    lever_num = sum(shares_num.values())
+    lever_den = sum(shares_den.values())
+    if lever_den <= 1e-12:
+        return None
+    return lever_num / lever_den
+
+
+def bootstrap_RB(per_seed_data: list[dict[str, Any]],
+                 *,
+                 factors: Sequence[str] = PHASE_B_FACTORS,
+                 metric_num: str = BIORED_EX_NEG,
+                 metric_den: str = KB_HIT_A,
+                 n_resamples: int = N_BOOTSTRAP_DEFAULT,
+                 seed: int = RB_BOOTSTRAP_SEED) -> dict[str, Any]:
+    """Cell-level cluster-bootstrap percentile CI on R_B (§8.5).
+
+    Parameters
+    ----------
+    per_seed_data : list of dict
+        One dict per seed-level run, with at least the factor columns,
+        `metric_num`, and `metric_den`. (For Phase B: factors =
+        ('encoder', 'update', 'schedule'); for the Phase A smoke test:
+        factors = ('encoder', 'schema').)
+    factors : sequence of str
+        Factor names that jointly identify a cell.
+    metric_num, metric_den : str
+        Metric column names for numerator (BioRED ex-NEG by default) and
+        denominator (KB_hit_A_setvalued by default) variance shares.
+    n_resamples : int
+        Number of cluster-bootstrap resamples. 5000 per §8.5.
+    seed : int
+        Deterministic RNG seed.
+
+    Returns
+    -------
+    dict with:
+        point_estimate : R_B from the observed data.
+        bootstrap_median : median R_B across successful resamples.
+        ci_lower, ci_upper : 2.5th / 97.5th percentile R_B (95 % CI).
+        n_resamples : as requested.
+        n_cells_used : number of unique cells in the input.
+        failed_resamples : count of resamples whose ANOVA was degenerate
+            (e.g. ss_total = 0 or denominator share ≈ 0). The percentile
+            CI is taken over the successful resamples only.
+
+    Procedure (matches §8.5 verbatim):
+        1. Identify unique cell ids.
+        2. For each of `n_resamples` resamples:
+           a. Sample `n_cells` cell ids with replacement.
+           b. Take all seeds within each sampled cell (cluster
+              bootstrap; preserves seed structure within cell).
+           c. Compute lever shares on numerator and denominator metrics.
+           d. R_B = (Σ lever shares on num) / (Σ lever shares on den).
+        3. 95 % CI = (2.5th, 97.5th) percentile of successful R_B values.
+    """
+    cells_to_rows: dict[tuple, list[dict[str, Any]]] = defaultdict(list)
+    for r in per_seed_data:
+        cells_to_rows[_cell_id(r, factors)].append(r)
+    cell_ids = list(cells_to_rows.keys())
+    n_cells = len(cell_ids)
+    if n_cells < 2:
+        return {"status": "insufficient_cells", "n_cells_used": n_cells}
+
+    point_num = _compute_lever_shares(per_seed_data, metric_num, factors)
+    point_den = _compute_lever_shares(per_seed_data, metric_den, factors)
+    point_RB = _R_from_shares(point_num, point_den)
+
+    rng = random.Random(seed)
+    bootstrap_RBs: list[float] = []
+    failed = 0
+    for _ in range(n_resamples):
+        sampled = [cell_ids[rng.randrange(n_cells)] for _ in range(n_cells)]
+        resample_rows: list[dict[str, Any]] = []
+        for cid in sampled:
+            resample_rows.extend(cells_to_rows[cid])
+        sn = _compute_lever_shares(resample_rows, metric_num, factors)
+        sd = _compute_lever_shares(resample_rows, metric_den, factors)
+        rb = _R_from_shares(sn, sd)
+        if rb is None or not math.isfinite(rb):
+            failed += 1
+            continue
+        bootstrap_RBs.append(rb)
+
+    if not bootstrap_RBs:
+        return {"status": "all_resamples_failed",
+                "point_estimate": point_RB,
+                "n_resamples": n_resamples,
+                "failed_resamples": failed,
+                "n_cells_used": n_cells}
+
+    bootstrap_RBs.sort()
+    n_ok = len(bootstrap_RBs)
+    lo = bootstrap_RBs[int(0.025 * n_ok)]
+    hi = bootstrap_RBs[min(n_ok - 1, int(0.975 * n_ok))]
+    median = bootstrap_RBs[n_ok // 2]
+
+    return {
+        "point_estimate": point_RB,
+        "bootstrap_median": median,
+        "ci_lower": lo,
+        "ci_upper": hi,
+        "n_resamples": n_resamples,
+        "n_successful_resamples": n_ok,
+        "failed_resamples": failed,
+        "n_cells_used": n_cells,
+        "factors": list(factors),
+        "metric_num": metric_num,
+        "metric_den": metric_den,
+        "seed": seed,
+        "lever_shares_observed": {
+            metric_num: point_num,
+            metric_den: point_den,
+        },
+    }
+
+
+def ordinal_instability(per_seed_data: list[dict[str, Any]],
+                        *,
+                        factors: Sequence[str] = PHASE_B_FACTORS,
+                        metric_bench: str = BIORED_EX_NEG,
+                        metric_kb: str = KB_HIT_A,
+                        rho: float = ORDINAL_RHO,
+                        n_resamples: int = N_BOOTSTRAP_DEFAULT,
+                        seed: int = ORDINAL_BOOTSTRAP_SEED,
+                        exclude_RB: bool = True,
+                        pairs_csv_path: Path | None = None) -> dict[str, Any]:
+    """Ordinal-instability quantification per §8.6.
+
+    Computes:
+      - eligible-pair table (|Δbench| < ρ),
+      - median |ΔKB| over eligible pairs (point estimate + bootstrap CI),
+      - rank-inversion rate (fraction of eligible non-zero pairs where
+        sign(Δbench) ≠ sign(ΔKB)) with bootstrap CI.
+
+    The matching radius ρ is fixed at 0.03 (Phase A within-cell BioRED
+    ex-NEG SD). This pin is hard-coded to prevent the circular dependency
+    flagged by §8.6 (a Phase-B-derived radius would be a function of the
+    LoRA-arm gating outcome).
+
+    Bootstrap is cluster bootstrap **by cell, not by pair**: each
+    resample draws cells with replacement and re-enumerates eligible
+    pairs in the resample, so the CI absorbs the underlying cell-level
+    sampling variability.
+    """
+    cells_to_rows: dict[tuple, list[dict[str, Any]]] = defaultdict(list)
+    for r in per_seed_data:
+        cells_to_rows[_cell_id(r, factors)].append(r)
+
+    if exclude_RB and "encoder" in factors:
+        enc_idx = factors.index("encoder")
+        cells_to_rows = {cid: rs for cid, rs in cells_to_rows.items()
+                         if cid[enc_idx] != ENCODER_REFERENCE}
+
+    cell_ids = list(cells_to_rows.keys())
+    if len(cell_ids) < 2:
+        return {"status": "insufficient_cells",
+                "n_cells_used": len(cell_ids),
+                "rho": rho}
+
+    def _cell_means(rows_per_cell: dict[tuple, list[dict[str, Any]]]
+                    ) -> dict[tuple, tuple[float, float]]:
+        means: dict[tuple, tuple[float, float]] = {}
+        for cid, rs in rows_per_cell.items():
+            bvs = [r[metric_bench] for r in rs if r.get(metric_bench) is not None]
+            kvs = [r[metric_kb] for r in rs if r.get(metric_kb) is not None]
+            if bvs and kvs:
+                means[cid] = (statistics.mean(bvs), statistics.mean(kvs))
+        return means
+
+    def _enumerate_eligible(means: dict[tuple, tuple[float, float]]
+                            ) -> list[dict[str, Any]]:
+        keys = list(means.keys())
+        eligible: list[dict[str, Any]] = []
+        for i in range(len(keys)):
+            for j in range(i + 1, len(keys)):
+                bi, ki = means[keys[i]]
+                bj, kj = means[keys[j]]
+                d_bench = bi - bj
+                d_kb = ki - kj
+                if abs(d_bench) < rho:
+                    inv = (d_bench != 0 and d_kb != 0
+                           and ((d_bench > 0) != (d_kb > 0)))
+                    eligible.append({
+                        "cell_i": keys[i],
+                        "cell_j": keys[j],
+                        "delta_bench": d_bench,
+                        "delta_kb_signed": d_kb,
+                        "delta_kb_abs": abs(d_kb),
+                        "rank_inverted": inv,
+                        "rank_tied": (d_bench == 0 or d_kb == 0),
+                    })
+        return eligible
+
+    def _summary(eligible: list[dict[str, Any]]) -> tuple[float, float, int, int]:
+        """(median |ΔKB|, rank-inversion rate, n_eligible, n_inversion_denom)."""
+        if not eligible:
+            return (float("nan"), float("nan"), 0, 0)
+        kb_abs = sorted(p["delta_kb_abs"] for p in eligible)
+        median_kb = kb_abs[len(kb_abs) // 2]
+        nz = [p for p in eligible if not p["rank_tied"]]
+        if nz:
+            inv_rate = sum(1 for p in nz if p["rank_inverted"]) / len(nz)
+        else:
+            inv_rate = float("nan")
+        return (median_kb, inv_rate, len(eligible), len(nz))
+
+    observed_means = _cell_means(cells_to_rows)
+    observed_eligible = _enumerate_eligible(observed_means)
+    median_kb, inv_rate, n_elig, n_nz = _summary(observed_eligible)
+
+    rng = random.Random(seed)
+    boot_medians: list[float] = []
+    boot_inv_rates: list[float] = []
+    failed = 0
+    n_cells = len(cell_ids)
+    for _ in range(n_resamples):
+        sampled_indices = [rng.randrange(n_cells) for _ in range(n_cells)]
+        resample_rows_per_cell: dict[tuple, list[dict[str, Any]]] = {}
+        for k, idx in enumerate(sampled_indices):
+            cid = cell_ids[idx]
+            # Each resample slot is a distinct "position" — avoid
+            # collapsing duplicate draws. Position-tagged keys preserve
+            # multiplicity and produce the self-pairs (Δ = 0) that
+            # cluster-bootstrap requires.
+            resample_rows_per_cell[(k, cid)] = cells_to_rows[cid]
+        means_r = _cell_means(resample_rows_per_cell)
+        elig_r = _enumerate_eligible(means_r)
+        m, ir, _, n_nz_r = _summary(elig_r)
+        if not (math.isfinite(m) and (math.isnan(ir) or math.isfinite(ir))):
+            failed += 1
+            continue
+        boot_medians.append(m)
+        if not math.isnan(ir):
+            boot_inv_rates.append(ir)
+
+    def _percentile_ci(xs: list[float]) -> list[float]:
+        if not xs:
+            return [float("nan"), float("nan")]
+        xs_sorted = sorted(xs)
+        n = len(xs_sorted)
+        return [xs_sorted[int(0.025 * n)],
+                xs_sorted[min(n - 1, int(0.975 * n))]]
+
+    median_ci = _percentile_ci(boot_medians)
+    inv_ci = _percentile_ci(boot_inv_rates)
+
+    if pairs_csv_path is not None and observed_eligible:
+        pairs_csv_path.parent.mkdir(parents=True, exist_ok=True)
+        import csv as _csv
+        with pairs_csv_path.open("w", newline="") as f:
+            w = _csv.writer(f)
+            w.writerow(["cell_i", "cell_j", "delta_bench",
+                        "delta_kb_signed", "delta_kb_abs",
+                        "rank_inverted", "rank_tied"])
+            for p in observed_eligible:
+                w.writerow([
+                    "|".join(str(x) for x in p["cell_i"]),
+                    "|".join(str(x) for x in p["cell_j"]),
+                    f"{p['delta_bench']:.6f}",
+                    f"{p['delta_kb_signed']:.6f}",
+                    f"{p['delta_kb_abs']:.6f}",
+                    int(p["rank_inverted"]),
+                    int(p["rank_tied"]),
+                ])
+
+    return {
+        "rho": rho,
+        "n_cells_used": n_cells,
+        "n_eligible_pairs": n_elig,
+        "n_eligible_nonzero_pairs": n_nz,
+        "median_delta_KB": median_kb,
+        "median_delta_KB_ci": median_ci,
+        "rank_inversion_rate": inv_rate,
+        "rank_inversion_rate_ci": inv_ci,
+        "delta_KB_distribution": [p["delta_kb_abs"] for p in observed_eligible],
+        "n_resamples": n_resamples,
+        "failed_resamples": failed,
+        "n_successful_resamples_median": len(boot_medians),
+        "n_successful_resamples_inversion": len(boot_inv_rates),
+        "factors": list(factors),
+        "metric_bench": metric_bench,
+        "metric_kb": metric_kb,
+        "exclude_RB": exclude_RB,
+        "pairs_csv_path": str(pairs_csv_path) if pairs_csv_path else None,
+        "seed": seed,
+    }
+
+
+# -----------------------------------------------------------------------------
 # Driver
 # -----------------------------------------------------------------------------
 
@@ -532,6 +905,8 @@ _HYPOTHESIS_KEYS = (
     "H1_encoder", "H2_corpus", "H3_schedule",
     "H4_update_regime", "H5_architecture_deferred",
     "H7_variance_asymmetry",
+    "h7_R_B_bootstrap",
+    "rq4_ordinal_instability",
 )
 
 
@@ -560,6 +935,19 @@ def analyze(csv_path: Path, out_json: Path, out_md: Path) -> dict[str, Any]:
         "H4_update_regime": h4_update(idx),
         "H5_architecture_deferred": h5_architecture_deferred(),
         "H7_variance_asymmetry": h7_variance_asymmetry(rows),
+        "h7_R_B_bootstrap": (
+            bootstrap_RB([r for r in rows if r.get("encoder") in ENCODERS_MAIN])
+            if any(r.get("encoder") in ENCODERS_MAIN for r in rows)
+            else {"status": "phase_b_data_not_yet_available"}
+        ),
+        "rq4_ordinal_instability": (
+            ordinal_instability(
+                [r for r in rows if r.get("encoder") in ENCODERS_MAIN],
+                pairs_csv_path=out_json.parent / "ordinal_instability_pairs.csv",
+            )
+            if any(r.get("encoder") in ENCODERS_MAIN for r in rows)
+            else {"status": "phase_b_data_not_yet_available"}
+        ),
         "H6_note": ("H6 mechanism-stratified slopes are computed by "
                     "fine_tuning_experiments.phase_b.analysis.h6_coupling_slopes; "
                     "run that script separately with both Phase A and Phase B CSVs."),
