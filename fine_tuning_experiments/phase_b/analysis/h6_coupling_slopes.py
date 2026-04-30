@@ -61,6 +61,7 @@ _PHASE_A_RE = re.compile(r"^PA_([A-Z]+)_([A-Za-z]+)_s(\d+)$")
 # Post-lock amendment 2026-04-16 (Appendix B row 2): arch axis dropped.
 # Phase B run_id layout is now PB_{enc}_{upd}_{sched}_s{NN} (3 factor tokens).
 _PHASE_B_RE = re.compile(r"^PB_([A-Z]+)_([A-Za-z0-9]+)_([A-Za-z0-9]+)_s(\d+)$")
+PHASE_B_MAIN_ENCODERS = {"PB", "BL", "PL"}
 
 
 @dataclass
@@ -133,6 +134,8 @@ def runs_from_eval_dir(eval_dir: Path) -> list[Run]:
             ))
         elif pb is not None:
             enc, upd, sched, seed = pb
+            if enc not in PHASE_B_MAIN_ENCODERS:
+                continue
             # Phase B is S_pair-only; carry schema="Spair" by convention.
             out.append(Run(
                 run_id=run_id, phase="B",
@@ -158,30 +161,49 @@ def _opt_float(v: Any) -> float | None:
 
 
 def runs_from_csv(csv_path: Path) -> list[Run]:
-    """Fallback loader that reads `phase_a_results.csv` (the
-    `aggregate_phase_a.py` output).  Phase A only."""
+    """Load aggregate CSV rows into H6 run records.
+
+    Historically this accepted only the Phase A `aggregate_phase_a.py`
+    output.  Phase B now feeds H6 through `phase_b/aggregate_phase_b.py`,
+    which emits `PB_{ENC}_{UPD}_{SCHED}_sNN` rows with the same benchmark
+    and KB columns.  Support both formats so one H6 invocation can combine
+    Phase A eval directories with the Phase B aggregate CSV.
+    """
     out: list[Run] = []
     with csv_path.open() as f:
         reader = csv.DictReader(f)
         for row in reader:
             run_id = row.get("run_id", "")
-            pa = _parse_phase_a_run(run_id)
-            if pa is None:
-                continue
-            enc, sch, seed = pa
             try:
                 x = float(row["biored_macro_f1_ex_neg"])
                 y = float(row["kb_hit_A_setvalued"])
             except Exception:
                 continue
-            out.append(Run(
-                run_id=run_id, phase="A",
-                cell_key=f"PA_{enc}_{sch}",
-                encoder=enc, schema=sch, seed=seed,
-                biored_f1=x, kb_hit_A=y,
-                kb_pmass_B=_opt_float(row.get("kb_pmass_B_setvalued")),
-                kb_auc_C=_opt_float(row.get("kb_auc_C_setvalued")),
-            ))
+
+            pa = _parse_phase_a_run(run_id)
+            if pa is not None:
+                enc, sch, seed = pa
+                out.append(Run(
+                    run_id=run_id, phase="A",
+                    cell_key=f"PA_{enc}_{sch}",
+                    encoder=enc, schema=sch, seed=seed,
+                    biored_f1=x, kb_hit_A=y,
+                    kb_pmass_B=_opt_float(row.get("kb_pmass_B_setvalued")),
+                    kb_auc_C=_opt_float(row.get("kb_auc_C_setvalued")),
+                ))
+                continue
+
+            pb = _parse_phase_b_run(run_id)
+            if pb is not None:
+                enc, upd, sched, seed = pb
+                out.append(Run(
+                    run_id=run_id, phase="B",
+                    cell_key=f"PB_{enc}_{upd}_{sched}",
+                    encoder=enc, schema="Spair", seed=seed,
+                    biored_f1=x, kb_hit_A=y,
+                    kb_pmass_B=_opt_float(row.get("kb_pmass_B_setvalued")),
+                    kb_auc_C=_opt_float(row.get("kb_auc_C_setvalued")),
+                ))
     return out
 
 
@@ -461,6 +483,8 @@ def _cell_means_B(runs: Sequence[Run]) -> dict[str, tuple[float, float, int]]:
     for r in runs:
         if r.phase != "B":
             continue
+        if r.encoder not in PHASE_B_MAIN_ENCODERS:
+            continue
         agg[r.cell_key].append(r)
     out: dict[str, tuple[float, float, int]] = {}
     for k, rs in agg.items():
@@ -474,8 +498,11 @@ def beta_config(
     runs: Sequence[Run], rng: np.random.Generator | None = None,
     n_boot: int = 5000,
 ) -> dict[str, Any] | None:
-    """OLS across 18 Phase B cell means (post-lock amendment 2026-04-16;
-    was 36 under the original factorial).  Returns None if no Phase B data."""
+    """OLS across 9 realised Phase B FT main cell means (post-B.24).
+
+    RB is a descriptive reference cell and is excluded from H6, matching
+    §7.3/§7.4 and the H7 implementation in `analyze_phase_b.py`.
+    """
     rng = rng or np.random.default_rng(20260416)
     cell_means = _cell_means_B(runs)
     if not cell_means:
@@ -492,6 +519,8 @@ def beta_config(
     cell_runs = defaultdict(list)
     for r in runs:
         if r.phase == "B":
+            if r.encoder not in PHASE_B_MAIN_ENCODERS:
+                continue
             cell_runs[r.cell_key].append(r)
     cell_keys = list(cell_runs)
     boot: list[float] = []
@@ -517,7 +546,7 @@ def beta_config(
         "bootstrap_ci_lo": float(boot_lo), "bootstrap_ci_hi": float(boot_hi),
         "ci_lo": float(boot_lo), "ci_hi": float(boot_hi),
         "ci_width": float(boot_hi - boot_lo),
-        "method": "OLS on Phase B cell means (18 cells under amended factorial, Appendix B 2026-04-16); Wald + cluster bootstrap (5000)",
+        "method": "OLS on realised Phase B FT main cell means (9 cells post-B.24; RB excluded); Wald + cluster bootstrap (5000)",
     }
 
 
@@ -716,7 +745,7 @@ def _load_runs(args: argparse.Namespace) -> list[Run]:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--input", type=Path, default=None,
-                    help="Phase A CSV (aggregate_phase_a output)")
+                    help="Aggregate CSV (Phase A or Phase B)")
     ap.add_argument("--input-dirs", type=Path, nargs="*", default=None,
                     help="Directories containing PA_*/PB_*/eval/phase_a_eval.json")
     ap.add_argument("--out", type=Path, required=True,

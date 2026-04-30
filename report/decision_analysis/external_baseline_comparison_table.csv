@@ -1,0 +1,5 @@
+story,family_id,what_it_shows,biored_effect,bc5cdr_effect,interpretation
+Pipeline beats shared on external data under this protocol,family_2_architecture_update,M003 vs M009,small_positive_m003,large_positive_m003,Architecture choice matters more on BC5CDR than BioRED in this snapshot
+Full finetune beats top-four on both benchmarks,family_2_architecture_update,M015 vs M025,moderate_positive_m015,strong_positive_m015,Parameter-efficient head not a substitute here for external transfer
+Mainline beats T3 auxiliary control,family_1_simpler_training_policy,M015 vs M005,small_positive_m015,moderate_positive_m015,Weak-aux mixture not justified by external gains vs mainline
+Decision-policy sweep (table-derived),family_3_selection_policy,DP1–DP6 vs naive single metrics,not_applicable,not_applicable,See decision_policy_baseline_comparison.csv; distinguishes policy assumptions from architecture contrasts

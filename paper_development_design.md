@@ -579,7 +579,7 @@ non-zero `dev_macro_f1_excluding_negative`.
 | D3 result | Action | Amendment chain |
 |---|---|---|
 | Smoke escapes (dev_f1 > 0.20 by step ≤ 1024 *and* > 0.30 at step 4096) | Submit the 180 LoRA bulk retrain at LR = 2 × 10⁻⁵, max\_updates = 4096; H4 then proceeds as pre-registered with the budget amendment B.9 footnoted. | B.8 retracted (this amendment), B.9 single-clause budget change, no further amendments. |
-| Smoke does not escape | LoRA arm is dropped from Phase B in its entirety: H4 is declared *empirically undefined* on this dataset under any budget probed within the GPU‑budget envelope; H1, H2, H3, H5, H6, H7 are unaffected (they are FT-only or do not stratify on update\_regime). | B.8 retracted, B.9 records the budget-probe falsification, and a separate amendment (B.10) is written at the time it is taken to drop the LoRA arm. |
+| Smoke does not escape | LoRA arm is dropped from Phase B in its entirety: H4 is declared *empirically undefined* on this dataset under any budget probed within the GPU‑budget envelope; H1, H2, H3, H5, H6, H7 are unaffected (they are FT-only or do not stratify on update\_regime). | B.8 retracted, B.9 records the budget-probe falsification, and a separate amendment (**B.24** — the lock-v2 consolidation batch B.10–B.23 was committed concurrently with B.9 on 2026‑04‑27 and exhausted those numbers) is written at the time it is taken to drop the LoRA arm. |
 
 D3 is *the* falsifier.  No further hyperparameter search is
 conducted — multiple-axis tuning here would be cherry-picking under
@@ -710,4 +710,741 @@ or to documentation prose. The locked v1 document remains untouched.
 
 ---
 
+### B.24 — D3 budget probe falsified; LoRA arm dropped from Phase B; H4 declared methodological null (2026‑04‑30)
+
+| Date | Trigger | Scope affected | Description |
+|---|---|---|---|
+| 2026‑04‑30 | D3 budget-probe smoke `PB_PB_LR_T1B_s99` (SLURM `4399041`) at the pre-lock LR = 2 × 10⁻⁵ with the doubled budget `max_updates = 4096` produced the *same* bit-identical 100 %-NEGATIVE collapse as the LR = 2 × 10⁻⁵ pilot (B.8) and the LR = 3 × 10⁻⁴ pilot (B.9), **falsifying the budget hypothesis advanced in B.9(d)**.  Per the B.9(e) decision tree, the LoRA arm is dropped from Phase B and H4 is declared empirically undefined within the pre-registered compute envelope (§7.3 D3 acceptance criterion #1 — `dev_macro_f1 > 0.20` by step ≤ 1024 — and #2 — `dev_macro_f1 > 0.30` at step 4096 — and #3 — at least one `dev_macro_f1_excluding_negative > 0` — all failed). | §7.2 H4 decision rule, §7.3 LoRA cell, §7.4 factorial run count, §7.6 LoRA training-configuration paragraph; cross-references in §8.4 (H4 verdict mapping), §8.5 (R\_B variance bookkeeping), and §9.4.4 (paper Results writing). | See (a)–(j) below.  *Note on numbering*: this amendment was forward-referenced as "B.10" in the B.9 closing decision tree; the lock-v2 consolidation batch (B.10–B.23) was committed concurrently with B.9 on 2026‑04‑27 and consumed those numbers, so the chronologically next free integer is **B.24**.  This is the disposition that closes the Phase B LoRA decision in the post-lock log. |
+
+**(a) Falsifying observation — D3 collapses identically to B.8 and B.9.**
+Single-seed pilot at the *pre-lock* LR = 2 × 10⁻⁵ (B.9 restored
+the locked value after B.8 was retracted) with `max_updates`
+doubled from 2,048 to 4,096 (single new degree of freedom relative
+to the pre-lock spec).  All other LoRA hyperparameters were the
+locked values (rank = 16, α = 32, dropout = 0.05,
+`target_modules = ["query", "value"]`,
+`modules_to_save = ["classifier"]`, bias = none, batch = 4
+× 4 negatives = 16 effective, max\_length = 384, AdamW, linear
+schedule, eval\_every\_steps = 64, early\_stopping\_patience = 10,
+early\_stopping\_min\_updates = 256, selection\_metric = macro\_f1).
+
+| step | dev_macro_f1 | dev_acc | loss\_recent\_mean | lr |
+|---:|---:|---:|---:|---:|
+| 64    | 0.12680577… | 0.79452 | 1.925 | 1.97 × 10⁻⁵ |
+| 512   | 0.12680577… | 0.79452 | 0.946 | 1.75 × 10⁻⁵ |
+| 1024  | 0.12680577… | 0.79452 | 0.779 | 1.50 × 10⁻⁵ |
+| 2048  | 0.12680577… | 0.79452 | 0.870 | 1.00 × 10⁻⁵ |
+| 3072  | 0.12680577… | 0.79452 | 0.737 | 5.00 × 10⁻⁶ |
+| 4096  | 0.12680577… | 0.79452 | 0.769 | 0.00 |
+
+All 64 dev evaluations (steps 64, 128, …, 4096) returned the
+*identical* macro-F1 to 12 decimal places.  Predictions on the
+1,188-row dev split: `[("__NEGATIVE__", 1188)]` — every single
+dev example, including all 240 positive instances, is mapped to
+`__NEGATIVE__`.  The literal value of the bit-identical
+macro-F1 differs from the B.8 (0.12624584…) and B.9
+(0.12649945…) values only in the 5th decimal because the dev split
+sample order under seed 99 with the doubled-budget scheduler
+yields a slightly different all-NEGATIVE confusion matrix; the
+*structure* (every checkpoint sees identical predictions; loss falls
+without the boundary moving) is identical across all three
+attempts.
+
+**(b) Internal evidence — model trained correctly but never moved
+the decision boundary.**  Direct comparison of `stage_t1_best.pt`
+(saved at first-best step 64) and `stage_t1_end.pt` (step 4096) for
+`PB_PB_LR_T1B_s99` (D3):
+
+| Parameter group | n | max \|Δ\| best→end | Trainable per spec? |
+|---|---:|---:|---|
+| LoRA `lora_A`, `lora_B` (Q/V × 12 layers) | 48 | 1.51 × 10⁻² | yes |
+| `classifier.modules_to_save.default.{w,b}` | 2 | 2.24 × 10⁻² | yes |
+| `classifier.original_module.{w,b}` | 2 | 0.0 | no (PEFT-frozen) |
+| `*.base_layer.weight` (frozen Q/V originals) | 48 | 0.0 | no |
+| Other encoder (LN, FFN, K, attention output) | 144 | 0.0 | no |
+| Embeddings, pooler | 7 | 0.0 | no |
+
+LoRA-B representative norms: layer 0 query 0.0325 → 0.1566 (4.8×
+growth); layer 0 value 0.0583 → 0.1884 (3.2× growth); layer 1
+query 0.0433 → 0.1743 (4.0× growth).  Trainable classifier
+`weight`-norm grew from 1.5717 (step 64) to 1.6634 (step 4096) —
+6 % growth, consistent with the 14 % growth observed in B.9(b) for
+the LR = 3 × 10⁻⁴ run.  The optimiser is functioning, the gradient
+flow is correct, the training loss falls monotonically (1.93 → 0.77,
+59 % reduction).  The *decision* never moves off `__NEGATIVE__`.
+
+**(c) Trainer wiring re-verified independently for the third time.**
+The destructive PEFT routing probe documented in B.9(c) — adding
++1000 to `modules_to_save["default"].weight[0]` shifts the
+corresponding output logit by +294, while the same modification on
+`original_module.weight[0]` leaves output unchanged
+(diff = 1.5 × 10⁻⁵) — was re-verified against the D3 checkpoint
+state-dict by direct inspection of the four classifier subkeys:
+`base_model.model.classifier.original_module.{weight,bias}` (frozen,
+zero-Δ) and `base_model.model.classifier.modules_to_save.default.{weight,bias}`
+(trained, non-zero Δ).  Forward path is the trainable copy.  This
+is now the third independent confirmation that the trainer is not
+buggy across three distinct LoRA-cell hyperparameter regimes.
+
+**(d) The right-causal claim, restated and finalised.**  The
+combination of:
+
+1. *capacity*: 0.541 % trainable parameters (596 K of 110 M),
+   restricted to 48 rank-16 adapters on attention Q/V projections
+   plus the 2-tensor classifier head;
+2. *target-module restriction*: the FFN, K-projection, attention
+   output, embeddings, and pooler are all frozen at their
+   pre-trained values, so the only path out of the trivial basin is
+   through the small Q/V perturbation pipe;
+3. *data regime*: an 8-class, ≈ 80 %-`__NEGATIVE__`,
+   ≈ 1,200-example dev set (BioRED-only when the schedule is T1B,
+   the cell tested here);
+4. *budget*: 2,048 or 4,096 optimiser steps,
+
+is empirically insufficient to rotate the encoder representation
+off the all-NEGATIVE attractor under *any* learning rate probed
+within the pre-registered LoRA cell.  This is a property of the
+cell's pre-registered configuration on the present data, *not* a
+property of LoRA in general; it does *not* falsify Hu et al. (2021)
+or any LoRA result on a different dataset, model size, target
+module set, or training budget.  The matched-LR FT cell escapes
+this attractor in every seed by step ≤ 1024 because 100 % of the
+parameters optimise concurrently; this is the contrast that
+makes "FT > LoRA" methodologically uninformative on a *collapsed*
+LoRA comparator.
+
+**(e) Decision — drop LoRA arm, declare H4 a methodological null.**
+Per B.9(e), all three D3 acceptance criteria are FAIL ((i) max
+dev\_f1 over steps ≤ 1024 = 0.1268, fails the > 0.20 threshold;
+(ii) dev\_f1 at step 4096 = 0.1268, fails the > 0.30 threshold;
+(iii) all `dev_macro_f1_excluding_negative` values are `None` in
+the trainer's in-training metric stream because the trainer reports
+this only on the held-out test eval, but the equivalent BC5CDR-side
+audit on the corresponding LR = 3 × 10⁻⁴ smoke (B.9(g)) was 0.0 for
+every non-`__NEGATIVE__` class).  The LoRA arm is therefore
+dropped from Phase B in its entirety:
+
+- **§7.2 H4 (paper Methods)**: the decision rule is replaced.  The
+  new H4 statement reads: *H4 is declared empirically undefined on
+  this dataset within the pre-registered compute envelope.  Three
+  attempts to operationalise the matched-spec FT vs LoRA comparison
+  — at the locked LR (2 × 10⁻⁵), at a 15× LR amendment (3 × 10⁻⁴
+  per B.8, retracted), and at a 2× budget amendment (4,096 steps
+  per B.9) — produced the same trivial all-NEGATIVE collapse on
+  the LoRA arm at every checkpoint.  We do not report H4 as
+  "confirmed: FT > LoRA" because the LoRA comparator is collapsed,
+  which is a methodologically uninformative comparison; we report
+  H4 as a methodological null and document the full audit in
+  Appendix B.8/B.9/B.24.*  See the Results-section template
+  in (j) below.
+- **§7.3 design axis (Update regime)**: the cell is annotated with
+  a footnote, not deleted from the design table — preserving the
+  pre-registered intent (see (g) below).  The factorial reduces to
+  a single update regime.
+- **§7.4 factorial run count**: revises from "3 encoders × 2 update
+  regimes × 3 schedules × 20 seeds = 360 main runs + 10 RB" to
+  **"3 encoders × 1 update regime × 3 schedules × 20 seeds = 180
+  main runs + 10 RB = 190 runs"**.  After the (i)
+  PL\_FT\_T2 backfill of the two missing seeds (s17, s19), this is
+  the realised count.  All three D3 archive directories (35 + 1 + 1
+  = 37 LoRA runs) are excluded.
+- **§7.6 training configuration**: the "*conservative LR sweep
+  out of scope*" sentence is replaced with the cross-reference
+  *"§7.3 LoRA cell — the cell was dropped per amendment B.24
+  after a three-attempt budget-and-LR audit; the original spec is
+  preserved in the design table for reviewer audit."*
+
+**(f) Disposition of artefacts.**  The D3 run is archived alongside
+the B.8 (35 runs, LR = 2e-5) and B.9 (1 run, LR = 3e-4) sets.
+Three sibling directories now exist under the run-archive tree:
+
+| Directory | Runs | Reason |
+|---|---:|---|
+| `runs/phase_b_degenerate_lr_archive/lr2e5_preamendment_20260424T160804Z/` | 35 | B.8 — pre-lock LR collapse pilot |
+| `runs/phase_b_degenerate_lr_archive/lr3e4_postB8_20260427T101524Z/` | 1 | B.9 — LR = 3e-4 falsifier |
+| `runs/phase_b_degenerate_lr_archive/d3_budget_probe_20260430T134418Z/` | 1 | **B.24 — D3 budget-probe falsifier (this amendment)** |
+
+In addition, the 182 LoRA YAML configs (180 main retrain + smoke
+s99 + a stray `PB_PB_LR_T2_s99` from a prior wiring-verification
+smoke), the seven LoRA-only sbatch scripts
+(`phase_b_LR_retrain.sbatch`, `phase_b_LR_retrain_b8.sbatch`,
+`phase_b_lora_lr3e4_smoke.sbatch`, `phase_b_lora_smoke.sbatch`,
+`phase_b_lora_verify.sbatch`, `phase_b_lora_d3_smoke.sbatch`,
+`diagnose_lora_forward.sbatch`), the `update_lora_lr_to_3e4.py`
+helper script, and the `phase_b_retrain_v2_ids.txt` ID list have
+been moved to timestamped `_archived_lora_dropped_…` /
+`_superseded_lora_dropped_…` sibling directories under
+`fine_tuning_experiments/phase_b/{configs,sbatch,scripts}/`.  No
+LoRA artefacts remain in the active config or sbatch trees; this
+is the post-cleanup invariant.
+
+**(g) §7.3 design-table footnote (preserves pre-registered
+intent).**  The §7.3 LoRA bullet retains its full pre-registered
+specification and is annotated with an explicit cross-reference:
+
+> *§7.3 — Update regime (post-amendment).*  The pre-registered
+> design space includes two update regimes: `full_ft` and `lora`
+> (rank 16, α = 32, dropout 0.05, target modules = attention Q/V
+> projections, classifier head fully trained, LR matched to FT,
+> max\_updates = 2,048; gating spec given in B.9 D3 acceptance
+> criteria). **The `lora` cell is dropped from the realised Phase
+> B factorial per amendment B.24** after the D3 budget probe
+> failed all three acceptance criteria; the cell remains in the
+> design table to preserve the pre-registered design intent and to
+> support reviewer audit of the audit chain B.8 → B.9 → B.24.
+
+This wording is committed to `paper_methods_draft.md` §7.3 in the
+same change-set as this amendment.  The companion edit to §7.4
+restates the factorial count as 180 + 10 = 190 main runs, and the
+companion edit to §7.6 cross-references this clause.
+
+**(h) §7.2 H4 line — final wording.**  The §7.2 hypothesis table
+H4 row is replaced with:
+
+> | **H4** | Full fine-tune > LoRA on the small-data oncology bridge with d ≥ 0.5 for biomedical encoders, **conditional on a non-collapsed LoRA comparator**.  | Primary (decision rule supplanted by methodological null per B.24). | Three pre-registered attempts (LR = 2e-5 / max\_updates = 2048; LR = 3e-4 / max\_updates = 2048; LR = 2e-5 / max\_updates = 4096) all produced bit-identical 100%-`__NEGATIVE__` LoRA dev predictions.  H4 declared empirically undefined within the compute envelope.  Counter-finding now operationalised as: *if any future LoRA configuration on this dataset escapes the trivial basin, H4 may be re-tested.* |
+
+This is the third row update to §7.2 H4 in the amendment chain
+(B.8 changed it; B.9 reverted+re-edited it; B.24 supplants the
+decision rule with a methodological null).
+
+**(i) Independent action — PL\_FT\_T2 backfill (two seeds).**
+SLURM `4427892` (2-task array) was submitted on 2026‑04‑30 to
+backfill the two PL\_FT\_T2 seeds (s17, s19) that were absent at
+the lock-v2 freeze, restoring the cell to the pre-registered 20
+seeds.  Backfill cost ≈ 50 GPU-min, fire-and-forget.  This is
+**independent** of the LoRA decision: PL\_FT\_T2 is a full-FT
+cell, and the gap was a pre-existing artefact of the original
+LoRA-bulk array submission (the two seeds were intended to be
+co-submitted with the LoRA bulk retrain; they have now been
+de-coupled and submitted standalone).  The Phase B aggregate CSV
+generated 2026‑04‑30T13:45 has 188 rows; on backfill completion
+(within ≈ 1 GPU-hour of submission) it will be regenerated to 190
+rows and the H1/H3/H6/H7 analyses will be run on the 190-row CSV.
+
+**(j) Paper Results section template (§9.4.4 — H4 reporting).**
+Pre-committed wording for the Results-section paragraph:
+
+> *Section 4.2.4 — H4 (methodological null).*
+> We attempted to test H4 under the pre-registered LoRA
+> specification (rank 16, α = 32, target modules Q+V, classifier
+> head fully trained, LR matched to FT, max\_updates = 2,048).  At
+> the original budget, the LoRA arm collapsed to uniform
+> `__NEGATIVE__` prediction across all probed seeds, with dev
+> macro-F1 stuck at the trivial floor of 0.126 — the classifier
+> predicting `__NEGATIVE__` for every input regardless of content.
+> Two pre-committed amendments were applied to test alternative
+> explanations.  First, raising the LR 15× (from 2 × 10⁻⁵ to
+> 3 × 10⁻⁴) per amendment B.8, holding all other hyperparameters
+> fixed: the collapse persisted.  Second, a single-seed budget
+> probe at the doubled budget (`max_updates = 4096`) per amendment
+> B.9: again, all 64 evaluation checkpoints over the full 4,096
+> steps produced bit-identical dev macro-F1 = 0.126.
+> In contrast, the matched FT arm escapes the trivial NEGATIVE
+> basin within ≈ 512 steps and converges to dev macro-F1 ≈ 0.51 by
+> step 2,048 (Figure F6).  Both regimes start from the same
+> initialisation; only FT escapes within the available compute.
+> We therefore declare H4 **empirically undefined within our
+> pre-registered compute envelope**.  This is reported as a
+> methodological null rather than a confirmation of FT > LoRA,
+> because the collapsed LoRA comparator does not constitute a
+> fair test of the underlying claim.  A richer LoRA configuration
+> sweep (varying rank, target modules beyond Q+V, custom learning-
+> rate warmup schedules, or LoRA-specific class re-weighting) is
+> reserved for follow-up work.  The H4 negative result is itself
+> informative for future work on parameter-efficient fine-tuning
+> in small-data, high-class-imbalance biomedical RE settings, and
+> is documented in full at Appendix B.8 / B.9 / B.24.
+
+This wording is the *final* H4 paper text; it is committed
+together with the §7.2/§7.3/§7.4/§7.6 edits described above.
+
+**(k) Cumulative cost accounting.**
+
+| Phase | GPU-hours | Outcome |
+|---|---:|---|
+| 35 × LR = 2 × 10⁻⁵ degenerate runs (B.8(e)) | ≈ 6.4 | archived |
+| 1 × LR = 3 × 10⁻⁴ degenerate smoke (B.9(g)) | ≈ 0.07 | archived |
+| 188 × FT eval backlog (B.8(i)) | ≈ 31.3 GPU-h (≈ 5 h wall) | **complete, healthy** |
+| 1 × D3 budget probe (this amendment) | ≈ 0.12 | archived |
+| 2 × PL\_FT\_T2 backfill (s17, s19) | ≈ 0.5 | submitted, expected ≈ 1 h wall |
+| **Cumulative committed for Phase B (terminal)** | **≈ 38.4 GPU-h** | (LoRA bulk retrain at ≈ 50 GPU-h is **not spent** — the arm is dropped) |
+
+**(l) Lock-v3 readiness.**  This amendment is the final post-lock-v2
+clarification before the Phase B analytical lock (lock-v3).  The
+realised Phase B factorial — 3 encoders × 1 update regime
+(`full_ft`) × 3 schedules × 20 seeds + 10 RB — is now fixed at
+**190 main runs**.  No further training runs will be added before
+lock-v3.  The Phase B prelock-v3 freeze-list:
+
+- [x] D3 verdict known and documented (this amendment).
+- [x] LoRA arm formally dropped; H4 = methodological null wording committed.
+- [x] §7.2 / §7.3 / §7.4 / §7.6 edits queued for `paper_methods_draft.md`.
+- [x] All 188 FT runs aggregated to flat CSV (lock-v3 input).
+- [ ] PL\_FT\_T2 backfill complete (SLURM `4427892`, in-flight).
+- [ ] CSV regenerated at 190 rows after backfill.
+- [ ] git tag `phase_b_prelock_v3` applied to the post-cleanup tree.
+- [ ] SHA-256 of the 190-row aggregate CSV recorded in Appendix A.
+
+The remaining four items are mechanical and gate-able by the
+backfill SLURM job's terminal state; no further scientific
+decision is contingent on them.
+
+---
+
+### B.25 — RQ3 exploratory encoder × KB-metric interaction analysis added (2026‑04‑30)
+
+| Date | Trigger | Scope affected | Description |
+|---|---|---|---|
+| 2026‑04‑30 | RQ-level audit identified that RQ3 ("model family + audit formulation") is supported by rich data but lacks a dedicated confirmatory hypothesis.  The question is scientifically important — whether encoder conclusions depend on which KB surfacing metric is used — but it was not pre-registered as H-level confirmatory. | §8 exploratory analyses, §9.4 Results writing, Figure/Table plan. | Add a clearly labelled **post-lock exploratory** RQ3 interaction analysis: encoder × KB metric on Phase B FT main runs, with schedule as a nuisance/blocking factor.  This does not enter the confirmatory FDR tier and does not change H1–H7. |
+
+**Analysis specification.**  On the realised Phase B FT factorial
+(post-B.24: PB/BL/PL × T1B/T1F/T2 × 20 seeds), reshape the three
+KB surfacing metrics into long format:
+
+- `KB_hit_A = kb_hit_A_setvalued`
+- `KB_pmass_B = kb_pmass_B_setvalued`
+- `KB_auc_C = kb_auc_C_setvalued`
+
+Fit the exploratory least-squares audit:
+
+```text
+KB_value ~ encoder + schedule + kb_metric + encoder:kb_metric
+```
+
+where `schedule` is a nuisance/blocking factor, and report partial
+sum-of-squares shares for:
+
+- `encoder`
+- `schedule_block`
+- `kb_metric`
+- `encoder_x_kb_metric`
+
+The interaction term is the RQ3-relevant quantity: if its partial
+SS share is non-trivial, then the encoder ranking or effect size
+depends materially on the audit formulation.  Descriptive p-values
+may be printed for orientation but are **not** included in the
+confirmatory BH-FDR family and must not be described as hypothesis
+tests.
+
+**Implementation.**  The routine is implemented as:
+
+```text
+fine_tuning_experiments/phase_b/analysis/rq3_encoder_kb_interaction.py
+```
+
+It emits:
+
+- JSON: full partial-SS table, encoder × metric means, encoder ×
+  schedule × metric profiles.
+- Markdown: compact RQ3 audit table for paper-writing support.
+
+**Reporting guardrail.**  In the paper this analysis is labelled
+"exploratory RQ3 audit".  Acceptable wording:
+
+> To probe whether model-family conclusions depend on the KB audit
+> formulation, we fit a post-lock exploratory model
+> `KB_value ~ encoder + schedule + kb_metric + encoder:kb_metric`
+> over the realised Phase B FT cells.  The interaction term is
+> reported as a partial-SS share rather than as a confirmatory
+> hypothesis test.
+
+This amendment strengthens RQ3 narrative completeness without
+claiming pre-registered confirmation.
+
+---
+
 *End of Appendix B amendment log.*
+
+---
+
+## Appendix C — Phase B post-lock-v3 execution plan (added 2026‑04‑30)
+
+This appendix is the executable roadmap from the present state
+(D3 falsified, LoRA arm dropped, 188 FT runs aggregated, 2-seed
+backfill in flight) to a submission-ready paper draft.  It is *not*
+part of the pre-registered scientific design — it is a workflow
+ledger.  Every analytical decision below is already committed in
+the locked v1 specification or in an Appendix B amendment.
+
+### C.1  Lock-v3 freeze (target: end of 2026‑04‑30)
+
+Deterministic actions, no scientific choice:
+
+1. Wait for `4427892_{1,2}` (PL_FT_T2 backfill) to complete
+   (≈ 1 GPU-hour wall, currently running task 1, queued task 2).
+2. Re-run `aggregate_phase_b.py` to regenerate the flat CSV at
+   190 rows (was 188 at 2026‑04‑30 13:45Z).
+3. Compute SHA-256 of the 190-row CSV; record it in Appendix A
+   alongside the Phase A CSV hash.
+4. `git add` the (a) Appendix B.24 amendment, (b) §7.2/§7.3/§7.4/§7.6
+   edits to `paper_methods_draft.md`, (c) the cleanup move
+   manifests (no LoRA configs / sbatches / scripts in the active
+   tree), (d) the new aggregate CSV, (e) this Appendix C.
+5. `git tag -a phase_b_prelock_v3 -m "Phase B analytical lock"`
+   on the resulting commit.
+6. Tarball backup of the post-cleanup
+   `fine_tuning_experiments/phase_b/` + the two paper docs
+   (mirroring the v1 / v2 lock procedure).
+
+After step 6, **no further training runs are permitted before the
+analysis section of the paper is drafted**.  Any Phase B re-runs
+would require a new amendment.
+
+### C.2  Phase B primary analyses (target: 1–2 days post-lock-v3)
+
+All routines exist in
+`fine_tuning_experiments/phase_b/analysis/{analyze_phase_b.py,
+h6_coupling_slopes.py}` (verified 2026‑04‑30; smoke tests pass on
+Phase A R\_A bootstrap).  The analytical contract in
+`paper_methods_draft.md` §8 is unchanged.
+
+| Task | Script entry point | Input | Output | Notes |
+|---|---|---|---|---|
+| Aggregate (already run) | `aggregate_phase_b.py` | `runs/phase_b/PB_*` | `analysis/output/phase_b_eval_aggregate_LATEST.csv` | 188 rows now; 190 after backfill. |
+| H1 (encoder) | `analyze_phase_b.py::h1_encoder` | aggregate CSV | hypothesis JSON + Markdown table | Paired-t + Wilcoxon, PL > {PB, BL} on BioRED ex-NEG, anchor cell. |
+| H2 (corpus) | `analyze_phase_b.py::h2_corpus` | aggregate CSV | hypothesis JSON | Paired-t + Wilcoxon, T1F > T1B on BC5CDR macro-F1. |
+| H3 (schedule) | `analyze_phase_b.py::h3_schedule` | aggregate CSV | hypothesis JSON | 6 paired tests with BH-FDR; T2 > T1F on BioRED + BC5CDR across 3 encoders. |
+| H4 (FT vs LoRA) | n/a | n/a | (paper text per B.24(j)) | **Methodological null per B.24**; no script execution. |
+| H5 (architecture) | `analyze_phase_b.py::h5_architecture_deferred` | n/a | hypothesis stub | Deferred per B.2; reported as deferred. |
+| H6 (5 slopes × 3 KB metrics) | `h6_coupling_slopes.py` | aggregate CSV | slopes JSON, 5 fit specs × 3 KB metrics = 15 slopes total | β_within, β_schema, β_encoder, β_config, β_combined_cell each labelled weak/moderate/strong/inconclusive per B.21 thresholds. |
+| H7 (R\_B variance) | `analyze_phase_b.py::h7_variance_asymmetry` + `bootstrap_RB` | aggregate CSV | R_B point + 5 000-rep bootstrap CI | Per B.22; FT-only denominator post-B.24 is the *correct* operationalisation. |
+| Ordinal instability (§8.6) | `analyze_phase_b.py::ordinal_instability` | aggregate CSV | matching radius ρ histogram, median ΔKB, rank-inversion rate | Per B.23. |
+| RQ3 exploratory interaction | `rq3_encoder_kb_interaction.py` | aggregate CSV | partial-SS JSON + Markdown table | Post-lock exploratory per B.25: `KB_value ~ encoder + schedule + kb_metric + encoder:kb_metric`; not in confirmatory FDR tier. |
+
+Decision branches downstream of these results:
+
+- **§7.2.1 H6 abstract framing**: triggered by the bin label of
+  β_config — pre-committed to one of four narrative templates per
+  B.19.  No further choice is required after the slope is computed.
+- **R\_B ≥ 2 confirms variance-asymmetry headline; 1 < R\_B < 2 is
+  borderline (pre-committed wording in §9.4); R\_B ≤ 1 is a
+  null-headline (pre-committed wording in §9.4).**
+- **Counter-finding triggers** from §7.2 (H1 inverted, H3 < 50 %
+  of tests confirmed, H6 weak across the board, H7 R\_B ≤ 1) are
+  pre-committed and require no judgement.
+
+Wall-clock estimate: 2 hours of compute for all primary analyses
+(no GPU needed; CPU bootstrap), 1 day of human time to inspect
+output JSONs and feed the bin labels into the §7.2.1 trigger.
+
+### C.3  Figure + Table production (target: 2–3 days)
+
+The five-figure / three-table outline is pre-committed in
+`paper_methods_draft.md` §9.4.  Status:
+
+- **F1 (Phase A schema × encoder grid)** — already rendered:
+  `report/figures/fig01_phase_a_schema_encoder.png`.
+- **F2 (Phase B per-cell Δ vs anchor)** — to be rendered from the
+  190-row aggregate CSV; bar chart with seed-paired CIs.
+- **F3 (Per-target-family KB surfacing)** — pulls from the 35 active
+  KB target families (§4.5) per cell.
+- **F4 (H7 variance-share bar + ordinal-instability histogram)** —
+  two-panel figure; data from `h7_variance_asymmetry` and
+  `ordinal_instability` outputs.
+- **F5 (H6 forest plot + cell-level scatter for β_combined_cell)** —
+  forest of 5 slopes × 3 KB metrics + the underlying scatter for the
+  most-discussed slope.
+- **F6 (LoRA collapse audit, single-page diagnostic)** — *new figure
+  triggered by B.24(j)*: three panels showing the dev macro-F1
+  trajectory of (i) the B.8 LR pilot, (ii) the B.9 LR-amendment smoke,
+  (iii) the B.24 D3 budget probe, plus the matched FT trajectory in
+  the same axes.  This is the single visual asset that supports the
+  §9.4.4 H4 methodological-null paragraph.
+- **T1 (data + schema inventory)** — already drafted in
+  `paper_methods_draft.md` §3.
+- **T2 (Phase B per-cell results)** — auto-generated from aggregate
+  CSV using the §9.4 template.
+- **T3 (H6 + H7 audit summary)** — auto-generated from the slopes
+  JSON and the R\_B JSON.
+
+Figure rendering uses the deterministic seeds documented in
+`paper_methods_draft.md` §10 ("Reproducibility") — no new design
+decisions required.
+
+### C.4  Paper drafting (target: 3–4 weeks, in §9.1 reverse order)
+
+Already drafted scaffolds:
+
+- `paper_methods_draft.md` (Methods §3–§8; the post-B.24 edits land
+  in §7.2/§7.3/§7.4/§7.6; rest is unchanged).
+- `paper_development_design_locked_v1.md` (the immutable design,
+  reviewer-facing).
+
+To draft (sequence per the user's roadmap):
+
+1. **Methods** (§3–§7) — already 95 % drafted; 1 day of polish to
+   align numbering with the realised post-B.24 factorial.
+2. **Results** (§9.4) — 1 week.  Subsections in order:
+   §9.4.1 schema selection (already drafted from Phase A);
+   §9.4.2 Phase B benchmark (H1, H2, H3 + per-cell table);
+   §9.4.3 KB surfacing (per-family Δ, F3);
+   §9.4.4 H4 methodological null (per B.24(j) template);
+   §9.4.5 H6 + H7 + ordinal instability (the RQ4 headline,
+   F4 + F5 + T3).
+3. **Discussion** (§10) — 1 week.  *How to read benchmark
+   leaderboards* + *Clinical implications* + *W1–W8 limitations*
+   + the LoRA negative result as a stand-alone discussion bullet.
+4. **Introduction** (§1–§2) — 3 days.  Last because the
+   contributions are now fully known (RQ4 variance-asymmetry
+   headline + LoRA methodological null as a secondary
+   contribution about parameter-efficient FT in small-data
+   imbalanced biomedical RE).
+5. **Abstract** — 1 day.  Triggered by the §7.2.1 H6 bin and
+   the H7 R\_B verdict; pre-committed mapping table chooses the
+   narrative.
+
+### C.5  Out-of-scope items (deferred to follow-up)
+
+Documenting these explicitly so they cannot be smuggled into the
+present paper without an amendment:
+
+| Item | Status | Reason |
+|---|---|---|
+| LoRA configuration sweep (rank, target modules beyond Q/V, custom warmup, class re-weighting) | **Out of scope, follow-up paper** | Per §9.4.4 H4 paragraph; the B.24 audit shows the canonical Hu et al. spec collapses on this dataset, but a richer search is a separate research question. |
+| `shared_multitask` architecture (H5) | Deferred per B.2 | Reported as deferred; not retracted, just not estimated here. |
+| Phase B with schemas other than S\_pair | Out of scope | Phase A Outcome 1 fixed S\_pair as the single Phase B schema; revisiting other schemas is a separate axis. |
+| Encoders beyond {PB, BL, PL, RB} (e.g. SciBERT, BlueBERT, BioBERT, BiomedLM, GatorTron) | Out of scope per §7.3 | Modelling decision documented in the locked v1 spec; reviewer-facing. |
+| Phase A re-run with the v2 trainer | **Forbidden** | Phase A is locked at lock-v1; trainer-version differences across phases are documented in §6.3 and reviewer-facing. |
+
+### C.6  Risks and mitigations
+
+| Risk | Likelihood | Mitigation |
+|---|---|---|
+| Backfill `4427892` fails (cluster preemption) | Low (1 GPU each, 25 min) | Idempotent skip in the sbatch; resubmit on failure; lock-v3 freeze blocks until 190-row CSV exists. |
+| H6 β_config bin straddles a threshold (e.g. β = 0.31, threshold = 0.30) | Medium | §7.2.1 pre-committed mapping has explicit "borderline" handling; doc the bootstrap CI alongside the point estimate; do *not* re-bin. |
+| Reviewer pushback on H4 methodological null | Medium | The B.24 audit chain (3 attempts, 3 different hyperparameter regimes, identical collapse, internal evidence the trainer is correct) is the answer; the F6 figure makes it visual. |
+| Reviewer pushback on the FT-only R\_B denominator | Low | B.24(f) §7.6 already states this is the *correct* operationalisation: R\_B is "variance attributable to the realised design space", which excludes a dropped axis. |
+| Memory of LoRA decision lost in handoff | Mitigated | Three amendments (B.8, B.9, B.24) document the chain; the F6 figure makes it permanent in the paper. |
+
+### C.7  Single-page execution checklist (printable)
+
+```
+[ ] (C.1) Wait backfill 4427892 → completion         (~1 GPU-hour)
+[ ] (C.1) Re-aggregate to 190 rows                   (1 minute)
+[ ] (C.1) SHA-256 record in Appendix A               (1 minute)
+[ ] (C.1) git tag phase_b_prelock_v3                 (1 minute)
+[ ] (C.1) tarball backup                             (5 minutes)
+─── lock-v3 freeze ──────────────────────────────────────────
+[ ] (C.2) Run analyze_phase_b.py → H1 H2 H3 H7        (30 minutes)
+[ ] (C.2) Run h6_coupling_slopes.py → 5 × 3 slopes   (30 minutes)
+[ ] (C.2) Run RQ3 exploratory interaction            (15 minutes)
+[ ] (C.2) Inspect outputs, trigger §7.2.1 mapping    (1 day human)
+─── primary analyses complete ───────────────────────────────
+[ ] (C.3) Render F2/F3/F4/F5/F6                      (1–2 days)
+[ ] (C.3) Generate T2/T3 from output JSONs           (1 day)
+─── figures and tables complete ─────────────────────────────
+[ ] (C.4) Methods polish                             (1 day)
+[ ] (C.4) Results §9.4.1–§9.4.5                      (1 week)
+[ ] (C.4) Discussion §10                             (1 week)
+[ ] (C.4) Introduction                               (3 days)
+[ ] (C.4) Abstract                                   (1 day)
+─── submission-ready draft ──────────────────────────────────
+```
+
+---
+
+*End of Appendix C execution plan.*
+
+---
+
+## Appendix D — Phase B post-lock analysis result ledger (added 2026‑04‑30)
+
+This ledger records the first complete Phase B FT-only analysis after
+B.24 dropped the LoRA arm and after the PL_FT_T2 backfill restored the
+realised factorial to 190 rows.  It is a result ledger, not a new
+design amendment.
+
+### D.1  Completed jobs and immutable artefacts
+
+| Task | SLURM | Status | Key artefacts |
+|---|---:|---|---|
+| PL_FT_T2 backfill seed 17 | `4427892_1` | COMPLETED 0:0, 36:42 | `runs/phase_b/PB_PL_FT_T2_s17/{checkpoints/best.pt,eval/phase_b_eval.json}` |
+| PL_FT_T2 backfill seed 19 | `4427892_2` | COMPLETED 0:0, 36:18 | `runs/phase_b/PB_PL_FT_T2_s19/{checkpoints/best.pt,eval/phase_b_eval.json}` |
+| Post-lock analysis bundle | `4428015` | COMPLETED 0:0, 00:15 | aggregate, H1/H2/H3/H7, H6, ordinal instability, RQ3 exploratory |
+
+Final aggregate:
+
+```text
+fine_tuning_experiments/phase_b/analysis/output/phase_b_eval_aggregate_20260430T145905Z.csv
+rows = 190
+SHA-256 = 84a7150dd916faed849c75050a284aae2b0bbe74bca391e3fd316f502545c117
+```
+
+Cell fill is complete:
+
+| Cell | n |
+|---|---:|
+| BL_FT_T1B / BL_FT_T1F / BL_FT_T2 | 20 / 20 / 20 |
+| PB_FT_T1B / PB_FT_T1F / PB_FT_T2 | 20 / 20 / 20 |
+| PL_FT_T1B / PL_FT_T1F / PL_FT_T2 | 20 / 20 / 20 |
+| RB_FT_T2 reference | 10 |
+
+Backfilled seed metrics are within the already-observed PL_FT_T2
+cell range and do not look anomalous:
+
+| Run | BioRED ex-NEG | BC5CDR macro-F1 | KB_hit_A |
+|---|---:|---:|---:|
+| `PB_PL_FT_T2_s17` | 0.3748 | 0.2166 | 0.8889 |
+| `PB_PL_FT_T2_s19` | 0.3273 | 0.2031 | 0.4321 |
+
+### D.2  Primary hypothesis results (Phase B FT-only)
+
+Source files:
+
+```text
+phase_b_analysis_20260430T145905Z.json
+SHA-256 = ba9d338dc83b06a92ffc38581e7c3d6cd165bbc8b4f028046a8f0891f381f159
+phase_b_analysis_20260430T145905Z.md
+SHA-256 = 69139ada93c48b2991bda205aca2f90ed56113acc60d2d68dbeedb722dcebc71
+```
+
+| Hypothesis | Result | Key numbers | Interpretation |
+|---|---|---|---|
+| H1 (PL > {PB, BL}) | **Not confirmed** (`partial_or_intermediate`) | PL − PB = −0.0076, CI [−0.0321, +0.0132], q_t = 0.519; PL − BL = −0.0211, CI [−0.0431, −0.0015], q_t = 0.159, q_w = 0.238 | PL does not outperform PB/BL; if anything, PL trends lower than BL on BioRED ex-NEG. RQ2 encoder-size claim weakens. |
+| H2 (multi-corpus T1F > BioRED-only T1B on BC5CDR) | **Confirmed** | Δ = +0.1392, CI [+0.1082, +0.1662], d = 2.04, Wilcoxon p = 1.03e-4 | Strongest RQ2 result: multi-corpus T1 training materially improves OOD BC5CDR generalisation. |
+| H3 (T2 staged > T1F) | **Partial** | 3/6 tests confirmed. PB BioRED +0.0529 (q_w=0.0061), PB BC5CDR +0.0303 (q_w=0.0300), BL BioRED +0.0228 (q_w=0.0413); BL BC5CDR null; PL BioRED null; PL BC5CDR borderline q_w=0.05001 | T2 staging helps PB broadly and BL on BioRED, but not uniformly across encoders/datasets. |
+| H4 (FT vs LoRA) | **Methodological null** | No script test; B.8/B.9/B.24 audit chain | LoRA comparator collapsed; not a fair FT-vs-LoRA comparison. |
+| H5 (shared-multitask architecture) | **Deferred** | As pre-amended | No effect on current FT-only Phase B. |
+| H7 (R_B variance asymmetry) | **Not confirmed** (`null_no_asymmetry`) | R_B = 0.214; bootstrap median = 0.221, 95% CI [0.0275, 0.9902] | Contrary to the original variance-asymmetry headline: in realised Phase B, design levers explain **more KB_hit_A variance** (0.665) than BioRED ex-NEG variance (0.142). |
+
+H7 decomposition:
+
+| Metric | encoder share | schedule share | encoder×schedule share | lever total |
+|---|---:|---:|---:|---:|
+| BioRED ex-NEG | 0.0280 | 0.0823 | 0.0318 | 0.1421 |
+| KB_hit_A | 0.0474 | 0.5962 | 0.0216 | 0.6653 |
+
+This is a substantive Phase B result: benchmark performance is *less*
+configuration-sensitive than KB surfacing, not more.  The paper's RQ4
+framing must therefore shift from "benchmark variance dominates KB
+variance" to "benchmark–KB coupling is weak/inconclusive, while KB
+surfacing is strongly schedule-sensitive and ordinally unstable."
+
+### D.3  H6 mechanism-stratified coupling slopes
+
+The first post-lock H6 run included the RB reference cell in β_config
+(`n_cells = 10`).  This was corrected immediately because RB is a
+descriptive reference and is excluded from H1–H7.  The **authoritative
+H6 file** is:
+
+```text
+h6_coupling_slopes_20260430T153029Z_rerun.json
+SHA-256 = cd580fc50dfe9f8177ba108f39870cb940e69d90d7ffd2368fc51516076619a9
+```
+
+Corrected H6 summary:
+
+| Slope | Estimate | 95% interval | Label | Notes |
+|---|---:|---:|---|---|
+| β_within | +1.095 | [+0.399, +1.746] | inconclusive | Positive point estimate, interval too wide under B.21 width rule. |
+| β_schema | +0.953 | [+0.686, +1.412] | inconclusive | Positive/moderate point estimate, too wide. |
+| β_encoder | +1.232 | [+0.728, +6.373] | inconclusive | Strong-looking point estimate, very wide. |
+| β_config | −3.012 | [−13.001, +4.535] | inconclusive | Phase B realised 9-cell config slope is unstable and spans both signs. |
+| β_combined_cell | −0.912 | CI not available | n/a | Combined Phase A/B interaction descriptive only; not labelable. |
+
+Spearman summaries:
+
+| Level | n | rho | 95% CI |
+|---|---:|---:|---:|
+| Phase A cell | 12 | +0.622 | [+0.075, +0.881] |
+| Phase B cell | 9 | −0.250 | [−0.784, +0.497] |
+| Phase A seed | 120 | +0.458 | [+0.304, +0.589] |
+| Phase B seed | 190 | −0.103 | [−0.242, +0.040] |
+
+Result implication for §7.2.1 abstract framing: β_config is
+**inconclusive**.  Use the pre-committed "inconclusive / no stable
+configuration-level benchmark-KB proxy" abstract template, not the
+"strong coupling" or "weak coupling" templates.
+
+### D.4  Ordinal instability (RQ4)
+
+Authoritative source: `phase_b_analysis_20260430T145905Z.json`.
+
+| Quantity | Value |
+|---|---:|
+| ρ matching radius | 0.03 |
+| Eligible near-tie cell pairs | 18 |
+| Median ΔKB among near-ties | 0.1596 |
+| 95% CI for median ΔKB | [0.0000, 0.4694] |
+| Rank-inversion rate | 0.500 |
+| 95% CI for rank-inversion rate | [0.1429, 0.8333] |
+
+Even though H7's original variance-asymmetry direction is not
+confirmed, ordinal instability remains practically large: about half
+of near-tied benchmark cell pairs reverse their KB ordering, and the
+median KB difference among near-ties is ≈ 0.16.  This is the strongest
+remaining RQ4 paper result.
+
+### D.5  RQ3 exploratory encoder × KB-metric interaction
+
+Source files:
+
+```text
+rq3_encoder_kb_interaction_20260430T145905Z.json
+SHA-256 = 611d8d473a6af7d33bcdf02cb2ec650f888a4fc92d664f1eaeffcdbb6baa96e2
+rq3_encoder_kb_interaction_20260430T145905Z.md
+SHA-256 = 26dc66689c517eac3ad95315ea0931b196c43f8f704ae538125528eef42b8287
+```
+
+Exploratory model:
+
+```text
+KB_value ~ encoder + schedule + kb_metric + encoder:kb_metric
+```
+
+Partial-SS audit:
+
+| Term | df | partial SS share | Descriptive F | Descriptive p |
+|---|---:|---:|---:|---:|
+| encoder | 2 | 0.0178 | 13.65 | 1.65e-6 |
+| schedule_block | 2 | 0.4516 | 346.38 | 7.02e-97 |
+| kb_metric | 2 | 0.0433 | 33.21 | 2.60e-14 |
+| encoder × kb_metric | 4 | **0.0025** | 0.956 | 0.431 |
+
+Interpretation: RQ3 does **not** show a meaningful encoder × audit
+formulation interaction in the realised FT factorial.  Encoder matters
+somewhat (≈ 1.8% partial SS), the choice of KB metric matters more
+(≈ 4.3%), but schedule dominates KB surfacing (≈ 45.2%).  The encoder
+ranking is stable across the three KB metrics: `BL ≈ PL > PB` for
+KB_hit_A and KB_pmass_B; `BL > PL > PB` for KB_auc_C.  Therefore RQ3
+should be framed as "model family has a modest main effect; audit
+formulation changes scale but not the encoder ranking; schedule is the
+dominant driver of KB surfacing."
+
+Encoder means:
+
+| Encoder | KB_hit_A | KB_pmass_B | KB_auc_C | metric spread |
+|---|---:|---:|---:|---:|
+| PB | 0.461 | 0.381 | 0.614 | 0.232 |
+| BL | 0.590 | 0.455 | 0.752 | 0.297 |
+| PL | 0.594 | 0.457 | 0.722 | 0.264 |
+
+### D.6  Immediate paper-level consequences
+
+1. **RQ1 remains strong**: no new result threatens the schema
+   operationalisation story.
+2. **RQ2 is mixed**: H2 is strongly confirmed; H3 is partial; H1 is
+   not confirmed; H4 methodological null; H5 deferred.  The Results
+   section should not imply a global "bigger biomedical model wins" or
+   a uniformly beneficial T2 schedule.
+3. **RQ3 is now clearer**: the exploratory interaction analysis closes
+   the hidden gap.  It does not support a strong encoder × audit
+   formulation interaction; schedule dominates KB surfacing.
+4. **RQ4 headline must be revised**: Phase A showed positive coupling
+   and R_A ≈ 2.29, but Phase B FT-only yields R_B = 0.214 (CI below 1)
+   and β_config inconclusive.  The strongest RQ4 claim is no longer
+   "benchmark variance dominates KB variance"; it is:
+
+   > Benchmark improvements do not provide a stable configuration-level
+   > proxy for KB surfacing.  In Phase B, KB surfacing is more schedule-
+   > sensitive than BioRED ex-NEG performance, and near-tied benchmark
+   > configurations often reverse their KB ordering.
+
+5. **No further model-training experiment is warranted.**  All missing
+   FT seeds are now complete, LoRA is methodologically closed, and the
+   RQ3 gap was addressed by analysis, not new training.  The next phase
+   is figure/table generation and paper drafting.
+
+---
+
+*End of Appendix D result ledger.*

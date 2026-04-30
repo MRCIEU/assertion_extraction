@@ -33,20 +33,19 @@ oncology setting.
 This paper addresses both gaps. We define a schema-aware multi-stage
 training framework that explicitly separates gold-span (T1), oncology-
 projected (T2), weak-prior (T3), and unlabeled-adaptation (T4)
-supervision; we train a systematic factorial of encoder × architecture ×
-update-regime × schedule configurations against held-out external
-benchmarks; and we evaluate every checkpoint in a knowledge-grounded
-audit pipeline anchored to 165 CIViC-curated oncology evidence targets.
+supervision; we train a realised full-fine-tuning factorial of encoder ×
+schedule configurations against held-out external benchmarks; and we
+evaluate every checkpoint in a knowledge-grounded audit pipeline anchored
+to 165 CIViC-curated oncology evidence targets.
 
-Our central empirical finding is that benchmark and KB-audit metrics
-are positively correlated but exhibit pronounced variance asymmetry:
-schema-level design choices that explain 60 % of BioRED variance
-explain only 19 % of KB-audit variance — a 3× disparity that produces
-ordinal instability between the two metric orderings, so
-configurations within typical seed noise on BioRED can swap rank on
-the KB audit. We characterise this asymmetry through a family of
-mechanism-stratified coupling slopes and a pre-registered variance-
-decomposition test.
+Our central empirical finding is that benchmark and KB-audit metrics are
+not interchangeable proxies. Phase B reverses the originally expected
+benchmark-dominant variance asymmetry: KB surfacing is more sensitive to
+training schedule than BioRED ex-NEG, while near-tied benchmark cells can
+differ materially on KB surfacing with wide uncertainty. We characterise
+this benchmark-proxy instability through a family of mechanism-stratified
+coupling slopes, a pre-registered variance-decomposition test, and an
+ordinal-instability audit.
 
 We organise the work around four research questions:
 **RQ1** how cancer-focused assertion extraction should be operationalised
@@ -60,14 +59,13 @@ KB surfacing across schema and configuration variation.
 
 The four contributions are: a principled mapping from heterogeneous
 public corpora to three oncology relation schemas at three granularity
-levels with verifiable integrity checks; a multi-seed factorial of
-encoder, architecture, update regime, and schedule under formal paired
-significance tests; a reproducible KB-grounded audit using 165
-CIViC-anchored targets evaluated under three correctness-aware metrics;
-and an evaluation-validity audit that decomposes variance contributions
-across design levers, reports a family of mechanism-stratified coupling
-slopes, and quantifies ordinal rank instability between benchmark and KB
-metrics.
+levels with verifiable integrity checks; a multi-seed realised factorial
+of encoder and training schedule under formal paired significance tests;
+a reproducible KB-grounded audit using 165 CIViC-anchored targets
+evaluated under three correctness-aware metrics; and an
+evaluation-validity audit that decomposes variance contributions across
+design levers, reports a family of mechanism-stratified coupling slopes,
+and quantifies ordinal rank instability between benchmark and KB metrics.
 
 ---
 
@@ -572,8 +570,8 @@ Naming: `PA_{ENC}_{SCHEMA}_s{NN}` with NN ∈ 01..10. Total: 4 × 3 × 10 =
 
 ### 6.3 Locked hyperparameters
 
-These values are shared across all 120 cells and serve as the anchor
-defaults for Phase B.
+These values are shared across all 120 Phase A runs and serve as the
+anchor defaults for Phase B.
 
 | Parameter | Value |
 |---|---|
@@ -853,8 +851,8 @@ checksums are listed in Appendix A.
 | **H1** | PubMedBERT-large > {PubMedBERT-base, BioLinkBERT-base} on BioRED macro-F1 ex-NEG under matched config. | Primary | Paired-t + Wilcoxon (dual report); 3 pairwise tests. | Confirmed: PL > both by Δ ≥ 0.02 with FDR-q < 0.05 on both tests. Null: gaps < 0.01 or q > 0.10. Inverted: PL < either by Δ ≥ 0.02, q < 0.05. |
 | **H2** | Multi-corpus T1 > BioRED-only T1 on BC5CDR DD F1 (held-out OOD). | Primary | Paired-t + Wilcoxon at PB × pipeline × full-FT. | Confirmed: Δ ≥ 0.03, q < 0.05 on both. Null: \|Δ\| < 0.02. Counter-finding: BioRED-only > multi-corpus by Δ ≥ 0.03 with q < 0.05 (multi-corpus actively *hurts* OOD). |
 | **H3** | T1→T2 staged > T1_flat on BioRED and BC5CDR, across all three biomedical encoders. | Primary | Paired-t + Wilcoxon on BioRED ex-NEG and BC5CDR DD at PB/BL/PL × pipeline × full-FT (6 tests; FDR over 6). | Confirmed: ≥ 4 of 6 with Δ ≥ 0.02 and q < 0.05. Partial: 2–3 of 6. Counter-finding: T1_flat > T1→T2 in ≥ 4 of 6 tests at Δ ≥ 0.02 and q < 0.05 (oncology-projection stage actively *hurts*). |
-| **H4** | Full fine-tune > LoRA on the small-data oncology bridge with d ≥ 0.5 for biomedical encoders. | Primary | Paired-t + Wilcoxon on BioRED ex-NEG, FT vs LoRA, at PB/BL/PL × pipeline × T1→T2. | Confirmed: 3/3 encoders show FT > LoRA with d ≥ 0.5 and q < 0.05. Counter-finding: any encoder shows LoRA > FT with q < 0.05. |
-| **H5** | Pipeline ≈ shared-multitask on macro-F1 ex-NEG (equivalence). | Primary (TOST) | TOST at PB and PL × full-FT × T1→T2; equivalence margin ±0.03. | Equivalent: 90 % CI of Δ ⊂ [−0.03, +0.03] for both encoders. Counter-finding: TOST 90 % CI excludes \[−0.03, +0.03\] in either direction (positive disequivalence — pipeline and shared-multitask differ by more than one within-cell SD). |
+| **H4** | Full fine-tune > LoRA on the small-data oncology bridge with d ≥ 0.5 for biomedical encoders, **conditional on a non-collapsed LoRA comparator**. | Primary (decision rule supplanted by methodological null per Appendix B.24). | Three pre-registered attempts to operationalise the comparison (LR = 2e-5, max_updates = 2048; LR = 3e-4 per Appendix B.8 retracted; LR = 2e-5, max_updates = 4096 per Appendix B.9 D3 probe) all produced bit-identical 100 %-`__NEGATIVE__` LoRA dev predictions. **H4 declared empirically undefined within the pre-registered compute envelope.** Audit chain B.8 → B.9 → B.24. Counter-finding now operationalised as: *if any future LoRA configuration on this dataset escapes the trivial basin, H4 may be re-tested.* |
+| **H5** | Pipeline ≈ shared-multitask on macro-F1 ex-NEG (equivalence). | Deferred per Appendix B.6. | No realised shared-multitask arm exists in Phase B after the post-lock design simplification. | Reported as deferred, not confirmed or rejected. The full-fine-tuning factorial remains valid for H1–H3, H6, H7, RQ3, and ordinal-instability analyses. |
 | **H6** | The benchmark-to-KB coupling slope is a *family of five mechanism-stratified slopes* (β_within, β_schema, β_encoder, β_config, β_combined_cell), not a single quantity. | Primary (characterisation family) | See §8.4. | Three-bin label per slope (strong / moderate / weak), with "inconclusive" when 95 % CI width > 0.30. Counter-finding: β_within is **strong** (currently anticipated weak / near-zero, §7.2.1) — would indicate seed-level coupling not captured by any cell-level mechanism, motivating a re-specification of the H6 family. |
 | **H7** | Design levers (schema in Phase A; configuration in Phase B) exhibit variance asymmetry — they explain more variance in BioRED ex-NEG than in `KB_hit_A_setvalued`. | Primary (RQ4 headline) | ANOVA variance decomposition; ratio R = (design-lever share in BioRED) / (same share in KB_hit_A). | Phase A descriptive (R_A ≈ 2.29 / 3.16, §6.9.3). Phase B threshold R_B ≥ 2 confirms; 1 < R_B < 2 borderline; R_B ≤ 1 null. Counter-finding: R_B < 1 with bootstrap 95 % CI fully below 1 (design levers explain *more* variance in KB than in BioRED — the asymmetry runs the other way, and Abstract framing reverses accordingly). |
 
@@ -880,15 +878,13 @@ because the FT and LoRA arms have visibly unequal seed-level variance,
 and a standardised cut keeps the threshold comparable across the two
 regimes.
 
-*Rationale for TOST in H5.* Two one-sided tests is the standard
-equivalence-testing procedure in biostatistics: it converts the null of
-"a real difference exists" into the null of "the difference is at least
-as large as some pre-specified margin", so a non-rejection yields a
-positive equivalence claim rather than a vacuous "we failed to detect a
-difference". The equivalence margin ±0.03 is set to one within-cell SD
-of BioRED ex-NEG observed in Phase A, so a difference smaller than ±0.03
-is *literally indistinguishable from seed noise* under the lock-time
-data.
+*Historical rationale for H5's planned TOST.* The shared-multitask arm
+was deferred before the realised Phase B run (Appendix B.6), so no H5
+equivalence claim is made. If this arm is revived later, two one-sided
+tests remain the planned equivalence-testing procedure: they convert the
+null of "a real difference exists" into the null of "the difference is at
+least as large as some pre-specified margin". The pre-specified margin
+±0.03 came from one within-cell SD of BioRED ex-NEG observed in Phase A.
 
 *Rationale for the H6 mechanism-stratified slope family.* A single
 mixed-effects pooled slope on `KB ~ BioRED + (1|cell) + (1|seed)`
@@ -945,9 +941,10 @@ Abstract states so in those terms.
 - **Architecture**: `pipeline` only. The originally planned
   `shared_multitask` arm is deferred to follow-up work, and H5 is
   reported as deferred rather than confirmed or rejected here.
-- **Update regime** (2 levels): `full_ft` and `lora` (rank 16, α = 32,
+- **Update regime** (originally 2 levels, realised 1 level after
+  Appendix B.24): `full_ft` and `lora` (rank 16, α = 32,
   dropout 0.05, target modules = attention Q/V projections, classifier
-  head fully trained, LR matched to FT). The LoRA arm is gated on a
+  head fully trained, LR matched to FT). The LoRA arm was gated on a
   single-seed budget probe at the doubled training budget
   (`max_updates = 4096`, LR = 2.0e-5, all other LoRA hyperparameters
   unchanged). The pre-committed acceptance criteria are all-must-pass:
@@ -956,11 +953,14 @@ Abstract states so in those terms.
   (iii) at least one evaluation point with `dev_macro_f1_excluding_negative > 0`.
   These three criteria are encoded as exit-code logic in
   `phase_b/sbatch/phase_b_lora_d3_smoke.sbatch` and apply to the
-  trainer's full-vocabulary in-training dev metric (§5.3). If any
-  criterion fails, the LoRA arm is dropped and H4 is reported as
-  *empirically undefined for the present budget* rather than as a
-  confirmation of full-FT superiority on a trivially-collapsed
-  comparator.
+  trainer's full-vocabulary in-training dev metric (§5.3).
+  **The D3 probe failed all three acceptance criteria on
+  2026‑04‑30 (SLURM `4399041`); the LoRA arm is therefore dropped
+  from the realised Phase B factorial per Appendix B.24, and H4 is
+  reported as a *methodological null* (§7.2, third row).**  The
+  LoRA bullet is preserved in this design table to document the
+  pre-registered design intent and to support reviewer audit of
+  the audit chain B.8 → B.9 → B.24.
 - **Schedule** (3 levels): `T1_biored_only`, `T1_flat`, `T1_to_T2_staged`.
 - **Schema**: S_pair only (Phase A Outcome 1).
 - **Seed** (20 per cell). Seeds 1..10 are reused from Phase A so seed
@@ -969,39 +969,72 @@ Abstract states so in those terms.
 
 ### 7.4 Factorial
 
-The factorial is 3 biomedical encoders × 2 update regimes × 3 schedules
-× 20 seeds = 360 main runs, plus a 10-seed RB reference cell at the
-anchor configuration; the 180-run LoRA half is gated on the
-update-regime budget probe described above.
+**Pre-registered design.**  3 biomedical encoders × 2 update regimes
+× 3 schedules × 20 seeds = 360 main runs, plus a 10-seed RB reference
+cell at the anchor configuration; the 180-run LoRA half was gated on
+the update-regime budget probe described in §7.3.
+
+**Realised factorial (post-Appendix B.24).**  3 biomedical encoders ×
+**1 update regime (`full_ft`)** × 3 schedules × 20 seeds = **180 main
+runs + 10 RB = 190 runs**.  The LoRA half is dropped; the audit
+chain is documented in Appendix B.8 (LR pilot collapse), B.9 (LR
+amendment falsified), and B.24 (D3 budget probe falsified, LoRA arm
+dropped).  H4 is reported as a methodological null (§7.2 H4).  This
+is the count used in §8.5 (R\_B variance bookkeeping), §8.6 (ordinal
+instability), §9.4 (Results), and all paper figures.
 
 Run naming: `PB_{ENC}_{UPD}_{SCHED}_s{NN}` with `ENC ∈ {PB, BL, PL, RB}`,
 `UPD ∈ {FT, LR}`, `SCHED ∈ {T2, T1F, T1B}`, `NN ∈ 01..20`. The schema
-field is dropped — every Phase B run is S_pair.
+field is dropped — every Phase B run is S_pair.  In the realised
+factorial only `UPD = FT` runs participate in analysis; `UPD = LR`
+runs (37 in total: 35 from the B.8 pilot, 1 from the B.9 LR-amendment
+smoke, 1 from the B.24 D3 probe) are archived under
+`runs/phase_b_degenerate_lr_archive/` and excluded from every
+hypothesis test, every figure, and every table.
 
-### 7.5 Why a full factorial rather than a star design
+### 7.5 Why the realised factorial is still not a star design
 
-A star design at the anchor cell would leave encoder × update and
-encoder × schedule interactions confounded; in particular, H4's
-cross-encoder generalisation claim requires BL × LoRA and PL × LoRA
-cells that a star design omits. The full factorial at 20 paired seeds
-per cell also gives H7's variance decomposition adequate power to
-partition configuration variance across its design axes — the single
-most important Phase B estimand because it closes the loop on the RQ4
-variance-asymmetry headline.
+The original pre-B.24 design was a full 3 encoder × 2 update-regime ×
+3 schedule factorial because a star design at the anchor cell would
+have left encoder × update and encoder × schedule interactions
+confounded.  After B.24 drops the LoRA arm, the realised design remains
+a proper 3 encoder × 3 schedule factorial rather than a star design:
+it still estimates encoder effects, schedule effects, and their
+interaction across all biomedical encoders under the single realised
+update regime (`full_ft`).  This is sufficient for H1, H2, H3, the
+FT-only R_B variance decomposition, ordinal-instability analysis, and
+the RQ3 exploratory encoder × KB-metric audit.  H4 is reported
+separately as a methodological null because its LoRA comparator
+collapsed; it is not folded into the realised factorial.
 
 ### 7.6 Training configuration
 
-All cells share the §6.3 anchor hyperparameters. LoRA cells add rank
-16, α = 32, dropout 0.05, `target_modules = ["query", "value"]`,
-classifier fully trained, LR matched to FT (this is a *conservative*
-specification for H4 — LoRA-optimal LR sweeps are out of scope for the
-present paper).
+All FT cells share the §6.3 anchor hyperparameters.  The originally
+pre-registered LoRA cells (rank 16, α = 32, dropout 0.05,
+`target_modules = ["query", "value"]`, classifier fully trained, LR
+matched to FT) were dropped per Appendix B.24 after a three-attempt
+budget-and-LR audit (B.8 LR pilot, B.9 LR amendment, B.24 D3 budget
+probe) showed the LoRA cell collapses to the trivial all-`__NEGATIVE__`
+solution under every probed configuration in the pre-registered
+compute envelope.  The original LoRA specification is preserved in
+the §7.3 design table for reviewer audit; LoRA-optimal sweeps
+(varying rank, target modules, custom warmup, class re-weighting)
+are reserved for follow-up work (§9.4.4 paragraph on H4
+methodological null).
 
-The factorial therefore yields ≈ 18 main cells × 20 paired seeds, plus
-the RB reference cell. §8 specifies how every primary and secondary
-hypothesis in §7.2 is tested on this design, including the
-multiple-comparison correction tier that each hypothesis falls into and
-the slope-by-slope fit specifications that operationalise the H6 family.
+The realised factorial yields **9 main FT cells × 20 paired seeds = 180
+main runs + 10 RB reference seeds = 190 runs**.  §8 specifies how every
+primary and secondary hypothesis in §7.2 is tested on this design,
+including the multiple-comparison correction tier that each hypothesis
+falls into and the slope-by-slope fit specifications that operationalise
+the H6 family.  Hypotheses that previously stratified on the
+update\_regime axis (H4) are reported per the methodological-null
+template; hypotheses that aggregated across update\_regime in their
+factorial denominator (H7 R\_B variance share) use the FT-only
+denominator post-B.24 — the analytical implication is that R\_B's
+"design-lever" share excludes the update\_regime axis, which is the
+*correct* operationalisation of "variance attributable to the realised
+design space".
 
 ---
 
@@ -1112,7 +1145,7 @@ All slopes are OLS or OLS-with-cluster-robust-SE on appropriately
 aggregated data; no single mixed-effects model is used.
 
 **(a) β_within — within-cell (seed-level) coupling.** For each cell
-(12 Phase A cells + 18 Phase B cells), fit an OLS slope of
+(12 Phase A cells + 9 realised Phase B main cells after B.24), fit an OLS slope of
 `KB_hit_A` on `BioRED_F1` across the seeds in that cell.
 Report the seed-count-weighted mean slope and a paired 95 % CI via
 cluster-bootstrap (5,000 resamples, resampling whole cells).
@@ -1139,9 +1172,9 @@ pretraining. The biomedical-pretraining-specific test is H1, from
 which RB is excluded as stated in §7.3.
 
 **(d) β_config — Phase B between-config slope (S_pair only).** Compute
-the cell means across the 18 Phase B cells (or 9 if the LoRA half is
-gated out by the update-regime budget probe of §7.3) and fit OLS slope.
-Report Wald + cluster-bootstrap CIs.
+the cell means across the 9 realised Phase B FT main cells after B.24
+(PB/BL/PL × T1B/T1F/T2; RB excluded as descriptive reference) and fit
+OLS slope. Report Wald + cluster-bootstrap CIs.
 
 **(e) β_combined_cell — pooled between-cell slope across phases.**
 Compute all cell means, fit OLS slope on `KB ~ BioRED + phase_dummy`
@@ -1153,12 +1186,14 @@ All five slopes are additionally re-fit using active-head macro-F1
 
 ### 8.5 H7 variance decomposition
 
-For Phase B (n = 360 seed-level observations, S_pair only) decompose
-variance of BioRED ex-NEG and of `KB_hit_A_setvalued` across the
-factor set `(encoder, update_regime, schedule)` and all of their
-two-way interactions, plus the residual. For Phase A (n = 120) the
-factor set is `(schema, encoder, schema × encoder)` plus residual.
-Type-I SS partition is used in both phases (cf. §6.9.3).
+For realised Phase B after B.24 (n = 180 main seed-level observations,
+S_pair only; RB excluded as descriptive reference), decompose variance
+of BioRED ex-NEG and of `KB_hit_A_setvalued` across the factor set
+`(encoder, schedule, encoder × schedule)`, plus the residual.  The
+pre-B.24 update-regime axis is excluded because the LoRA arm is dropped
+from the realised design. For Phase A (n = 120) the factor set is
+`(schema, encoder, schema × encoder)` plus residual. Type-I SS
+partition is used in both phases (cf. §6.9.3).
 
 The asymmetry ratios are defined as **ratios of variance shares**, so
 that they are dimensionless and directly comparable across phases and
@@ -1170,27 +1205,29 @@ $$\text{Share}_m(\mathcal{F}) = \frac{\sum_{f \in \mathcal{F}} SS_m(f)}{SS_m^{\t
 Phase A asymmetry ratio (descriptive, §6.9.3):
 $$R_A = \frac{\text{Share}_{\text{BioRED}}(\{\text{schema}, \text{encoder}, \text{schema}\times\text{encoder}\})}{\text{Share}_{\text{KB\_hit\_A}}(\{\text{schema}, \text{encoder}, \text{schema}\times\text{encoder}\})} = \frac{91.9\,\%}{40.2\,\%} \approx 2.29.$$
 
-Phase B asymmetry ratio (confirmatory, identical-factor form):
+Phase B asymmetry ratio (confirmatory, realised-factor form):
 $$R_B = \frac{\text{Share}_{\text{BioRED}}(\mathcal{F}_B)}{\text{Share}_{\text{KB\_hit\_A}}(\mathcal{F}_B)},
-\qquad \mathcal{F}_B = \{\text{enc}, \text{upd}, \text{sch}, \text{enc}\times\text{upd}, \text{enc}\times\text{sch}, \text{upd}\times\text{sch}\}.$$
+\qquad \mathcal{F}_B = \{\text{enc}, \text{sch}, \text{enc}\times\text{sch}\}.$$
 
-Three-way interactions and the residual are excluded from
-$\mathcal{F}_B$. Numerator and denominator are bound to the same
-factor set, so $R_B$ is the ratio of variance shares attributable to
-identically-defined design levers under the two metrics, and is
-directly comparable in form to $R_A$. R_A is descriptive; R_B is the
+The residual is excluded from $\mathcal{F}_B$. Numerator and
+denominator are bound to the same realised factor set, so $R_B$ is the
+ratio of variance shares attributable to identically-defined design
+levers under the two metrics. R_A is descriptive; R_B is the
 confirmatory statistic for H7 with the pre-committed threshold
-$R_B \ge 2$ (§7.2).
+$R_B \ge 2$ (§7.2). A counter-finding is explicitly allowed by §7.2:
+if $R_B < 1$ with CI below 1, design levers explain more variance in
+KB surfacing than in BioRED, and the original variance-asymmetry
+direction is rejected.
 
 **Bootstrap protocol for $R_B$.** Five thousand cluster-bootstrap
-resamples are drawn at the cell level: for each resample, draw 18
-cells (or 9 if the LoRA arm is gated out) **with replacement** from
-the realised Phase B cells, preserving all 20 seeds within each
-sampled cell. The Type-I SS ANOVA decomposition is recomputed on the
-resample, and $R_B$ is recomputed from the share definition above.
-The reported 95 % CI is the percentile interval (2.5th and 97.5th
-percentiles of the bootstrap distribution); the bootstrap-distribution
-median is reported alongside the point estimate as a stability check.
+resamples are drawn at the cell level: for each resample, draw the
+9 realised main FT cells **with replacement**, preserving all 20 seeds
+within each sampled cell. The Type-I SS ANOVA decomposition is
+recomputed on the resample, and $R_B$ is recomputed from the share
+definition above. The reported 95 % CI is the percentile interval
+(2.5th and 97.5th percentiles of the bootstrap distribution); the
+bootstrap-distribution median is reported alongside the point estimate
+as a stability check.
 
 ### 8.6 Ordinal-instability quantification
 
@@ -1226,20 +1263,24 @@ Phase A within-cell SDs (BioRED ex-NEG ≈ 0.03; BC5CDR DD ≈ 0.03–0.10
 depending on schema; KB_hit_A_sv ≈ 0.16) yield, under α = 0.05 and
 power = 0.80, detectable paired effect sizes of Δ ≈ 0.03–0.05 on BioRED,
 ≈ 0.07 on BC5CDR DD, and ≈ 0.15–0.17 on KB_hit_A. With 20 paired seeds
-per Phase B cell, the H1–H4 paired-difference power exceeds 0.84 at
-d = 0.6. H7's variance decomposition uses 360 observations, which is
-high-power for variance partitioning. H6 power varies by slope:
-β_config (n = 18 cells) is the most likely to clear the 0.30 CI-width
-gate; β_schema (n = 3 means per encoder) and β_encoder (n = 4 means
-per schema) are expected to trip the gate and be reported
-descriptively (small-sample limitation explicitly acknowledged in §8.4).
+per Phase B cell, the H1–H3 paired-difference power exceeds 0.84 at
+d = 0.6. H4 is not tested as a paired difference after B.24 because
+the LoRA comparator collapsed. H7's realised variance decomposition
+uses 180 main observations over 9 cells, which is adequate for the
+pre-committed cell-bootstrap audit but less expansive than the
+pre-B.24 18-cell design. H6 power varies by slope: β_config
+(n = 9 realised Phase B cells after B.24) is now explicitly
+small-sample and may trip the 0.30 CI-width gate; β_schema
+(n = 3 means per encoder) and β_encoder (n = 4 means per schema) are
+also expected to be reported descriptively when their CIs are too wide
+(small-sample limitation explicitly acknowledged in §8.4).
 
 *Caveat on seed reuse.* Of the 20 seeds per Phase B cell, seeds 1–10
 are reused from Phase A (preserving cross-phase pairing) and seeds
 11–20 are fresh. The reuse does not affect Phase B's *internal* paired
 comparisons (each cell uses its own 20 seeds against its own
 counterpart's 20 seeds, and noise from the shared seeds differences
-out of paired contrasts), so the H1–H5 power figures above are
+out of paired contrasts), so the H1–H3 power figures above are
 unaffected. The cross-phase β_combined_cell test (§8.4(e)) does
 treat all 20 seeds as independent observations within Phase B; the
 shared seeds introduce mild dependence between Phase A and Phase B
@@ -1253,8 +1294,9 @@ interpreted with this caveat.
 ### 9.1 Section layout (Bioinformatics format)
 
 1. **Abstract** (250 words). Motivation → methods → central finding
-   (variance asymmetry + mechanism-stratified coupling characterisation +
-   ordinal instability) → implication.
+   (benchmark is not a stable proxy for KB surfacing; H7 original
+   direction not confirmed; ordinal instability + mechanism-stratified
+   coupling characterisation) → implication.
 2. **Introduction.** Oncology gap → heterogeneous supervision →
    evaluation-validity question → contributions.
 3. **Methods.** Data and schemas, training framework, evaluation,
@@ -1264,29 +1306,31 @@ interpreted with this caveat.
    - §4.2 Main benchmark results under S_pair (Phase B; H1–H4).
    - §4.3 KB-surface yield (Phase B; per-family breakdown; active-head
      sensitivity).
-   - §4.4 Evaluation-validity audit: H7 variance asymmetry as headline;
-     H6 mechanism-stratified slopes; ordinal-instability summary.
+   - §4.4 Evaluation-validity audit: H7 counter-finding; H6
+     mechanism-stratified slopes; ordinal-instability summary.
 5. **Discussion.** How to read benchmark leaderboards when downstream
    utility is the goal; clinical-evaluation implications; W1–W8.
 6. **Conclusion.**
 
-### 9.2 Figure plan (5 main figures)
+### 9.2 Figure plan (6 main figures)
 
 | Figure | Content |
 |---|---|
-| **F1** | Supervision pipeline schematic (T1 → T2 → T3/T4) with schema labels. |
-| **F2** | Phase B main results: BioRED ex-NEG and BC5CDR DD F1 by encoder × schedule under S_pair. Mean ± 95 % CI across seeds; anchor cell highlighted; Phase A S_flat/S_mech rows inset for context. |
-| **F3** | Per-family KB surfacing yield: per-family `KB_hit_A_setvalued` for the anchor and edge configurations; CIViC baseline overlay. |
-| **F4** | RQ4 evaluation-validity audit — variance-asymmetry headline. (a) Variance-share bar chart for BioRED ex-NEG vs `KB_hit_A` vs BC5CDR DD. (b) Ordinal-instability histogram: ΔKB_hit_A between configurations within 1 × within-cell BioRED SD of each other. |
-| **F5** | RQ4 — mechanism-stratified coupling. (a) Forest plot of the five H6 slopes with 95 % CIs and three-bin shading. (b) Cell-level scatter of BioRED × `KB_hit_A` across phases, β_config and β_schema lines overlaid. |
+| **F1** | Phase A schema × encoder result (`fig01_phase_a_schema_encoder.png`): S_pair selection evidence. |
+| **F2** | Phase B main benchmark results (`fig02_phase_b_benchmark.png`): BioRED ex-NEG and BC5CDR macro-F1 by encoder × schedule under S_pair. |
+| **F3** | RQ3 KB surfacing profiles (`fig03_kb_surfacing_profiles.png`): encoder × KB metric means and exploratory partial-SS audit. |
+| **F4** | RQ4 evaluation-validity audit (`fig04_h7_variance_ordinal.png`): H7 variance-share counter-finding plus ordinal-instability histogram. |
+| **F5** | RQ4 H6 slope family (`fig05_h6_slopes.png`): forest plot of mechanism-stratified slopes with CI-width gate. |
+| **F6** | H4 methodological-null audit (`fig06_lora_collapse_audit.png`): FT escape vs three collapsed LoRA attempts. |
 
-### 9.3 Table plan (3 main tables)
+### 9.3 Table plan (4 main tables)
 
 | Table | Content |
 |---|---|
 | **T1** | Data and schema inventory: T1/T2/T3/T4 counts; per-schema label list; active-head support per schema; BioRED test support per head. |
 | **T2** | Phase B main benchmark results under S_pair: one row per cell, columns BioRED ex-NEG, BioRED active-head macro, BC5CDR DD, KB_hit_A_sv, KB_pmass_B, KB_auc_C; mean ± SE over seeds. RB reference row included. |
-| **T3** | Evaluation-validity audit summary: H7 variance decomposition with R_A (descriptive) and R_B (confirmatory + CI); H6 mechanism-stratified slope table with point estimate, 95 % CI, CI-width-gate status, three-bin label, and active-head re-fit. |
+| **T3** | Hypothesis summary: H1-H7, H6/H7 outcomes, H4 methodological null, and RQ3 exploratory audit. |
+| **T4** | RQ evidence matrix: final evidence, verdict, and limitations per RQ. |
 
 ---
 
@@ -1328,12 +1372,16 @@ duality is specifically designed to bracket the mapping's uncertainty.
 relation extraction; comparison with LLM-paradigm assertion extraction
 is reserved for follow-up work.
 
-**W8 — Benchmark and KB metrics are positively correlated.** The Phase
-A 120-run data show a positive seed-level Pearson r = +0.52 [+0.40,
-+0.64]. The central finding is therefore framed as variance asymmetry
-(H7) and ordinal instability (Figure 4), which are compatible with
-positive coupling and are the aspects directly relevant to model-
-selection practice.
+**W8 — Benchmark and KB metrics are not a stable proxy pair.** The
+Phase A 120-run data show positive seed-level coupling, but the realised
+Phase B FT factorial does not confirm the original H7 variance-asymmetry
+direction: $R_B = 0.214$ with a 95 % bootstrap CI below 1.  The central
+finding is therefore framed as **benchmark-proxy instability** rather
+than as confirmed benchmark-dominant variance asymmetry: configurations
+near-tied on BioRED can differ materially on KB surfacing.  The observed
+rank-inversion point estimate is large (≈ 0.5), but its CI is wide, so
+we write it as a cautionary instability signal rather than a precise
+population estimate.
 
 ---
 

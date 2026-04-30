@@ -1,0 +1,382 @@
+{
+  "analysis": "RQ3 exploratory encoder \u00d7 KB-metric interaction",
+  "status": "exploratory_post_lock_not_confirmatory",
+  "input_csv": "fine_tuning_experiments/phase_b/analysis/output/phase_b_eval_aggregate_LATEST.csv",
+  "main_encoders": [
+    "PB",
+    "BL",
+    "PL"
+  ],
+  "kb_metrics": [
+    "KB_hit_A",
+    "KB_pmass_B",
+    "KB_auc_C"
+  ],
+  "n_long_rows": 540,
+  "n_main_runs": 180,
+  "n_rb_reference_rows_excluded_from_anova": 10,
+  "anova_partial_ss": {
+    "n_long_rows": 540,
+    "n_original_runs": 180,
+    "model": "KB_value ~ encoder + schedule + kb_metric + encoder:kb_metric",
+    "note": "Exploratory partial-SS audit. schedule is a nuisance/blocking factor. p-values are descriptive and not included in the confirmatory FDR tier.",
+    "columns": [
+      "intercept",
+      "encoder[BL]",
+      "encoder[PL]",
+      "schedule[T1F]",
+      "schedule[T2]",
+      "kb_metric[KB_pmass_B]",
+      "kb_metric[KB_auc_C]",
+      "encoder[BL]:kb_metric[KB_pmass_B]",
+      "encoder[BL]:kb_metric[KB_auc_C]",
+      "encoder[PL]:kb_metric[KB_pmass_B]",
+      "encoder[PL]:kb_metric[KB_auc_C]"
+    ],
+    "rank_full": 11,
+    "df_residual": 529,
+    "sse_full": 13.331927518016368,
+    "corrected_ss_total": 38.66251285979155,
+    "terms": {
+      "encoder": {
+        "df": 2,
+        "partial_ss": 0.6881475554200769,
+        "partial_ss_share_of_corrected_total": 0.017798831594718727,
+        "F": 13.652566604689433,
+        "p_value_descriptive": 1.6546987651402325e-06
+      },
+      "schedule_block": {
+        "df": 2,
+        "partial_ss": 17.45895907602731,
+        "partial_ss_share_of_corrected_total": 0.4515733144232426,
+        "F": 346.37862149855965,
+        "p_value_descriptive": 7.02284834983311e-97
+      },
+      "kb_metric": {
+        "df": 2,
+        "partial_ss": 1.673790916560069,
+        "partial_ss_share_of_corrected_total": 0.04329234684331104,
+        "F": 33.207328560094766,
+        "p_value_descriptive": 2.5957440289064284e-14
+      },
+      "encoder_x_kb_metric": {
+        "df": 4,
+        "partial_ss": 0.09635831799638339,
+        "partial_ss_share_of_corrected_total": 0.0024922932026126693,
+        "F": 0.955854848280616,
+        "p_value_descriptive": 0.43135828190945325
+      }
+    }
+  },
+  "encoder_metric_profiles": {
+    "PB": {
+      "metrics": {
+        "KB_hit_A": {
+          "n": 60,
+          "mean": 0.4610082304526749,
+          "sd": 0.3177775234653271,
+          "se": 0.04102490187267495,
+          "ci95_normal": [
+            0.380599422782232,
+            0.5414170381231178
+          ]
+        },
+        "KB_pmass_B": {
+          "n": 60,
+          "mean": 0.38138723018470394,
+          "sd": 0.2079138597816358,
+          "se": 0.026841563879332647,
+          "ci95_normal": [
+            0.328777764981212,
+            0.4339966953881959
+          ]
+        },
+        "KB_auc_C": {
+          "n": 60,
+          "mean": 0.6137857495495016,
+          "sd": 0.2961029654064223,
+          "se": 0.038226728459390145,
+          "ci95_normal": [
+            0.5388613617690969,
+            0.6887101373299063
+          ]
+        }
+      },
+      "metric_ranking_high_to_low": [
+        [
+          "KB_auc_C",
+          0.6137857495495016
+        ],
+        [
+          "KB_hit_A",
+          0.4610082304526749
+        ],
+        [
+          "KB_pmass_B",
+          0.38138723018470394
+        ]
+      ],
+      "metric_spread_max_minus_min": 0.23239851936479766
+    },
+    "BL": {
+      "metrics": {
+        "KB_hit_A": {
+          "n": 60,
+          "mean": 0.5902263374485597,
+          "sd": 0.24088178587136447,
+          "se": 0.031097704836149855,
+          "ci95_normal": [
+            0.5292748359697059,
+            0.6511778389274134
+          ]
+        },
+        "KB_pmass_B": {
+          "n": 60,
+          "mean": 0.45529673181849334,
+          "sd": 0.17063039325535004,
+          "se": 0.022028289047826433,
+          "ci95_normal": [
+            0.41212128528475356,
+            0.4984721783522331
+          ]
+        },
+        "KB_auc_C": {
+          "n": 60,
+          "mean": 0.7522253513979656,
+          "sd": 0.18765962218843768,
+          "se": 0.024226753049713164,
+          "ci95_normal": [
+            0.7047409154205279,
+            0.7997097873754034
+          ]
+        }
+      },
+      "metric_ranking_high_to_low": [
+        [
+          "KB_auc_C",
+          0.7522253513979656
+        ],
+        [
+          "KB_hit_A",
+          0.5902263374485597
+        ],
+        [
+          "KB_pmass_B",
+          0.45529673181849334
+        ]
+      ],
+      "metric_spread_max_minus_min": 0.2969286195794723
+    },
+    "PL": {
+      "metrics": {
+        "KB_hit_A": {
+          "n": 60,
+          "mean": 0.5940329218106997,
+          "sd": 0.274493774125195,
+          "se": 0.03543699386081668,
+          "ci95_normal": [
+            0.524576413843499,
+            0.6634894297779004
+          ]
+        },
+        "KB_pmass_B": {
+          "n": 60,
+          "mean": 0.45747652607064304,
+          "sd": 0.17947271308737184,
+          "se": 0.0231698276295351,
+          "ci95_normal": [
+            0.41206366391675425,
+            0.5028893882245319
+          ]
+        },
+        "KB_auc_C": {
+          "n": 60,
+          "mean": 0.721620801304679,
+          "sd": 0.24511130884237722,
+          "se": 0.031643733903787656,
+          "ci95_normal": [
+            0.6595990828532552,
+            0.7836425197561028
+          ]
+        }
+      },
+      "metric_ranking_high_to_low": [
+        [
+          "KB_auc_C",
+          0.721620801304679
+        ],
+        [
+          "KB_hit_A",
+          0.5940329218106997
+        ],
+        [
+          "KB_pmass_B",
+          0.45747652607064304
+        ]
+      ],
+      "metric_spread_max_minus_min": 0.26414427523403594
+    }
+  },
+  "encoder_schedule_metric_profiles": {
+    "PB": {
+      "T1B": {
+        "KB_hit_A": {
+          "n": 20,
+          "mean": 0.15030864197530866,
+          "sd": 0.11907889169166
+        },
+        "KB_pmass_B": {
+          "n": 20,
+          "mean": 0.155440315224369,
+          "sd": 0.06565149700749122
+        },
+        "KB_auc_C": {
+          "n": 20,
+          "mean": 0.334544826818273,
+          "sd": 0.23052893840026586
+        }
+      },
+      "T1F": {
+        "KB_hit_A": {
+          "n": 20,
+          "mean": 0.4765432098765432,
+          "sd": 0.2934780415917445
+        },
+        "KB_pmass_B": {
+          "n": 20,
+          "mean": 0.42034254389889414,
+          "sd": 0.16136381320433352
+        },
+        "KB_auc_C": {
+          "n": 20,
+          "mean": 0.6545097051890838,
+          "sd": 0.25303310757450925
+        }
+      },
+      "T2": {
+        "KB_hit_A": {
+          "n": 20,
+          "mean": 0.7561728395061728,
+          "sd": 0.140327185568078
+        },
+        "KB_pmass_B": {
+          "n": 20,
+          "mean": 0.5683788314308487,
+          "sd": 0.108369482607362
+        },
+        "KB_auc_C": {
+          "n": 20,
+          "mean": 0.8523027166411474,
+          "sd": 0.10668149970162576
+        }
+      }
+    },
+    "BL": {
+      "T1B": {
+        "KB_hit_A": {
+          "n": 20,
+          "mean": 0.30987654320987645,
+          "sd": 0.13399769506550352
+        },
+        "KB_pmass_B": {
+          "n": 20,
+          "mean": 0.2589423704014252,
+          "sd": 0.10584890279476036
+        },
+        "KB_auc_C": {
+          "n": 20,
+          "mean": 0.5422231942837648,
+          "sd": 0.15947857891836725
+        }
+      },
+      "T1F": {
+        "KB_hit_A": {
+          "n": 20,
+          "mean": 0.6898148148148148,
+          "sd": 0.13155497980798408
+        },
+        "KB_pmass_B": {
+          "n": 20,
+          "mean": 0.5037271937547269,
+          "sd": 0.06121356832009428
+        },
+        "KB_auc_C": {
+          "n": 20,
+          "mean": 0.8620896018034333,
+          "sd": 0.05917691876041676
+        }
+      },
+      "T2": {
+        "KB_hit_A": {
+          "n": 20,
+          "mean": 0.7709876543209877,
+          "sd": 0.13172294160915304
+        },
+        "KB_pmass_B": {
+          "n": 20,
+          "mean": 0.6032206312993277,
+          "sd": 0.09680634609992778
+        },
+        "KB_auc_C": {
+          "n": 20,
+          "mean": 0.8523632581066984,
+          "sd": 0.10362064534453778
+        }
+      }
+    },
+    "PL": {
+      "T1B": {
+        "KB_hit_A": {
+          "n": 20,
+          "mean": 0.28672839506172837,
+          "sd": 0.1842457762570285
+        },
+        "KB_pmass_B": {
+          "n": 20,
+          "mean": 0.26407713178092246,
+          "sd": 0.1534023085240055
+        },
+        "KB_auc_C": {
+          "n": 20,
+          "mean": 0.4859243437957629,
+          "sd": 0.2377667769023708
+        }
+      },
+      "T1F": {
+        "KB_hit_A": {
+          "n": 20,
+          "mean": 0.7188271604938271,
+          "sd": 0.15531809128192364
+        },
+        "KB_pmass_B": {
+          "n": 20,
+          "mean": 0.5446832347976011,
+          "sd": 0.09369571015503327
+        },
+        "KB_auc_C": {
+          "n": 20,
+          "mean": 0.8655992035736336,
+          "sd": 0.08627928430598912
+        }
+      },
+      "T2": {
+        "KB_hit_A": {
+          "n": 20,
+          "mean": 0.7765432098765431,
+          "sd": 0.1582362334891929
+        },
+        "KB_pmass_B": {
+          "n": 20,
+          "mean": 0.5636692116334057,
+          "sd": 0.09199555265094661
+        },
+        "KB_auc_C": {
+          "n": 20,
+          "mean": 0.8133388565446407,
+          "sd": 0.18284760429909913
+        }
+      }
+    }
+  },
+  "interpretation_guardrail": "Use the encoder_x_kb_metric partial-SS share to assess whether audit formulation changes encoder-level KB conclusions. In the observed run, this interaction is weak; report the result as exploratory evidence against a strong encoder \u00d7 audit-formulation interaction, not as a confirmatory test."
+}

@@ -1,0 +1,28 @@
+topic,metric_name,value,unit,source_file,section_where_used,caution_note
+T1 packaging,t1_biored.jsonl n_samples,600,samples,master report §7 (from training data generation report),Methods / Data,snapshot from generation report
+T1 packaging,t1_biored gold_relation_mentions,5935,mentions,master report §7,Methods / Data,same
+T1 packaging,t1_drugprot n_samples,4250,samples,master report §7,Methods / Data,same
+T1 packaging,t1_drugprot gold_relation_mentions,21053,mentions,master report §7,Methods / Data,same
+T1 packaging,t1_bc5cdr n_samples,1500,samples,master report §7,Methods / Data,same
+T1 packaging,t1_bc5cdr gold_relation_mentions,47813,mentions,master report §7,Methods / Data,same
+T1 packaging,t1_supervised_backbone_merged n_samples,6350,samples,master report §7,Methods / Data,same
+T1 packaging,t1_supervised_backbone_merged gold_relation_mentions,74801,mentions,master report §7,Methods / Data,same
+Internal HR rerun,M015 mean_macro_F1,0.7683,macro F1 (mean over seeds),fine_tuning_experiments/reports/tables/rerun_main_aggregated_results.csv,Results internal,Internal dev protocol — cite with RQ-train caveat
+Internal HR rerun,M015 std_macro_F1,0.0182,std,rerun_main_aggregated_results.csv,Results internal,same
+Internal HR rerun,S002 mean_macro_F1,0.7612,mean,rerun_main_aggregated_results.csv,Results internal,same
+Internal HR rerun,M003 mean_macro_F1,0.7554,mean,rerun_main_aggregated_results.csv,Results internal,same
+Internal HR rerun,M021 mean_macro_F1,0.7474,mean,rerun_main_aggregated_results.csv,Results internal,same
+Internal HR rerun,M009 mean_macro_F1,0.7085,mean,rerun_main_aggregated_results.csv,Results internal,same
+Internal HR rerun,M005 mean_macro_F1,0.5978,mean,rerun_main_aggregated_results.csv,Results internal,T3 aux control
+External BioRED,cluster top mean macro F1 approximate,0.285 to 0.292,macro F1 (mean),master report §10 narrative; primary_external_results.csv,Results external,Approximate cluster — cite table for exact
+External BC5CDR,M015 lead narrative,stated in master §10,macro F1,primary_external_results.csv,Results external,Verify row for M015 bc5cdr_official_test_pairs
+Downstream Tier-1,M025 pred_nonnegative R1C1,56,count / 165,knowledge_grounded_evidence_audit/reports/tables/training_to_downstream_master_table.csv,Results downstream,Tier-1 s01 only
+Downstream Tier-1,M003 pred_nonnegative R1C1,41,count / 165,training_to_downstream_master_table.csv,Results downstream,same
+Downstream Tier-1,M015 pred_nonnegative R1C1,0,count / 165,training_to_downstream_master_table.csv,Results downstream,gold-lite proxy
+Downstream Tier-2,M025 S1 pred_nonnegative_mean,13.4,mean count,tier2_multiseed_results.csv,Results downstream,5 seeds
+Downstream Tier-2,M025 S1 pred_nonnegative_std,23.943684,std,tier2_multiseed_results.csv,Results downstream,same
+Downstream Tier-2,M025 S2 pred_nonnegative_mean,0.2,mean count,tier2_multiseed_results.csv,Results downstream,Setting interaction
+Downstream Tier-2,M003 S1 pred_nonnegative_mean,14.4,mean count,tier2_multiseed_results.csv,Results downstream,same
+Downstream Tier-2,M015 S1 pred_nonnegative_mean,2.8,mean count,tier2_multiseed_results.csv,Results downstream,same
+Schema scores,S2_current usefulness (refined table),0.84,score,refined_schema_quality_metrics.csv,Methods schema,Comparative metric — not F1
+Policy composite,M015 decision_policy_composite_benchmark_heavy,0.76668,composite score,final_project_joined_model_table.csv,Discussion,Column name in joined table; from decision analysis join

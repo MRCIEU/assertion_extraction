@@ -1,0 +1,5 @@
+RQ,completion,evidence,verdict,limitation
+RQ1 schema operationalisation,95%,First-principle schema rationale; Phase A S_pair selection; active/dead head audit; leakage and oncology projection fixes.,Ready-to-write; strongest and cleanest foundation.,"Per-family KB breakdown still rendered as figure/table support, not new experiment."
+RQ2 OOD training configuration,80%,H2 confirmed; H3 partial; H1 null; H4 methodological null; H5 deferred.,Mixed but interpretable: corpus diversity is the main robust lever.,No valid LoRA comparison and no shared-multitask architecture result.
+RQ3 model family × audit formulation,80%,Exploratory encoder × KB metric partial-SS audit; per-encoder KB profiles.,No strong interaction; schedule dominates KB surfacing.,"Exploratory, not pre-registered confirmatory."
+RQ4 benchmark × KB coupling,95%,Phase A positive coupling; Phase B R_B null; H6 inconclusive; ordinal instability large.,Benchmark is not a stable proxy for KB surfacing; near-ties often reverse KB order.,Headline must be revised away from original H7 confirmation framing.

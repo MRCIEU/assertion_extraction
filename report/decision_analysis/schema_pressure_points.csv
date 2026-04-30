@@ -1,0 +1,4 @@
+pressure_point,observed_behavior,s2_current_implication
+drug_gene_mechanistic_fine_structure,Low macro-F1 (~0.34-0.44) vs variant–disease (~0.51-0.72); high std on some models,Mechanism types collapsed to DRUG_GENE_REGULATION; subtype semantics not recovered
+clinical_assertion_subtypes,Not measurable on external pair gold without assertion-type labels,S2 CLINICAL_ASSERTION bucket insufficient for predictive vs diagnostic claims
+drugprot_external,Official test not packaged — mechanism claims cannot be benchmarked on DrugProt test,Drug–gene story under-validated on third corpus

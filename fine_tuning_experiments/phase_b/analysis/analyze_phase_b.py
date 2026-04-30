@@ -65,14 +65,14 @@ OUT_MD = PHASE_B_DIR / "phase_b_analysis.md"
 ENCODERS_MAIN = ("PB", "BL", "PL")
 ENCODER_REFERENCE = "RB"
 # arch axis dropped per Appendix B row 2 (2026-04-16).
-UPDATES = ("FT", "LR")           # full-FT, LoRA
+UPDATES = ("FT",)                # realised post-B.24: LoRA arm dropped
 SCHEDULES = ("T1B", "T1F", "T2") # T1_biored_only, T1_flat, T1→T2 staged
 N_SEEDS = 20
 N_SEEDS_REFERENCE = 10
-N_CELLS_MAIN = len(ENCODERS_MAIN) * len(UPDATES) * len(SCHEDULES)  # 18
-EXPECTED_MAIN = N_CELLS_MAIN * N_SEEDS                              # 360
+N_CELLS_MAIN = len(ENCODERS_MAIN) * len(UPDATES) * len(SCHEDULES)  # 9
+EXPECTED_MAIN = N_CELLS_MAIN * N_SEEDS                              # 180
 EXPECTED_REFERENCE = N_SEEDS_REFERENCE                              # 10 (RB × FT × T2 × 10 seeds)
-EXPECTED_TOTAL = EXPECTED_MAIN + EXPECTED_REFERENCE                 # 370
+EXPECTED_TOTAL = EXPECTED_MAIN + EXPECTED_REFERENCE                 # 190
 BOOT_B = 10000
 SEED_DEFAULT = 20260416
 
@@ -103,7 +103,7 @@ def load_rows(csv_path: Path) -> list[dict[str, Any]]:
 
 
 def expected_row_count(rows: list[dict[str, Any]]) -> dict[str, Any]:
-    """Phase B expects 360 main runs + 10 RB reference runs = 370."""
+    """Phase B realised factorial expects 180 FT main + 10 RB = 190."""
     n_total = len(rows)
     n_main = sum(1 for r in rows if r.get("encoder") in ENCODERS_MAIN)
     n_ref = sum(1 for r in rows if r.get("encoder") == ENCODER_REFERENCE)
@@ -394,49 +394,19 @@ def h3_schedule(idx: dict[CellKey, dict]) -> dict[str, Any]:
 
 
 def h4_update(idx: dict[CellKey, dict]) -> dict[str, Any]:
-    """Full-FT vs LoRA on BioRED ex-NEG at PB/BL/PL × T2."""
-    tests, pvals_t, pvals_w, labels = [], [], [], []
-    for enc in ENCODERS_MAIN:
-        pairs = paired_over_seeds(idx,
-            {"encoder": enc, "update": "FT", "schedule": "T2"},
-            {"encoder": enc, "update": "LR", "schedule": "T2"},
-            BIORED_EX_NEG)
-        if len(pairs) < 2:
-            tests.append({"encoder": enc, "status": "no_data"})
-            continue
-        m, lo, hi = paired_mean_diff_ci(pairs)
-        _, _, p_t = paired_t(pairs)
-        p_w = wilcoxon_signed_rank_p(pairs)
-        d = cohens_d_paired(pairs)
-        tests.append({"encoder": enc, "mean_diff": m, "ci95": [lo, hi],
-                      "cohens_d": d, "paired_t_p": p_t, "wilcoxon_p": p_w,
-                      "n_pairs": len(pairs)})
-        pvals_t.append(p_t); pvals_w.append(p_w); labels.append(enc)
-    if pvals_t:
-        q_t = bh_fdr(pvals_t); q_w = bh_fdr(pvals_w)
-        for lab, qt, qw in zip(labels, q_t, q_w):
-            for t in tests:
-                if t.get("encoder") == lab:
-                    t["q_t"] = qt; t["q_w"] = qw
-    passes = [t for t in tests
-              if t.get("cohens_d", 0) >= 0.5
-              and t.get("q_t", 1.0) < 0.05
-              and t.get("q_w", 1.0) < 0.05]
-    lora_pref = [t for t in tests
-                 if t.get("mean_diff") is not None and t["mean_diff"] < 0
-                 and t.get("q_t", 1.0) < 0.05]
-    if not pvals_t:
-        verdict = "phase_b_data_not_yet_available"
-    elif len(passes) == 3:
-        verdict = "confirmed"
-    elif len(passes) == 2:
-        verdict = "partial"
-    elif lora_pref:
-        verdict = "lora_preferred_counter_finding"
-    else:
-        verdict = "null_or_mixed"
-    return {"hypothesis": "H4", "tests": tests, "n_confirmed": len(passes),
-            "verdict": verdict}
+    """H4 is a methodological null after B.24; do not run FT-vs-LoRA tests."""
+    return {
+        "hypothesis": "H4",
+        "status": "methodological_null",
+        "verdict": "empirically_undefined_lora_collapsed",
+        "reason": (
+            "LoRA arm dropped per Appendix B.24 after three attempts "
+            "(LR=2e-5/2048, LR=3e-4/2048, LR=2e-5/4096) all collapsed "
+            "to bit-identical 100%-NEGATIVE dev predictions. A collapsed "
+            "LoRA comparator is not a fair FT-vs-LoRA test."
+        ),
+        "tests": [],
+    }
 
 
 def h5_architecture_deferred() -> dict[str, Any]:
@@ -463,11 +433,11 @@ def h7_variance_asymmetry(rows: list[dict[str, Any]]) -> dict[str, Any]:
     """Variance decomposition: R_B = (design-lever share in BioRED ex-NEG) /
     (design-lever share in KB_hit_A).  §9.5.
 
-    Under the amended factorial (Appendix B 2026-04-16), design levers are
-    (encoder + update + schedule + all pairwise interactions among these);
-    architecture no longer contributes.  Threshold R_B ≥ 2 is retained
-    unchanged because the threshold is first-principles (R = 1 = perfect
-    benchmark-KB proxy, R ≥ 2 = ≥ 2× disparity) and axis-count independent.
+    Under the realised post-B.24 factorial, design levers are
+    (encoder + schedule + their interaction); architecture and update regime
+    no longer contribute.  Threshold R_B ≥ 2 is retained unchanged because
+    the threshold is first-principles (R = 1 = perfect benchmark-KB proxy,
+    R ≥ 2 = ≥ 2× disparity) and axis-count independent.
     """
     main_rows = [r for r in rows if r.get("encoder") in ENCODERS_MAIN]
     if len(main_rows) < N_CELLS_MAIN * 2:  # at least 2 seeds per cell for any decomp
@@ -481,7 +451,7 @@ def h7_variance_asymmetry(rows: list[dict[str, Any]]) -> dict[str, Any]:
         grand = statistics.mean(ys)
         ss_tot = sum((y - grand) ** 2 for y in ys)
         shares = {}
-        for factor in ("encoder", "update", "schedule"):
+        for factor in PHASE_B_FACTORS:
             by_level = defaultdict(list)
             for r in main_rows:
                 if r.get(metric) is not None:
@@ -489,8 +459,7 @@ def h7_variance_asymmetry(rows: list[dict[str, Any]]) -> dict[str, Any]:
             ss_f = sum(len(vs) * (statistics.mean(vs) - grand) ** 2
                        for vs in by_level.values() if vs)
             shares[factor] = ss_f / ss_tot if ss_tot else 0.0
-        for fa, fb in [("encoder", "update"), ("encoder", "schedule"),
-                       ("update", "schedule")]:
+        for fa, fb in itertools.combinations(PHASE_B_FACTORS, 2):
             by_cell = defaultdict(list)
             for r in main_rows:
                 if r.get(metric) is not None:
@@ -551,7 +520,7 @@ ORDINAL_BOOTSTRAP_SEED = 20260418
 N_BOOTSTRAP_DEFAULT = 5000
 
 # Canonical factor sets ↔ §8.5 / §6.9.3.
-PHASE_B_FACTORS = ("encoder", "update", "schedule")
+PHASE_B_FACTORS = ("encoder", "schedule")
 PHASE_A_FACTORS = ("encoder", "schema")
 
 
