@@ -1,0 +1,131 @@
+\documentclass[11pt]{article}
+
+% =============================================================
+% PACKAGES (mirror main.tex where relevant)
+% =============================================================
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage[english]{babel}
+
+\usepackage[a4paper,
+            left=2.0cm, right=2.0cm,
+            top=2.4cm, bottom=2.4cm,
+            headheight=14pt]{geometry}
+
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[LE,RO]{\small\itshape Supplementary Material --- Heterogeneous supervision and evaluation validity in cancer assertion extraction}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\fancypagestyle{plain}{%
+  \fancyhf{}
+  \fancyfoot[C]{\small\thepage}
+  \renewcommand{\headrulewidth}{0pt}
+}
+
+\usepackage{amsmath, amssymb}
+\usepackage{booktabs, tabularx, multirow, array, makecell}
+\renewcommand{\arraystretch}{1.15}
+\usepackage{graphicx, caption, subcaption, float}
+
+\captionsetup{font=small, labelfont=bf, labelsep=period, skip=6pt}
+\captionsetup[table]{position=top}
+\captionsetup[figure]{position=bottom}
+
+\usepackage{xcolor}
+\definecolor{linkblue}{RGB}{0,70,160}
+\definecolor{citeblue}{RGB}{0,100,180}
+\usepackage[colorlinks=true,
+            linkcolor=linkblue,
+            citecolor=citeblue,
+            urlcolor=linkblue,
+            breaklinks=true,
+            bookmarks=true,
+            bookmarksnumbered=true,
+            pdftitle={Supplementary Material: Heterogeneous supervision and evaluation validity in cancer assertion extraction}]{hyperref}
+\usepackage{xurl}
+
+\usepackage{titlesec}
+\usepackage{enumitem}
+\setlist[itemize]{leftmargin=1.5em, itemsep=2pt, parsep=0pt, topsep=4pt}
+\setlist[enumerate]{leftmargin=1.5em, itemsep=2pt, parsep=0pt, topsep=4pt}
+
+\setlength{\parskip}{0.4em}
+\setlength{\parindent}{1.2em}
+
+\usepackage[numbers,sort&compress]{natbib}
+
+% =============================================================
+% CUSTOM COMMANDS (must match main.tex)
+% =============================================================
+\newcommand{\shead}[1]{\textsc{#1}}
+\newcommand{\code}[1]{\texttt{#1}}
+\newcommand{\model}[1]{\texttt{#1}}
+
+% =============================================================
+% SUPPLEMENT NUMBERING (S1, S2, ...)
+% =============================================================
+\renewcommand{\thesection}{S\arabic{section}}
+\renewcommand{\thesubsection}{S\arabic{section}.\arabic{subsection}}
+\renewcommand{\thesubsubsection}{S\arabic{section}.\arabic{subsection}.\arabic{subsubsection}}
+\renewcommand{\thetable}{S\arabic{table}}
+\renewcommand{\thefigure}{S\arabic{figure}}
+\renewcommand{\theequation}{S\arabic{equation}}
+
+% =============================================================
+% TITLE
+% =============================================================
+\title{Supplementary Material \\
+       \large Heterogeneous supervision and evaluation validity \\
+              in cancer assertion extraction}
+\date{}
+
+% =============================================================
+% DOCUMENT
+% =============================================================
+\begin{document}
+
+\maketitle
+\thispagestyle{plain}
+
+\begin{center}
+\small
+This Supplementary Material accompanies the main manuscript and
+provides full reproducibility detail, complete numerical results, the
+falsification audit chain for the parameter-efficient fine-tuning
+arm, and the statistical analysis plan. Section labels run
+\textbf{S1--S13} (through Phase~D CIViCmine material) and figure/table labels are
+prefixed \textbf{S}.
+Cross-references in the main paper to ``Supplement~A'' resolve to
+\S\ref{supp:prereg} (Section~S1) and so on; Phase~D material begins at
+\S\ref{supp:civicmine-phase-d} (Section~S13, subsections S13.1--S13.4 as defined in
+\texttt{supplement/L\_civicmine\_phase\_d.tex}).
+\end{center}
+
+\vspace{1em}
+\tableofcontents
+\vspace{1em}
+\hrule
+\vspace{1.5em}
+
+\input{supplement/A_prereg}
+\input{supplement/B_data_inventory}
+\input{supplement/C_schema_full}
+\input{supplement/D_trainer_spec}
+\input{supplement/E_schema_wave_full}
+\input{supplement/F_config_wave_full}
+\input{supplement/G_coupling_slopes}
+\input{supplement/H_ordinal_instability}
+\input{supplement/I_lora_audit}
+\input{supplement/J_additional_figures}
+\input{supplement/K_stats_plan}
+\input{supplement/L_civicmine_phase_d}
+
+\bibliographystyle{vancouver}
+\bibliography{references}
+
+\end{document}

@@ -1,0 +1,961 @@
+{
+  "coverage_rates_unfiltered_relaxed": {
+    "strict_entity_pair_cover_162": 0.25308641975308643,
+    "pmid_only_cover_162": 0.4876543209876543,
+    "strict_count": 41,
+    "pmid_only_count": 79
+  },
+  "n_evaluable_targets": 162,
+  "n_civicmine_strict_covered": 41,
+  "n_missing_pmid": 83,
+  "civicmine_kb_argmax_accuracy_strict41_mean": 0.9512195121951219,
+  "civicmine_kb_argmax_accuracy_strict41_note": "Selection-biased: strict coverage follows CIViCmine's realised extraction support. Compare against PB models only on the matched 41-target denominator (see pb_pubmedbert_kb_on_civicmine_strict_subset).",
+  "pmid_present_no_pair_breakdown": {
+    "n_pmid_no_pair": 38,
+    "n_at_least_one_entity_slot": 31,
+    "n_neither_entity_slot": 7
+  },
+  "covered_targets": [
+    {
+      "target_id": "GL_0007",
+      "pairing_family": "gene_drug",
+      "pmid": "15329413",
+      "civicmine_evidencetype": "Predictive",
+      "pred_spair_label": "DRUG_GENE_REGULATION",
+      "expected_label_s2": "DRUG_GENE_REGULATION",
+      "expected_set_sv": [
+        "DRUG_GENE_REGULATION"
+      ],
+      "hit_A_sv_argmax": 1,
+      "evidencetype_prob": 0.9598964283073003
+    },
+    {
+      "target_id": "GL_0010",
+      "pairing_family": "gene_drug",
+      "pmid": "21933749",
+      "civicmine_evidencetype": "Predictive",
+      "pred_spair_label": "DRUG_GENE_REGULATION",
+      "expected_label_s2": "DRUG_GENE_REGULATION",
+      "expected_set_sv": [
+        "DRUG_GENE_REGULATION"
+      ],
+      "hit_A_sv_argmax": 1,
+      "evidencetype_prob": 0.9150101312908332
+    },
+    {
+      "target_id": "GL_0016",
+      "pairing_family": "gene_drug",
+      "pmid": "21030459",
+      "civicmine_evidencetype": "Predictive",
+      "pred_spair_label": "DRUG_GENE_REGULATION",
+      "expected_label_s2": "DRUG_GENE_REGULATION",
+      "expected_set_sv": [
+        "DRUG_GENE_REGULATION"
+      ],
+      "hit_A_sv_argmax": 1,
+      "evidencetype_prob": 0.6560842014386181
+    },
+    {
+      "target_id": "GL_0018",
+      "pairing_family": "gene_drug",
+      "pmid": "20979469",
+      "civicmine_evidencetype": "Predictive",
+      "pred_spair_label": "DRUG_GENE_REGULATION",
+      "expected_label_s2": "DRUG_GENE_REGULATION",
+      "expected_set_sv": [
+        "DRUG_GENE_REGULATION"
+      ],
+      "hit_A_sv_argmax": 1,
+      "evidencetype_prob": 0.8714557073787155
+    },
+    {
+      "target_id": "GL_0019",
+      "pairing_family": "gene_drug",
+      "pmid": "18509184",
+      "civicmine_evidencetype": "Predictive",
+      "pred_spair_label": "DRUG_GENE_REGULATION",
+      "expected_label_s2": "DRUG_GENE_REGULATION",
+      "expected_set_sv": [
+        "DRUG_GENE_REGULATION"
+      ],
+      "hit_A_sv_argmax": 1,
+      "evidencetype_prob": 0.7358280173712537
+    },
+    {
+      "target_id": "GL_0026",
+      "pairing_family": "gene_drug",
+      "pmid": "16707605",
+      "civicmine_evidencetype": "Predictive",
+      "pred_spair_label": "DRUG_GENE_REGULATION",
+      "expected_label_s2": "DRUG_GENE_REGULATION",
+      "expected_set_sv": [
+        "DRUG_GENE_REGULATION"
+      ],
+      "hit_A_sv_argmax": 1,
+      "evidencetype_prob": 0.8372344112246787
+    },
+    {
+      "target_id": "GL_0035",
+      "pairing_family": "gene_drug",
+      "pmid": "22452895",
+      "civicmine_evidencetype": "Predictive",
+      "pred_spair_label": "DRUG_GENE_REGULATION",
+      "expected_label_s2": "DRUG_GENE_REGULATION",
+      "expected_set_sv": [
+        "DRUG_GENE_REGULATION"
+      ],
+      "hit_A_sv_argmax": 1,
+      "evidencetype_prob": 0.7678149897315517
+    },
+    {
+      "target_id": "GL_0037",
+      "pairing_family": "gene_drug",
+      "pmid": "16818686",
+      "civicmine_evidencetype": "Predictive",
+      "pred_spair_label": "DRUG_GENE_REGULATION",
+      "expected_label_s2": "DRUG_GENE_REGULATION",
+      "expected_set_sv": [
+        "DRUG_GENE_REGULATION"
+      ],
+      "hit_A_sv_argmax": 1,
+      "evidencetype_prob": 0.9439973739728091
+    },
+    {
+      "target_id": "GL_0045",
+      "pairing_family": "gene_drug",
+      "pmid": "15118125",
+      "civicmine_evidencetype": "Predictive",
+      "pred_spair_label": "DRUG_GENE_REGULATION",
+      "expected_label_s2": "DRUG_GENE_REGULATION",
+      "expected_set_sv": [
+        "DRUG_GENE_REGULATION"
+      ],
+      "hit_A_sv_argmax": 1,
+      "evidencetype_prob": 0.8840181521332754
+    },
+    {
+      "target_id": "GL_0049",
+      "pairing_family": "gene_drug",
+      "pmid": "16818618",
+      "civicmine_evidencetype": "Predictive",
+      "pred_spair_label": "DRUG_GENE_REGULATION",
+      "expected_label_s2": "ASSOCIATION_GENERAL",
+      "expected_set_sv": [
+        "DRUG_GENE_REGULATION"
+      ],
+      "hit_A_sv_argmax": 1,
+      "evidencetype_prob": 0.6125594101418806
+    },
+    {
+      "target_id": "GL_0051",
+      "pairing_family": "gene_drug",
+      "pmid": "22452895",
+      "civicmine_evidencetype": "Predictive",
+      "pred_spair_label": "DRUG_GENE_REGULATION",
+      "expected_label_s2": "DRUG_GENE_REGULATION",
+      "expected_set_sv": [
+        "DRUG_GENE_REGULATION"
+      ],
+      "hit_A_sv_argmax": 1,
+      "evidencetype_prob": 0.7678149897315517
+    },
+    {
+      "target_id": "GL_0055",
+      "pairing_family": "gene_drug",
+      "pmid": "22235099",
+      "civicmine_evidencetype": "Predictive",
+      "pred_spair_label": "DRUG_GENE_REGULATION",
+      "expected_label_s2": "DRUG_GENE_REGULATION",
+      "expected_set_sv": [
+        "DRUG_GENE_REGULATION"
+      ],
+      "hit_A_sv_argmax": 1,
+      "evidencetype_prob": 0.7354834112436391
+    },
+    {
+      "target_id": "GL_0059",
+      "pairing_family": "gene_drug",
+      "pmid": "22285168",
+      "civicmine_evidencetype": "Predictive",
+      "pred_spair_label": "DRUG_GENE_REGULATION",
+      "expected_label_s2": "DRUG_GENE_REGULATION",
+      "expected_set_sv": [
+        "DRUG_GENE_REGULATION"
+      ],
+      "hit_A_sv_argmax": 1,
+      "evidencetype_prob": 0.6301611457818617
+    },
+    {
+      "target_id": "GL_0066",
+      "pairing_family": "gene_drug",
+      "pmid": "20022809",
+      "civicmine_evidencetype": "Predictive",
+      "pred_spair_label": "DRUG_GENE_REGULATION",
+      "expected_label_s2": "DRUG_GENE_REGULATION",
+      "expected_set_sv": [
+        "DRUG_GENE_REGULATION"
+      ],
+      "hit_A_sv_argmax": 1,
+      "evidencetype_prob": 0.5074275379457417
+    },
+    {
+      "target_id": "GL_0073",
+      "pairing_family": "gene_drug",
+      "pmid": "22235099",
+      "civicmine_evidencetype": "Predictive",
+      "pred_spair_label": "DRUG_GENE_REGULATION",
+      "expected_label_s2": "DRUG_GENE_REGULATION",
+      "expected_set_sv": [
+        "DRUG_GENE_REGULATION"
+      ],
+      "hit_A_sv_argmax": 1,
+      "evidencetype_prob": 0.7354834112436391
+    },
+    {
+      "target_id": "GL_0074",
+      "pairing_family": "gene_drug",
+      "pmid": "20979469",
+      "civicmine_evidencetype": "Predictive",
+      "pred_spair_label": "DRUG_GENE_REGULATION",
+      "expected_label_s2": "DRUG_GENE_REGULATION",
+      "expected_set_sv": [
+        "DRUG_GENE_REGULATION"
+      ],
+      "hit_A_sv_argmax": 1,
+      "evidencetype_prob": 0.8714557073787155
+    },
+    {
+      "target_id": "GL_0076",
+      "pairing_family": "gene_drug",
+      "pmid": "17409929",
+      "civicmine_evidencetype": "Predictive",
+      "pred_spair_label": "DRUG_GENE_REGULATION",
+      "expected_label_s2": "DRUG_GENE_REGULATION",
+      "expected_set_sv": [
+        "DRUG_GENE_REGULATION"
+      ],
+      "hit_A_sv_argmax": 1,
+      "evidencetype_prob": 0.8823666389662888
+    },
+    {
+      "target_id": "GL_0082",
+      "pairing_family": "gene_drug",
+      "pmid": "15329413",
+      "civicmine_evidencetype": "Predictive",
+      "pred_spair_label": "DRUG_GENE_REGULATION",
+      "expected_label_s2": "DRUG_GENE_REGULATION",
+      "expected_set_sv": [
+        "DRUG_GENE_REGULATION"
+      ],
+      "hit_A_sv_argmax": 1,
+      "evidencetype_prob": 0.9598964283073003
+    },
+    {
+      "target_id": "GL_0083",
+      "pairing_family": "gene_drug",
+      "pmid": "15329413",
+      "civicmine_evidencetype": "Predictive",
+      "pred_spair_label": "DRUG_GENE_REGULATION",
+      "expected_label_s2": "DRUG_GENE_REGULATION",
+      "expected_set_sv": [
+        "DRUG_GENE_REGULATION"
+      ],
+      "hit_A_sv_argmax": 1,
+      "evidencetype_prob": 0.9407807815382614
+    },
+    {
+      "target_id": "GL_0085",
+      "pairing_family": "gene_drug",
+      "pmid": "17020982",
+      "civicmine_evidencetype": "Predictive",
+      "pred_spair_label": "DRUG_GENE_REGULATION",
+      "expected_label_s2": "DRUG_GENE_REGULATION",
+      "expected_set_sv": [
+        "DRUG_GENE_REGULATION"
+      ],
+      "hit_A_sv_argmax": 1,
+      "evidencetype_prob": 0.8359858981521101
+    },
+    {
+      "target_id": "GL_0086",
+      "pairing_family": "gene_drug",
+      "pmid": "15329413",
+      "civicmine_evidencetype": "Predictive",
+      "pred_spair_label": "DRUG_GENE_REGULATION",
+      "expected_label_s2": "DRUG_GENE_REGULATION",
+      "expected_set_sv": [
+        "DRUG_GENE_REGULATION"
+      ],
+      "hit_A_sv_argmax": 1,
+      "evidencetype_prob": 0.9407807815382614
+    },
+    {
+      "target_id": "GL_0097",
+      "pairing_family": "gene_drug",
+      "pmid": "16818618",
+      "civicmine_evidencetype": "Predictive",
+      "pred_spair_label": "DRUG_GENE_REGULATION",
+      "expected_label_s2": "ASSOCIATION_GENERAL",
+      "expected_set_sv": [
+        "DRUG_GENE_REGULATION"
+      ],
+      "hit_A_sv_argmax": 1,
+      "evidencetype_prob": 0.6125594101418806
+    },
+    {
+      "target_id": "GL_0098",
+      "pairing_family": "gene_drug",
+      "pmid": "18509184",
+      "civicmine_evidencetype": "Predictive",
+      "pred_spair_label": "DRUG_GENE_REGULATION",
+      "expected_label_s2": "DRUG_GENE_REGULATION",
+      "expected_set_sv": [
+        "DRUG_GENE_REGULATION"
+      ],
+      "hit_A_sv_argmax": 1,
+      "evidencetype_prob": 0.7358280173712537
+    },
+    {
+      "target_id": "GL_0103",
+      "pairing_family": "gene_drug",
+      "pmid": "15118125",
+      "civicmine_evidencetype": "Predictive",
+      "pred_spair_label": "DRUG_GENE_REGULATION",
+      "expected_label_s2": "DRUG_GENE_REGULATION",
+      "expected_set_sv": [
+        "DRUG_GENE_REGULATION"
+      ],
+      "hit_A_sv_argmax": 1,
+      "evidencetype_prob": 0.8840181521332754
+    },
+    {
+      "target_id": "GL_0105",
+      "pairing_family": "gene_drug",
+      "pmid": "17463250",
+      "civicmine_evidencetype": "Predictive",
+      "pred_spair_label": "DRUG_GENE_REGULATION",
+      "expected_label_s2": "DRUG_GENE_REGULATION",
+      "expected_set_sv": [
+        "DRUG_GENE_REGULATION"
+      ],
+      "hit_A_sv_argmax": 1,
+      "evidencetype_prob": 0.8708407246880461
+    },
+    {
+      "target_id": "GL_0113",
+      "pairing_family": "gene_drug",
+      "pmid": "15329413",
+      "civicmine_evidencetype": "Predictive",
+      "pred_spair_label": "DRUG_GENE_REGULATION",
+      "expected_label_s2": "DRUG_GENE_REGULATION",
+      "expected_set_sv": [
+        "DRUG_GENE_REGULATION"
+      ],
+      "hit_A_sv_argmax": 1,
+      "evidencetype_prob": 0.9598964283073003
+    },
+    {
+      "target_id": "GL_0120",
+      "pairing_family": "gene_drug",
+      "pmid": "20979469",
+      "civicmine_evidencetype": "Predictive",
+      "pred_spair_label": "DRUG_GENE_REGULATION",
+      "expected_label_s2": "DRUG_GENE_REGULATION",
+      "expected_set_sv": [
+        "DRUG_GENE_REGULATION"
+      ],
+      "hit_A_sv_argmax": 1,
+      "evidencetype_prob": 0.8714557073787155
+    },
+    {
+      "target_id": "GL_0121",
+      "pairing_family": "gene_drug",
+      "pmid": "15329413",
+      "civicmine_evidencetype": "Predictive",
+      "pred_spair_label": "DRUG_GENE_REGULATION",
+      "expected_label_s2": "DRUG_GENE_REGULATION",
+      "expected_set_sv": [
+        "DRUG_GENE_REGULATION"
+      ],
+      "hit_A_sv_argmax": 1,
+      "evidencetype_prob": 0.9407807815382614
+    },
+    {
+      "target_id": "GL_0122",
+      "pairing_family": "gene_drug",
+      "pmid": "15737014",
+      "civicmine_evidencetype": "Predictive",
+      "pred_spair_label": "DRUG_GENE_REGULATION",
+      "expected_label_s2": "DRUG_GENE_REGULATION",
+      "expected_set_sv": [
+        "DRUG_GENE_REGULATION"
+      ],
+      "hit_A_sv_argmax": 1,
+      "evidencetype_prob": 0.9294168433357914
+    },
+    {
+      "target_id": "GL_0127",
+      "pairing_family": "variant_disease",
+      "pmid": "15597105",
+      "civicmine_evidencetype": "Prognostic",
+      "pred_spair_label": "ASSOCIATION_GENERAL",
+      "expected_label_s2": "ASSOCIATION_GENERAL",
+      "expected_set_sv": [
+        "VARIANT_DISEASE"
+      ],
+      "hit_A_sv_argmax": 0,
+      "evidencetype_prob": 0.8276054416004053
+    },
+    {
+      "target_id": "GL_0128",
+      "pairing_family": "gene_drug",
+      "pmid": "15329413",
+      "civicmine_evidencetype": "Predictive",
+      "pred_spair_label": "DRUG_GENE_REGULATION",
+      "expected_label_s2": "DRUG_GENE_REGULATION",
+      "expected_set_sv": [
+        "DRUG_GENE_REGULATION"
+      ],
+      "hit_A_sv_argmax": 1,
+      "evidencetype_prob": 0.9598964283073003
+    },
+    {
+      "target_id": "GL_0139",
+      "pairing_family": "gene_drug",
+      "pmid": "15728811",
+      "civicmine_evidencetype": "Predictive",
+      "pred_spair_label": "DRUG_GENE_REGULATION",
+      "expected_label_s2": "DRUG_GENE_REGULATION",
+      "expected_set_sv": [
+        "DRUG_GENE_REGULATION"
+      ],
+      "hit_A_sv_argmax": 1,
+      "evidencetype_prob": 0.6774687312227545
+    },
+    {
+      "target_id": "GL_0141",
+      "pairing_family": "gene_drug",
+      "pmid": "21642865",
+      "civicmine_evidencetype": "Predictive",
+      "pred_spair_label": "DRUG_GENE_REGULATION",
+      "expected_label_s2": "DRUG_GENE_REGULATION",
+      "expected_set_sv": [
+        "DRUG_GENE_REGULATION"
+      ],
+      "hit_A_sv_argmax": 1,
+      "evidencetype_prob": 0.6815459104399769
+    },
+    {
+      "target_id": "GL_0143",
+      "pairing_family": "gene_drug",
+      "pmid": "21791641",
+      "civicmine_evidencetype": "Predictive",
+      "pred_spair_label": "DRUG_GENE_REGULATION",
+      "expected_label_s2": "DRUG_GENE_REGULATION",
+      "expected_set_sv": [
+        "DRUG_GENE_REGULATION"
+      ],
+      "hit_A_sv_argmax": 1,
+      "evidencetype_prob": 0.5218920563711019
+    },
+    {
+      "target_id": "GL_0146",
+      "pairing_family": "gene_drug",
+      "pmid": "17085664",
+      "civicmine_evidencetype": "Predictive",
+      "pred_spair_label": "DRUG_GENE_REGULATION",
+      "expected_label_s2": "DRUG_GENE_REGULATION",
+      "expected_set_sv": [
+        "DRUG_GENE_REGULATION"
+      ],
+      "hit_A_sv_argmax": 1,
+      "evidencetype_prob": 0.9392638130850095
+    },
+    {
+      "target_id": "GL_0149",
+      "pairing_family": "gene_drug",
+      "pmid": "15329413",
+      "civicmine_evidencetype": "Predictive",
+      "pred_spair_label": "DRUG_GENE_REGULATION",
+      "expected_label_s2": "DRUG_GENE_REGULATION",
+      "expected_set_sv": [
+        "DRUG_GENE_REGULATION"
+      ],
+      "hit_A_sv_argmax": 1,
+      "evidencetype_prob": 0.9407807815382614
+    },
+    {
+      "target_id": "GL_0150",
+      "pairing_family": "gene_drug",
+      "pmid": "22285168",
+      "civicmine_evidencetype": "Predictive",
+      "pred_spair_label": "DRUG_GENE_REGULATION",
+      "expected_label_s2": "DRUG_GENE_REGULATION",
+      "expected_set_sv": [
+        "DRUG_GENE_REGULATION"
+      ],
+      "hit_A_sv_argmax": 1,
+      "evidencetype_prob": 0.6301611457818617
+    },
+    {
+      "target_id": "GL_0151",
+      "pairing_family": "variant_disease",
+      "pmid": "22810899",
+      "civicmine_evidencetype": "Prognostic",
+      "pred_spair_label": "ASSOCIATION_GENERAL",
+      "expected_label_s2": "ASSOCIATION_GENERAL",
+      "expected_set_sv": [
+        "VARIANT_DISEASE"
+      ],
+      "hit_A_sv_argmax": 0,
+      "evidencetype_prob": 0.8357230403856414
+    },
+    {
+      "target_id": "GL_0152",
+      "pairing_family": "gene_drug",
+      "pmid": "22285168",
+      "civicmine_evidencetype": "Predictive",
+      "pred_spair_label": "DRUG_GENE_REGULATION",
+      "expected_label_s2": "DRUG_GENE_REGULATION",
+      "expected_set_sv": [
+        "DRUG_GENE_REGULATION"
+      ],
+      "hit_A_sv_argmax": 1,
+      "evidencetype_prob": 0.6301611457818617
+    },
+    {
+      "target_id": "GL_0161",
+      "pairing_family": "gene_drug",
+      "pmid": "20979469",
+      "civicmine_evidencetype": "Predictive",
+      "pred_spair_label": "DRUG_GENE_REGULATION",
+      "expected_label_s2": "DRUG_GENE_REGULATION",
+      "expected_set_sv": [
+        "DRUG_GENE_REGULATION"
+      ],
+      "hit_A_sv_argmax": 1,
+      "evidencetype_prob": 0.8714557073787155
+    },
+    {
+      "target_id": "GL_0162",
+      "pairing_family": "gene_drug",
+      "pmid": "22452895",
+      "civicmine_evidencetype": "Predictive",
+      "pred_spair_label": "DRUG_GENE_REGULATION",
+      "expected_label_s2": "DRUG_GENE_REGULATION",
+      "expected_set_sv": [
+        "DRUG_GENE_REGULATION"
+      ],
+      "hit_A_sv_argmax": 1,
+      "evidencetype_prob": 0.7678149897315517
+    }
+  ],
+  "pmid_present_no_pair_targets": [
+    {
+      "target_id": "GL_0005",
+      "pairing_family": "gene_drug",
+      "pmid": "23470965",
+      "slot_a_present": false,
+      "slot_b_present": false,
+      "at_least_one_slot": false
+    },
+    {
+      "target_id": "GL_0006",
+      "pairing_family": "gene_drug",
+      "pmid": "18594010",
+      "slot_a_present": false,
+      "slot_b_present": false,
+      "at_least_one_slot": false
+    },
+    {
+      "target_id": "GL_0015",
+      "pairing_family": "gene_drug",
+      "pmid": "17409929",
+      "slot_a_present": false,
+      "slot_b_present": true,
+      "at_least_one_slot": true
+    },
+    {
+      "target_id": "GL_0022",
+      "pairing_family": "gene_drug",
+      "pmid": "23524406",
+      "slot_a_present": false,
+      "slot_b_present": false,
+      "at_least_one_slot": false
+    },
+    {
+      "target_id": "GL_0025",
+      "pairing_family": "gene_drug",
+      "pmid": "17409929",
+      "slot_a_present": false,
+      "slot_b_present": true,
+      "at_least_one_slot": true
+    },
+    {
+      "target_id": "GL_0028",
+      "pairing_family": "gene_drug",
+      "pmid": "19147750",
+      "slot_a_present": true,
+      "slot_b_present": false,
+      "at_least_one_slot": true
+    },
+    {
+      "target_id": "GL_0038",
+      "pairing_family": "gene_drug",
+      "pmid": "23371856",
+      "slot_a_present": true,
+      "slot_b_present": false,
+      "at_least_one_slot": true
+    },
+    {
+      "target_id": "GL_0040",
+      "pairing_family": "gene_drug",
+      "pmid": "22235099",
+      "slot_a_present": true,
+      "slot_b_present": true,
+      "at_least_one_slot": true
+    },
+    {
+      "target_id": "GL_0042",
+      "pairing_family": "gene_drug",
+      "pmid": "17409929",
+      "slot_a_present": false,
+      "slot_b_present": true,
+      "at_least_one_slot": true
+    },
+    {
+      "target_id": "GL_0043",
+      "pairing_family": "gene_drug",
+      "pmid": "18408761",
+      "slot_a_present": true,
+      "slot_b_present": false,
+      "at_least_one_slot": true
+    },
+    {
+      "target_id": "GL_0044",
+      "pairing_family": "gene_drug",
+      "pmid": "18408761",
+      "slot_a_present": true,
+      "slot_b_present": false,
+      "at_least_one_slot": true
+    },
+    {
+      "target_id": "GL_0046",
+      "pairing_family": "gene_drug",
+      "pmid": "22056021",
+      "slot_a_present": true,
+      "slot_b_present": false,
+      "at_least_one_slot": true
+    },
+    {
+      "target_id": "GL_0047",
+      "pairing_family": "gene_drug",
+      "pmid": "19147750",
+      "slot_a_present": true,
+      "slot_b_present": false,
+      "at_least_one_slot": true
+    },
+    {
+      "target_id": "GL_0048",
+      "pairing_family": "gene_drug",
+      "pmid": "15696205",
+      "slot_a_present": false,
+      "slot_b_present": true,
+      "at_least_one_slot": true
+    },
+    {
+      "target_id": "GL_0060",
+      "pairing_family": "gene_drug",
+      "pmid": "17409929",
+      "slot_a_present": false,
+      "slot_b_present": true,
+      "at_least_one_slot": true
+    },
+    {
+      "target_id": "GL_0065",
+      "pairing_family": "gene_drug",
+      "pmid": "19147750",
+      "slot_a_present": true,
+      "slot_b_present": false,
+      "at_least_one_slot": true
+    },
+    {
+      "target_id": "GL_0067",
+      "pairing_family": "gene_drug",
+      "pmid": "23470965",
+      "slot_a_present": true,
+      "slot_b_present": false,
+      "at_least_one_slot": true
+    },
+    {
+      "target_id": "GL_0068",
+      "pairing_family": "gene_drug",
+      "pmid": "21430269",
+      "slot_a_present": true,
+      "slot_b_present": false,
+      "at_least_one_slot": true
+    },
+    {
+      "target_id": "GL_0078",
+      "pairing_family": "gene_drug",
+      "pmid": "21783417",
+      "slot_a_present": true,
+      "slot_b_present": false,
+      "at_least_one_slot": true
+    },
+    {
+      "target_id": "GL_0080",
+      "pairing_family": "gene_drug",
+      "pmid": "21258250",
+      "slot_a_present": false,
+      "slot_b_present": false,
+      "at_least_one_slot": false
+    },
+    {
+      "target_id": "GL_0087",
+      "pairing_family": "gene_drug",
+      "pmid": "19147750",
+      "slot_a_present": true,
+      "slot_b_present": false,
+      "at_least_one_slot": true
+    },
+    {
+      "target_id": "GL_0088",
+      "pairing_family": "gene_drug",
+      "pmid": "17409929",
+      "slot_a_present": false,
+      "slot_b_present": true,
+      "at_least_one_slot": true
+    },
+    {
+      "target_id": "GL_0090",
+      "pairing_family": "variant_disease",
+      "pmid": "22810899",
+      "slot_a_present": false,
+      "slot_b_present": true,
+      "at_least_one_slot": true
+    },
+    {
+      "target_id": "GL_0093",
+      "pairing_family": "variant_disease",
+      "pmid": "11208838",
+      "slot_a_present": false,
+      "slot_b_present": true,
+      "at_least_one_slot": true
+    },
+    {
+      "target_id": "GL_0094",
+      "pairing_family": "gene_drug",
+      "pmid": "19147750",
+      "slot_a_present": true,
+      "slot_b_present": false,
+      "at_least_one_slot": true
+    },
+    {
+      "target_id": "GL_0096",
+      "pairing_family": "gene_drug",
+      "pmid": "20979473",
+      "slot_a_present": false,
+      "slot_b_present": false,
+      "at_least_one_slot": false
+    },
+    {
+      "target_id": "GL_0108",
+      "pairing_family": "gene_drug",
+      "pmid": "20979473",
+      "slot_a_present": false,
+      "slot_b_present": false,
+      "at_least_one_slot": false
+    },
+    {
+      "target_id": "GL_0111",
+      "pairing_family": "gene_drug",
+      "pmid": "18408761",
+      "slot_a_present": true,
+      "slot_b_present": false,
+      "at_least_one_slot": true
+    },
+    {
+      "target_id": "GL_0114",
+      "pairing_family": "gene_drug",
+      "pmid": "18408761",
+      "slot_a_present": true,
+      "slot_b_present": false,
+      "at_least_one_slot": true
+    },
+    {
+      "target_id": "GL_0117",
+      "pairing_family": "gene_drug",
+      "pmid": "18227510",
+      "slot_a_present": true,
+      "slot_b_present": false,
+      "at_least_one_slot": true
+    },
+    {
+      "target_id": "GL_0123",
+      "pairing_family": "gene_drug",
+      "pmid": "18408761",
+      "slot_a_present": true,
+      "slot_b_present": false,
+      "at_least_one_slot": true
+    },
+    {
+      "target_id": "GL_0125",
+      "pairing_family": "gene_drug",
+      "pmid": "21258250",
+      "slot_a_present": true,
+      "slot_b_present": false,
+      "at_least_one_slot": true
+    },
+    {
+      "target_id": "GL_0126",
+      "pairing_family": "gene_drug",
+      "pmid": "18408761",
+      "slot_a_present": true,
+      "slot_b_present": false,
+      "at_least_one_slot": true
+    },
+    {
+      "target_id": "GL_0132",
+      "pairing_family": "gene_drug",
+      "pmid": "21732342",
+      "slot_a_present": true,
+      "slot_b_present": false,
+      "at_least_one_slot": true
+    },
+    {
+      "target_id": "GL_0133",
+      "pairing_family": "gene_drug",
+      "pmid": "20979473",
+      "slot_a_present": false,
+      "slot_b_present": false,
+      "at_least_one_slot": false
+    },
+    {
+      "target_id": "GL_0140",
+      "pairing_family": "gene_drug",
+      "pmid": "18408761",
+      "slot_a_present": true,
+      "slot_b_present": false,
+      "at_least_one_slot": true
+    },
+    {
+      "target_id": "GL_0155",
+      "pairing_family": "gene_drug",
+      "pmid": "22901364",
+      "slot_a_present": true,
+      "slot_b_present": false,
+      "at_least_one_slot": true
+    },
+    {
+      "target_id": "GL_0165",
+      "pairing_family": "gene_drug",
+      "pmid": "19147750",
+      "slot_a_present": true,
+      "slot_b_present": false,
+      "at_least_one_slot": true
+    }
+  ],
+  "pb_pubmedbert_kb_on_civicmine_strict_subset": {
+    "runs_root_observed": "/lus/lfs1aip2/projects/b5ac/project_1/fine_tuning_experiments/runs/phase_b",
+    "methods_note": "Subset means use Method A hit_A_sv on kb_surface_targets.jsonl aggregated over the strict CIViCmine-covered target identifiers (deterministic PMID + tuple match).",
+    "PB_T2_on_strict41": {
+      "run_prefix": "PB_PB_FT",
+      "encoder_schedule": "T2",
+      "n_targets_subset": 41,
+      "n_seeds_found": 20,
+      "subset_kb_hit_mean_seed_mean": 0.8548780487804878,
+      "subset_kb_hit_seed_sd": 0.11029002920184777,
+      "per_seed_subset_accuracy_sample": [
+        0.7317073170731707,
+        0.7317073170731707,
+        0.5853658536585366,
+        0.9512195121951219,
+        0.9512195121951219,
+        0.9512195121951219,
+        0.9024390243902439,
+        0.7804878048780488
+      ],
+      "issues_sample": []
+    },
+    "PB_T1F_2048_on_strict41": {
+      "run_prefix": "PB_PB_FT",
+      "encoder_schedule": "T1F",
+      "n_targets_subset": 41,
+      "n_seeds_found": 20,
+      "subset_kb_hit_mean_seed_mean": 0.5487804878048781,
+      "subset_kb_hit_seed_sd": 0.33905948230384986,
+      "per_seed_subset_accuracy_sample": [
+        0.9512195121951219,
+        0.0,
+        0.0975609756097561,
+        0.975609756097561,
+        0.5853658536585366,
+        0.9512195121951219,
+        0.8292682926829268,
+        0.3170731707317073
+      ],
+      "issues_sample": []
+    },
+    "PB_T1B_on_strict41": {
+      "run_prefix": "PB_PB_FT",
+      "encoder_schedule": "T1B",
+      "n_targets_subset": 41,
+      "n_seeds_found": 20,
+      "subset_kb_hit_mean_seed_mean": 0.2621951219512195,
+      "subset_kb_hit_seed_sd": 0.23833586747022376,
+      "per_seed_subset_accuracy_sample": [
+        0.5365853658536586,
+        0.0,
+        0.0,
+        0.0,
+        0.04878048780487805,
+        0.12195121951219512,
+        0.0,
+        0.3170731707317073
+      ],
+      "issues_sample": []
+    },
+    "PB_T1F_4096_on_strict41_interim_placeholder": {
+      "run_prefix": "PB_PB_FT",
+      "encoder_schedule": "T1F4096",
+      "n_targets_subset": 41,
+      "n_seeds_found": 0,
+      "subset_kb_hit_mean_seed_mean": null,
+      "subset_kb_hit_seed_sd": null,
+      "per_seed_subset_accuracy_sample": [],
+      "issues_sample": [
+        "missing:/lus/lfs1aip2/projects/b5ac/project_1/fine_tuning_experiments/runs/phase_b/PB_PB_FT_T1F4096_s01/eval/kb_surface_targets.jsonl",
+        "missing:/lus/lfs1aip2/projects/b5ac/project_1/fine_tuning_experiments/runs/phase_b/PB_PB_FT_T1F4096_s02/eval/kb_surface_targets.jsonl",
+        "missing:/lus/lfs1aip2/projects/b5ac/project_1/fine_tuning_experiments/runs/phase_b/PB_PB_FT_T1F4096_s03/eval/kb_surface_targets.jsonl",
+        "missing:/lus/lfs1aip2/projects/b5ac/project_1/fine_tuning_experiments/runs/phase_b/PB_PB_FT_T1F4096_s04/eval/kb_surface_targets.jsonl",
+        "missing:/lus/lfs1aip2/projects/b5ac/project_1/fine_tuning_experiments/runs/phase_b/PB_PB_FT_T1F4096_s05/eval/kb_surface_targets.jsonl",
+        "missing:/lus/lfs1aip2/projects/b5ac/project_1/fine_tuning_experiments/runs/phase_b/PB_PB_FT_T1F4096_s06/eval/kb_surface_targets.jsonl",
+        "missing:/lus/lfs1aip2/projects/b5ac/project_1/fine_tuning_experiments/runs/phase_b/PB_PB_FT_T1F4096_s07/eval/kb_surface_targets.jsonl",
+        "missing:/lus/lfs1aip2/projects/b5ac/project_1/fine_tuning_experiments/runs/phase_b/PB_PB_FT_T1F4096_s08/eval/kb_surface_targets.jsonl",
+        "missing:/lus/lfs1aip2/projects/b5ac/project_1/fine_tuning_experiments/runs/phase_b/PB_PB_FT_T1F4096_s09/eval/kb_surface_targets.jsonl",
+        "missing:/lus/lfs1aip2/projects/b5ac/project_1/fine_tuning_experiments/runs/phase_b/PB_PB_FT_T1F4096_s10/eval/kb_surface_targets.jsonl",
+        "missing:/lus/lfs1aip2/projects/b5ac/project_1/fine_tuning_experiments/runs/phase_b/PB_PB_FT_T1F4096_s11/eval/kb_surface_targets.jsonl",
+        "missing:/lus/lfs1aip2/projects/b5ac/project_1/fine_tuning_experiments/runs/phase_b/PB_PB_FT_T1F4096_s12/eval/kb_surface_targets.jsonl",
+        "missing:/lus/lfs1aip2/projects/b5ac/project_1/fine_tuning_experiments/runs/phase_b/PB_PB_FT_T1F4096_s13/eval/kb_surface_targets.jsonl",
+        "missing:/lus/lfs1aip2/projects/b5ac/project_1/fine_tuning_experiments/runs/phase_b/PB_PB_FT_T1F4096_s14/eval/kb_surface_targets.jsonl",
+        "missing:/lus/lfs1aip2/projects/b5ac/project_1/fine_tuning_experiments/runs/phase_b/PB_PB_FT_T1F4096_s15/eval/kb_surface_targets.jsonl",
+        "missing:/lus/lfs1aip2/projects/b5ac/project_1/fine_tuning_experiments/runs/phase_b/PB_PB_FT_T1F4096_s16/eval/kb_surface_targets.jsonl",
+        "missing:/lus/lfs1aip2/projects/b5ac/project_1/fine_tuning_experiments/runs/phase_b/PB_PB_FT_T1F4096_s17/eval/kb_surface_targets.jsonl",
+        "missing:/lus/lfs1aip2/projects/b5ac/project_1/fine_tuning_experiments/runs/phase_b/PB_PB_FT_T1F4096_s18/eval/kb_surface_targets.jsonl",
+        "missing:/lus/lfs1aip2/projects/b5ac/project_1/fine_tuning_experiments/runs/phase_b/PB_PB_FT_T1F4096_s19/eval/kb_surface_targets.jsonl",
+        "missing:/lus/lfs1aip2/projects/b5ac/project_1/fine_tuning_experiments/runs/phase_b/PB_PB_FT_T1F4096_s20/eval/kb_surface_targets.jsonl"
+      ]
+    },
+    "civicmine_162_denominator_heuristics_for_external_system_reporting": {
+      "definition": "CIViCmine has deterministic argmax predictions only under strict subset; outside that subset we summarise three imputation hypotheses.",
+      "n_strict_covered_correct": 39,
+      "n_uncovered_targets": 121,
+      "accuracy_162_exclude_uncovered_predictions": 0.24074074074074073,
+      "accuracy_162_neg_surrogate_on_uncovered": 0.24074074074074073,
+      "accuracy_162_random_label_expected_iid_uniform8": 0.3341049382716049,
+      "hits_from_negative_imputed": 39,
+      "expected_hits_from_random_imputed": 54.125
+    }
+  }
+}

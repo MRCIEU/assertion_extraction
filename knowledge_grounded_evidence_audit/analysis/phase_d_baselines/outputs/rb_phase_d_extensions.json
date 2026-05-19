@@ -1,0 +1,75 @@
+{
+  "source_csv": "/home/b5ac/freddieyu.b5ac/project_1/report/data/phase_b_ft_seedlevel.csv",
+  "runs_root_checked": "/lus/lfs1aip2/projects/b5ac/project_1/fine_tuning_experiments/runs/phase_b",
+  "t1f4096_rows_merged": false,
+  "warnings": [
+    "PB_ONLY R_B emits THREE schedules pending PB_PB_FT_T1F4096 completion.",
+    "Augmented 10-cell R_B falls back to the original NINE factorial cells."
+  ],
+  "PB_only_three_schedule_rb_interim_pre_t1f4096": {
+    "point_estimate": 0.6720226746028675,
+    "bootstrap_median": 0.6720226746028675,
+    "ci_lower": 0.15249729732930267,
+    "ci_upper": 1.409726231854479,
+    "n_resamples": 5000,
+    "n_successful_resamples": 4489,
+    "failed_resamples": 511,
+    "n_cells_used": 3,
+    "factors": [
+      "schedule_track"
+    ],
+    "metric_num": "biored_macro_f1_ex_neg",
+    "metric_den": "kb_hit_A_setvalued",
+    "seed": 20260519,
+    "lever_shares_observed": {
+      "biored_macro_f1_ex_neg": {
+        "schedule_track": 0.41485076433917234
+      },
+      "kb_hit_A_setvalued": {
+        "schedule_track": 0.6173166174553989
+      }
+    },
+    "human_label": "PB_only_three_schedule_design_interim_missing_T1F4096",
+    "design_factors_requested": [
+      "schedule_track"
+    ],
+    "n_rows_input": 60,
+    "n_unique_cells": 3
+  },
+  "augmented_grid_deferred_matching_pre_registration_nine_cell": {
+    "point_estimate": 0.2136030117018241,
+    "bootstrap_median": 0.21552621889652082,
+    "ci_lower": 0.0293266420000264,
+    "ci_upper": 1.0321256936562573,
+    "n_resamples": 5000,
+    "n_successful_resamples": 5000,
+    "failed_resamples": 0,
+    "n_cells_used": 9,
+    "factors": [
+      "encoder",
+      "schedule_track"
+    ],
+    "metric_num": "biored_macro_f1_ex_neg",
+    "metric_den": "kb_hit_A_setvalued",
+    "seed": 20260519,
+    "lever_shares_observed": {
+      "biored_macro_f1_ex_neg": {
+        "encoder": 0.028005635174123026,
+        "schedule_track": 0.08229212437565471,
+        "encoder_x_schedule_track": 0.03180403720401302
+      },
+      "kb_hit_A_setvalued": {
+        "encoder": 0.04740940981887442,
+        "schedule_track": 0.596228521372513,
+        "encoder_x_schedule_track": 0.021623272860152865
+      }
+    },
+    "human_label": "original_nine_cells_encoder_schedule_no_T1F4096_augment_yet",
+    "design_factors_requested": [
+      "encoder",
+      "schedule_track"
+    ],
+    "n_rows_input": 180,
+    "n_unique_cells": 9
+  }
+}

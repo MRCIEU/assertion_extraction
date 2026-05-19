@@ -1,0 +1,101 @@
+% Force section index 13 (continues numbering after supplemental sections S1–S11).
+\setcounter{section}{12}
+
+\section{CIViCmine coverage, matched denominators, and variance extensions (Phase~D)}
+\label{supp:civicmine-phase-d}
+
+This section documents Phase~D Case~C framing: we use CIViCmine relations (Zenodo
+DOI~\href{https://doi.org/10.5281/zenodo.7689629}{10.5281/zenodo.7689629},
+unfiltered export, predictor probability ${>}0.5$) as a \emph{non-trainable}
+external extractor and summarise how rarely its tuples align with curator-anchored
+Goldlite assertions. Headline contrasts emphasise coverage limits; headline
+\textbf{accuracy comparisons use matched target sets only}.
+
+\subsection{Layer A --- Coverage dominates; full-162 CIViCmine accuracy needs imputation}%
+\label{supp:civicmine-layer-a}
+
+\textbf{Population:} Goldlite-derived KB audit targets excluding three
+\texttt{VARIANT\_GENE} anchors ($n=162$, ``evaluable'' in Phase~B nomenclature).
+
+\textbf{Finding:} Coverage is scarce under strict matching --- only \textbf{41/162}
+($25.31\,\%$) targets carry a deterministic CIViCmine relation that passes PMID
+plus typed entity alignment (details in Phase~D code). \textbf{79/162}
+($48.77\,\%$) have \emph{any} CIViCmine sentence at their curator PMID yet \textbf{83} PMIDs remain
+unsupported entirely (\textbf{38} have PMID overlap but lack a compliant entity pair).
+
+\textbf{Full-162 CIViCmine accuracy is undefined} without heuristic completion for the missing
+\textbf{121} targets. Automated Phase~D exports therefore include three illustrative $n=162$
+surrogates (CIViCmine-only bookkeeping; not attributable to Lever et al.'s extractor):
+\textbf{(i)~exclude uncovered} assigns zero credit outside the strict 41-target support
+(\textbf{$0.241$}); \textbf{(ii)~negative surrogate} imputes \texttt{\_\_NEGATIVE\_\_} outside strict support
+\textbf{($0.241$)} on this curator population because the schema-projected curator sets seldom include
+pure abstention labels; \textbf{(iii)~random IID label} analytic expectation yields \textbf{($0.334$)}
+under naive uniform draws over the eight \texttt{S\_pair} softmax heads.
+
+These imputations are \emph{sensitivity scaffolding} --- they foreground that non-coverage, not oracle
+mistakes within coverage, dominates when one insists on denominator~162 for CIViCmine.
+
+\subsection{Layer B --- Self-selected subset (strict support only)}%
+\label{supp:civicmine-layer-b}
+
+\begin{center}
+\fbox{\parbox{0.94\linewidth}{
+\small\textbf{Caption (required):} Accuracy on CIViCmine's self-selected covered subset is an upper
+bound; it does not generalise to the broader curated CIViC target population, where non-coverage
+dominates. Always pair CIViCmine strict-scorecard numbers with PubMedBERT baselines recomputed on
+the identical 41~\texttt{target\_id}s and the same Phase~B evaluation contract.}}
+\end{center}
+
+\textbf{Matched comparison (same 41 deterministic strict targets, PubMedBERT-base/FT schedules,
+means over twenty seeds locked in Phase~B):}
+
+\begin{tabular}{lr}
+  \toprule
+  System (encoder held at PubMedBERT-base) & Mean KB argmax accuracy (41 targets) \\
+  \midrule
+  CIViCmine deterministic mapping (Phase~D script)                       & $0.951$ (39/41) \\
+  Trainer configuration T2 (\texttt{PB\_PB\_FT\_T2\_s01\text{..}s20})     & $0.855$ \\
+  Trainer configuration T1 flat ($2048$ updates)                           & $0.549$ \\
+  Trainer configuration T1 biomedical backbone                           & $0.262$ \\
+  Trainer configuration T1 flat ($4096$ updates; Phase~2C matched cell) & pending \\
+  \bottomrule
+\end{tabular}
+
+\noindent CIViCmine remains narrowly higher inside this cherry-picked extractor-defined slice, but scores
+\textbf{cannot be quoted opposite} Population-level PubMedBERT statistics on $n=162$ without the coverage
+warnings above.
+
+\subsection{Layer C --- Non-coverage anatomy}%
+\label{supp:civicmine-layer-c}
+
+Among the \textbf{38} PMID-present failures (strict matching impossible despite CIViCmine supporting the
+curator-linked PMID), automated accounting finds \textbf{31} abstracts where \emph{at least one}
+gold-facing slot surfaces somewhere in CIViCmine's mined rows versus \textbf{7} abstracts with
+\textbf{neither} slot detected (gene+drug or alteration+disease pairing rules summarised in
+\texttt{knowledge\_grounded\_evidence\_audit/analysis/phase\_d\_baselines/civicmine/civicmine\_matching.py}).
+
+\subsection{Extended $R_B$ summaries (nine-cell factorial vs augmented grid)}%
+\label{supp:phase-d-rb-extensions}
+
+\textbf{Pre-registered headline:} Continue to quote the factorial nine-cell Phase~B
+$R_{\mathrm{B}} \approx 0.21$ verbatim in the main text and Supplement~A. No post-hoc substitution is permitted.
+
+\textbf{Phase~D bookkeeping (JSON \texttt{rb\_phase\_d\_extensions.json}):}
+\begin{itemize}[leftmargin=1.15em]
+  \item \textbf{Balanced PubMedBERT-only decomposition (schedules \(=\) T1B / T1F-2048 / T2, interim while
+        T1F-4096 is absent):}
+        point estimate \(\widehat{R}_{\mathrm{B}}^{\mathrm{(PB\mbox{-}sched)}} =
+        \mathbf{0.67}\); bootstrap 95\% interval \([\mathbf{0.15},\,\mathbf{1.41}]\) (cluster
+        resampling seed~20260519).
+  \item \textbf{Nine-cell factorial reference recomputed with the same tooling:}
+        point \(\mathbf{0.214}\); 95\% CI \([\mathbf{0.029},\,\mathbf{1.03}]\) -- matches the locked
+        headline within Monte Carlo variability.
+\end{itemize}
+
+\noindent \textbf{Outstanding after Phase~2C:}
+\begin{enumerate}[label=(\roman*),leftmargin=1.2em]
+  \item Extend the PubMedBERT row to four schedules (\(+\) matched T1F-4096 outputs) producing the definitive
+        \emph{balanced} variance ratio on that slice.
+  \item Augment factorial rows with PubMedBERT T1F-4096 (ten distinct encoder--schedule strata) recomputing
+        the exploratory ``+$R_{\mathrm{B}}$ augmentation'' statistic without overwriting the headline nine-cell figure.
+\end{enumerate}
