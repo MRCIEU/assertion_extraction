@@ -916,36 +916,24 @@
       ],
       "issues_sample": []
     },
-    "PB_T1F_4096_on_strict41_interim_placeholder": {
+    "PB_T1F_4096_on_strict41": {
       "run_prefix": "PB_PB_FT",
       "encoder_schedule": "T1F4096",
       "n_targets_subset": 41,
-      "n_seeds_found": 0,
-      "subset_kb_hit_mean_seed_mean": null,
-      "subset_kb_hit_seed_sd": null,
-      "per_seed_subset_accuracy_sample": [],
-      "issues_sample": [
-        "missing:/lus/lfs1aip2/projects/b5ac/project_1/fine_tuning_experiments/runs/phase_b/PB_PB_FT_T1F4096_s01/eval/kb_surface_targets.jsonl",
-        "missing:/lus/lfs1aip2/projects/b5ac/project_1/fine_tuning_experiments/runs/phase_b/PB_PB_FT_T1F4096_s02/eval/kb_surface_targets.jsonl",
-        "missing:/lus/lfs1aip2/projects/b5ac/project_1/fine_tuning_experiments/runs/phase_b/PB_PB_FT_T1F4096_s03/eval/kb_surface_targets.jsonl",
-        "missing:/lus/lfs1aip2/projects/b5ac/project_1/fine_tuning_experiments/runs/phase_b/PB_PB_FT_T1F4096_s04/eval/kb_surface_targets.jsonl",
-        "missing:/lus/lfs1aip2/projects/b5ac/project_1/fine_tuning_experiments/runs/phase_b/PB_PB_FT_T1F4096_s05/eval/kb_surface_targets.jsonl",
-        "missing:/lus/lfs1aip2/projects/b5ac/project_1/fine_tuning_experiments/runs/phase_b/PB_PB_FT_T1F4096_s06/eval/kb_surface_targets.jsonl",
-        "missing:/lus/lfs1aip2/projects/b5ac/project_1/fine_tuning_experiments/runs/phase_b/PB_PB_FT_T1F4096_s07/eval/kb_surface_targets.jsonl",
-        "missing:/lus/lfs1aip2/projects/b5ac/project_1/fine_tuning_experiments/runs/phase_b/PB_PB_FT_T1F4096_s08/eval/kb_surface_targets.jsonl",
-        "missing:/lus/lfs1aip2/projects/b5ac/project_1/fine_tuning_experiments/runs/phase_b/PB_PB_FT_T1F4096_s09/eval/kb_surface_targets.jsonl",
-        "missing:/lus/lfs1aip2/projects/b5ac/project_1/fine_tuning_experiments/runs/phase_b/PB_PB_FT_T1F4096_s10/eval/kb_surface_targets.jsonl",
-        "missing:/lus/lfs1aip2/projects/b5ac/project_1/fine_tuning_experiments/runs/phase_b/PB_PB_FT_T1F4096_s11/eval/kb_surface_targets.jsonl",
-        "missing:/lus/lfs1aip2/projects/b5ac/project_1/fine_tuning_experiments/runs/phase_b/PB_PB_FT_T1F4096_s12/eval/kb_surface_targets.jsonl",
-        "missing:/lus/lfs1aip2/projects/b5ac/project_1/fine_tuning_experiments/runs/phase_b/PB_PB_FT_T1F4096_s13/eval/kb_surface_targets.jsonl",
-        "missing:/lus/lfs1aip2/projects/b5ac/project_1/fine_tuning_experiments/runs/phase_b/PB_PB_FT_T1F4096_s14/eval/kb_surface_targets.jsonl",
-        "missing:/lus/lfs1aip2/projects/b5ac/project_1/fine_tuning_experiments/runs/phase_b/PB_PB_FT_T1F4096_s15/eval/kb_surface_targets.jsonl",
-        "missing:/lus/lfs1aip2/projects/b5ac/project_1/fine_tuning_experiments/runs/phase_b/PB_PB_FT_T1F4096_s16/eval/kb_surface_targets.jsonl",
-        "missing:/lus/lfs1aip2/projects/b5ac/project_1/fine_tuning_experiments/runs/phase_b/PB_PB_FT_T1F4096_s17/eval/kb_surface_targets.jsonl",
-        "missing:/lus/lfs1aip2/projects/b5ac/project_1/fine_tuning_experiments/runs/phase_b/PB_PB_FT_T1F4096_s18/eval/kb_surface_targets.jsonl",
-        "missing:/lus/lfs1aip2/projects/b5ac/project_1/fine_tuning_experiments/runs/phase_b/PB_PB_FT_T1F4096_s19/eval/kb_surface_targets.jsonl",
-        "missing:/lus/lfs1aip2/projects/b5ac/project_1/fine_tuning_experiments/runs/phase_b/PB_PB_FT_T1F4096_s20/eval/kb_surface_targets.jsonl"
-      ]
+      "n_seeds_found": 20,
+      "subset_kb_hit_mean_seed_mean": 0.7817073170731708,
+      "subset_kb_hit_seed_sd": 0.1794755728815319,
+      "per_seed_subset_accuracy_sample": [
+        0.8048780487804879,
+        0.7317073170731707,
+        0.8292682926829268,
+        0.36585365853658536,
+        0.5365853658536586,
+        0.3170731707317073,
+        0.9512195121951219,
+        0.8292682926829268
+      ],
+      "issues_sample": []
     },
     "civicmine_162_denominator_heuristics_for_external_system_reporting": {
       "definition": "CIViCmine has deterministic argmax predictions only under strict subset; outside that subset we summarise three imputation hypotheses.",

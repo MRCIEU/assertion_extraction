@@ -149,7 +149,7 @@ def pb_subset_kb_block_from_covered_targets(
         "PB_T2_on_strict41": aggregate_schedule_over_seeds(runs_root=runs_root, schedule_key="T2", wanted=wanted, n_seeds=20),
         "PB_T1F_2048_on_strict41": aggregate_schedule_over_seeds(runs_root=runs_root, schedule_key="T1F", wanted=wanted, n_seeds=20),
         "PB_T1B_on_strict41": aggregate_schedule_over_seeds(runs_root=runs_root, schedule_key="T1B", wanted=wanted, n_seeds=20),
-        "PB_T1F_4096_on_strict41_interim_placeholder": aggregate_schedule_over_seeds(
+        "PB_T1F_4096_on_strict41": aggregate_schedule_over_seeds(
             runs_root=runs_root,
             schedule_key="T1F4096",
             wanted=wanted,
