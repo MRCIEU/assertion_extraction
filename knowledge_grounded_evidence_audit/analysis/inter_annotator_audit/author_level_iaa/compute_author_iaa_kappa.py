@@ -579,7 +579,7 @@ def main():
     s42.append(
         "To further calibrate the heuristic projection against human judgment, the first author "
         "independently labelled the same 30 stratified audit targets blinded to the heuristic and LLM outputs "
-        "(label vocabulary: six family-level options matching Supplement~S3, including \\code{{__NEGATIVE__}}). "
+        "(label vocabulary: six family-level options matching Supplement~S3, including \\code{__NEGATIVE__}). "
     )
     s42.append(
         "Author--heuristic agreement was Cohen's $\\kappa = {:.3f}$ (95\\% bootstrap CI $[{:.3f}, {:.3f}]$); "
@@ -588,8 +588,8 @@ def main():
         )
     )
     s42.append(
-        "Among the seven IAA disagreement targets (where the LLM chose \\code{{__NEGATIVE__}} and the heuristic chose a positive relation), "
-        "the author agreed with the LLM on {} of 7, with the heuristic on {} of 7, and took a distinct label on {} of 7. ".format(
+        "Among the seven IAA disagreement targets (where the LLM chose \\code{__NEGATIVE__} and the heuristic chose a positive relation), "
+        + "the author agreed with the LLM on {} of 7, with the heuristic on {} of 7, and took a distinct label on {} of 7. ".format(
             agree_llm, agree_heur, other
         )
     )
