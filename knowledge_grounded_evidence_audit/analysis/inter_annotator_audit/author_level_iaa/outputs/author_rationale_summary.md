@@ -1,0 +1,34 @@
+# Author rationale transcript (all 30 targets)
+
+| target_id | author_label | confidence | rationale |
+| --- | --- | --- | --- |
+| GL_0001 | DRUG_GENE_REGULATION | — | Erlotinib is explicitly named as an EGFR tyrosine kinase inhibitor whose effectiveness varies with EGFR mutation type. |
+| GL_0003 | DRUG_GENE_REGULATION | — | The abstract characterises gefitinib as an EGFR-targeted TKI and links specific EGFR kinase-domain mutations to its inhibition of EGFR signalling. |
+| GL_0019 | DRUG_GENE_REGULATION | — | Gefitinib is studied as EGFR-directed therapy in NSCLC, with EGFR exon 19 / L858R mutations predicting time to treatment failure. |
+| GL_0031 | __NEGATIVE__ | — | Tanespimycin is not mentioned in the abstract; only crizotinib and next-generation ALK TKIs are named. |
+| GL_0039 | __NEGATIVE__ | — | Same source abstract as GL_0031: tanespimycin does not appear in the text. |
+| GL_0040 | ASSOCIATION_GENERAL | — | EGFR-mutant outgrowth is reported as a bypass resistance mechanism to crizotinib in ALK+ NSCLC, an indirect association rather than direct regulation. |
+| GL_0043 | __NEGATIVE__ | — | Lapatinib is not named in the abstract; the comparators discussed are erlotinib and BIBW2992. |
+| GL_0050 | DRUG_GENE_REGULATION | — | Salirasib is described as a Ras-membrane-binding inhibitor that blocks Ras isoform function, evaluated in KRAS-mutant lung adenocarcinoma. |
+| GL_0055 | DRUG_GENE_REGULATION | — | Crizotinib is explicitly the small-molecule ALK inhibitor whose direct activity and resistance mutations against ALK are the central topic. |
+| GL_0068 | __NEGATIVE__ | — | The abstract refers only to 'EGFR tyrosine kinase inhibitors' generically; dacomitinib is not named (and its code PF00299804 does not appear either). |
+| GL_0070 | __NEGATIVE__ | — | Gefitinib is not named in the abstract — only erlotinib, HKI-272, and cetuximab are explicitly mentioned as small-molecule or antibody EGFR inhibitors. |
+| GL_0073 | DRUG_GENE_REGULATION | — | Crizotinib is named as the ALK inhibitor under study, with the abstract centred on ALK-targeted activity and resistance mechanisms. |
+| GL_0077 | DRUG_GENE_REGULATION | — | Gefitinib is explicitly described as 'a novel epidermal growth factor receptor tyrosine kinase inhibitor' evaluated in pretreated NSCLC. |
+| GL_0091 | DRUG_GENE_REGULATION | — | Gefitinib is named as an EGFR TKI and the meta-analysis relates EGFR gene copy number directly to its survival outcomes. |
+| GL_0094 | DRUG_GENE_REGULATION | — | Erlotinib is explicitly tested against a panel of EGFR mutants in cell-proliferation assays with IC50 sensitivity profiles. |
+| GL_0101 | DRUG_GENE_REGULATION | — | Crizotinib is the named ALK TKI whose target-domain resistance mechanisms in ALK+ NSCLC are characterised throughout the abstract. |
+| GL_0105 | ASSOCIATION_GENERAL | — | MET amplification is shown to drive gefitinib resistance via ERBB3/PI3K signalling — a strong textual association between MET and gefitinib outcome, not direct regulation of MET by the drug. |
+| GL_0118 | __NEGATIVE__ | — | Although gefitinib is named, EGFR is not mentioned anywhere in the abstract; the trial compares gefitinib to chemotherapy without any EGFR-specific claim. |
+| GL_0123 | DRUG_GENE_REGULATION | — | Erlotinib is named as a first-generation reversible EGFR inhibitor whose activity against EGFR mutants (including erlotinib-resistant T790M) is directly discussed. |
+| GL_0128 | DRUG_GENE_REGULATION | — | Gefitinib (Iressa) is explicitly the EGFR kinase inhibitor whose sensitivity is linked to EGFR tyrosine-kinase-domain mutations. |
+| GL_0129 | ASSOCIATION_GENERAL | — | The abstract links the KRAS G12C variant to KRAS-driven Ral signalling and NSCLC outcomes; the gene–variant pair falls outside the four specific families and best maps to the general-association catch-all. |
+| GL_0131 | __NEGATIVE__ | — | The abstract names only 'tyrosine kinase inhibitors (TKIs)' generically; erlotinib is not mentioned by name. |
+| GL_0132 | __NEGATIVE__ | — | Afatinib is not named by its generic name; only its development code BIBW2992 appears once as a comparator, which under a literal reading does not name the drug entity. |
+| GL_0138 | __NEGATIVE__ | — | Teprotumumab is referred to only by its development code R1507, not by its generic name, so under literal reading the drug entity is not present. |
+| GL_0144 | __NEGATIVE__ | — | Dacomitinib appears only under its development code PF00299804, not its generic name, so by literal reading the drug entity is not named. |
+| GL_0145 | ASSOCIATION_GENERAL | — | EGFR amplification is extensively described as a feature of the EGFR gene in Barrett's adenocarcinoma; the gene–variant pair maps to the general-association label since no more specific family applies. |
+| GL_0151 | ASSOCIATION_GENERAL | — | EGFR mutations are tied to EGFR-gene status and survival in lung adenocarcinoma; for a gene–variant pair this falls under the general-association catch-all. |
+| GL_0154 | DRUG_GENE_REGULATION | — | Gefitinib is named and EGFR mutation, copy number, and protein expression are all evaluated as biomarkers of its response in the INTEREST trial. |
+| GL_0161 | DRUG_GENE_REGULATION | — | Crizotinib (PF-02341066) is explicitly the orally available small-molecule ALK tyrosine kinase inhibitor under clinical evaluation against ALK-rearranged NSCLC. |
+| GL_0162 | DRUG_GENE_REGULATION | — | Afatinib is explicitly named as an irreversible ErbB-family blocker active in EGFR-mutant lung adenocarcinoma, a direct drug-on-target relationship. |

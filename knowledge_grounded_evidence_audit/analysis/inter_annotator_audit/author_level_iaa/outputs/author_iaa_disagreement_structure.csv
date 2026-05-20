@@ -1,0 +1,14 @@
+kind,target_id,pairing_family,label_a,label_b,extra
+heuristic_vs_author,GL_0031,gene_drug,DRUG_GENE_REGULATION,__NEGATIVE__,Tanespimycin is not mentioned in the abstract; only crizotinib and next-generation ALK TKIs are name
+heuristic_vs_author,GL_0039,gene_drug,DRUG_GENE_REGULATION,__NEGATIVE__,Same source abstract as GL_0031: tanespimycin does not appear in the text.
+heuristic_vs_author,GL_0043,gene_drug,DRUG_GENE_REGULATION,__NEGATIVE__,Lapatinib is not named in the abstract; the comparators discussed are erlotinib and BIBW2992.
+heuristic_vs_author,GL_0068,gene_drug,DRUG_GENE_REGULATION,__NEGATIVE__,The abstract refers only to 'EGFR tyrosine kinase inhibitors' generically; dacomitinib is not named 
+heuristic_vs_author,GL_0070,gene_drug,ASSOCIATION_GENERAL,__NEGATIVE__,"Gefitinib is not named in the abstract — only erlotinib, HKI-272, and cetuximab are explicitly menti"
+heuristic_vs_author,GL_0118,gene_drug,DRUG_GENE_REGULATION,__NEGATIVE__,"Although gefitinib is named, EGFR is not mentioned anywhere in the abstract; the trial compares gefi"
+heuristic_vs_author,GL_0131,gene_drug,ASSOCIATION_GENERAL,__NEGATIVE__,The abstract names only 'tyrosine kinase inhibitors (TKIs)' generically; erlotinib is not mentioned 
+heuristic_vs_author,GL_0132,gene_drug,DRUG_GENE_REGULATION,__NEGATIVE__,Afatinib is not named by its generic name; only its development code BIBW2992 appears once as a comp
+heuristic_vs_author,GL_0138,gene_drug,ASSOCIATION_GENERAL,__NEGATIVE__,"Teprotumumab is referred to only by its development code R1507, not by its generic name, so under li"
+heuristic_vs_author,GL_0144,gene_drug,DRUG_GENE_REGULATION,__NEGATIVE__,"Dacomitinib appears only under its development code PF00299804, not its generic name, so by literal "
+llm_vs_author,GL_0132,gene_drug,DRUG_GENE_REGULATION,__NEGATIVE__,Afatinib is not named by its generic name; only its development code BIBW2992 appears once as a comp
+llm_vs_author,GL_0138,gene_drug,ASSOCIATION_GENERAL,__NEGATIVE__,"Teprotumumab is referred to only by its development code R1507, not by its generic name, so under li"
+llm_vs_author,GL_0144,gene_drug,DRUG_GENE_REGULATION,__NEGATIVE__,"Dacomitinib appears only under its development code PF00299804, not its generic name, so by literal "

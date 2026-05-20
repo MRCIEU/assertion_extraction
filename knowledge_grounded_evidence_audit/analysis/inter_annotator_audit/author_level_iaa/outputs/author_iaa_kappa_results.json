@@ -1,0 +1,55 @@
+{
+  "n_targets": 30,
+  "label_vocabulary": [
+    "ASSOCIATION_GENERAL",
+    "DRUG_DISEASE",
+    "DRUG_GENE_REGULATION",
+    "GENE_DISEASE",
+    "VARIANT_DISEASE",
+    "__NEGATIVE__"
+  ],
+  "bootstrap_B": 5000,
+  "note_workbook": "author_confidence column absent in saved xlsx; author_confidence left blank in author_audit_labels.csv",
+  "kappa_heuristic_vs_llm_opus": {
+    "point": 0.560669,
+    "paper_reference_point": 0.56,
+    "bootstrap_seed_main": 20260520,
+    "ci_95_bootstrap": [
+      0.3208,
+      0.7902
+    ],
+    "bootstrap_seed_paper_replicate": 42,
+    "ci_95_bootstrap_seed_42": [
+      0.3196,
+      0.7955
+    ],
+    "n_disagreements": 7,
+    "landis_koch": "moderate"
+  },
+  "kappa_heuristic_vs_author": {
+    "point": 0.433962,
+    "ci_95_bootstrap_seed_20260520": [
+      0.2143,
+      0.6544
+    ],
+    "n_disagreements": 10,
+    "landis_koch": "moderate"
+  },
+  "kappa_llm_opus_vs_author": {
+    "point": 0.834862,
+    "ci_95_bootstrap_seed_20260520": [
+      0.6281,
+      1.0
+    ],
+    "n_disagreements": 3,
+    "landis_koch": "almost perfect"
+  },
+  "fleiss_kappa_three_raters": {
+    "point": 0.603,
+    "note": "stdlib Fleiss on 3x30 category-count matrix; statsmodels not required"
+  },
+  "kappa_author_vs_author_diagnostic": {
+    "status": "not_applicable",
+    "reason": "single author label per target_id; no duplicate annotations"
+  }
+}
