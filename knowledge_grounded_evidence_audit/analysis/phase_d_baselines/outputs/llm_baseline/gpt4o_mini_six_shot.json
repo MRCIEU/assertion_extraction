@@ -1,0 +1,1640 @@
+{
+  "summary": {
+    "condition": "six_shot",
+    "n_targets": 162,
+    "kb_hit_mean_162": 0.9197530864197531,
+    "kb_hit_mean_41": 0.926829268292683,
+    "n41_evaluable": 41,
+    "usd_spent_estimate": 0.13104479999999993,
+    "fewshot_target_ids": [
+      "GL_0001",
+      "GL_0002",
+      "GL_0003",
+      "GL_0090",
+      "GL_0093",
+      "GL_0127"
+    ]
+  },
+  "records": [
+    {
+      "target_id": "GL_0001",
+      "pairing_family": "gene_drug",
+      "pmid": "21531810",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the effectiveness of erlotinib, a drug, in relation to EGFR mutations, indicating a regulatory relationship.\"}"
+    },
+    {
+      "target_id": "GL_0002",
+      "pairing_family": "gene_drug",
+      "pmid": "21531810",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the effectiveness of gefitinib, a drug, in relation to EGFR mutations, indicating a regulatory relationship.\"}"
+    },
+    {
+      "target_id": "GL_0003",
+      "pairing_family": "gene_drug",
+      "pmid": "15118073",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses how mutations in the EGFR gene affect the responsiveness of non-small-cell lung cancer to the drug gefitinib.\"}"
+    },
+    {
+      "target_id": "GL_0004",
+      "pairing_family": "gene_drug",
+      "pmid": "23200175",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The study investigates the effect of selumetinib, a drug, on patients with KRAS mutations in non-small-cell lung cancer.\"}"
+    },
+    {
+      "target_id": "GL_0005",
+      "pairing_family": "gene_drug",
+      "pmid": "23470965",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "__NEGATIVE__",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 0,
+      "raw_response": "{\"label\": \"__NEGATIVE__\", \"confidence\": 0.8, \"rationale\": \"The abstract discusses mechanisms of resistance to EGFR-TKIs but does not establish a positive relationship between erlotinib and MET.\"}"
+    },
+    {
+      "target_id": "GL_0006",
+      "pairing_family": "gene_drug",
+      "pmid": "18594010",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the efficacy of an ALK kinase inhibitor in relation to the EML4-ALK fusion gene.\"}"
+    },
+    {
+      "target_id": "GL_0007",
+      "pairing_family": "gene_drug",
+      "pmid": "15329413",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the association of EGFR mutations with sensitivity to gefitinib.\"}"
+    },
+    {
+      "target_id": "GL_0008",
+      "pairing_family": "gene_drug",
+      "pmid": "21531810",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the effectiveness of gefitinib, a drug, in relation to EGFR mutations, indicating a regulatory relationship.\"}"
+    },
+    {
+      "target_id": "GL_0009",
+      "pairing_family": "gene_drug",
+      "pmid": "18089823",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the effectiveness of Dacomitinib, a drug, in relation to mutations in the EGFR gene.\"}"
+    },
+    {
+      "target_id": "GL_0010",
+      "pairing_family": "gene_drug",
+      "pmid": "21933749",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the effect of crizotinib, a drug, on patients with ALK gene rearrangement in non-small-cell lung cancer.\"}"
+    },
+    {
+      "target_id": "GL_0011",
+      "pairing_family": "gene_drug",
+      "pmid": "20038723",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "__NEGATIVE__",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 0,
+      "raw_response": "{\"label\": \"__NEGATIVE__\", \"confidence\": 0.8, \"rationale\": \"The abstract indicates that there were no significant differences in survival outcomes between gefitinib and docetaxel, suggesting a lack of positive interaction between the drug and the gene.\"}"
+    },
+    {
+      "target_id": "GL_0012",
+      "pairing_family": "gene_drug",
+      "pmid": "22277784",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the mechanisms of resistance to the drug crizotinib in relation to mutations in the ALK gene.\"}"
+    },
+    {
+      "target_id": "GL_0013",
+      "pairing_family": "gene_drug",
+      "pmid": "21531810",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the effectiveness of gefitinib, a drug, in relation to EGFR mutations, indicating a regulatory relationship.\"}"
+    },
+    {
+      "target_id": "GL_0014",
+      "pairing_family": "gene_drug",
+      "pmid": "21969500",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The study demonstrates that EGFR mutations significantly influence the efficacy of erlotinib treatment in NSCLC patients.\"}"
+    },
+    {
+      "target_id": "GL_0015",
+      "pairing_family": "gene_drug",
+      "pmid": "17409929",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the relationship between gefitinib treatment and KRAS mutations in lung cancer patients.\"}"
+    },
+    {
+      "target_id": "GL_0016",
+      "pairing_family": "gene_drug",
+      "pmid": "21030459",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses how the ALK mutation affects the efficacy of the drug crizotinib.\"}"
+    },
+    {
+      "target_id": "GL_0017",
+      "pairing_family": "gene_drug",
+      "pmid": "21969500",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the relationship between erlotinib and KRAS mutations in the context of predicting treatment outcomes.\"}"
+    },
+    {
+      "target_id": "GL_0018",
+      "pairing_family": "gene_drug",
+      "pmid": "20979469",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the therapeutic efficacy of crizotinib, which inhibits the ALK gene in non-small-cell lung cancer.\"}"
+    },
+    {
+      "target_id": "GL_0019",
+      "pairing_family": "gene_drug",
+      "pmid": "18509184",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses how specific EGFR mutations predict treatment outcomes in patients receiving gefitinib.\"}"
+    },
+    {
+      "target_id": "GL_0020",
+      "pairing_family": "gene_drug",
+      "pmid": "20609353",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the therapeutic strategy involving the drug Palbociclib targeting the Cdk4 in relation to K-RAS oncogenes in non-small cell lung carcinoma.\"}"
+    },
+    {
+      "target_id": "GL_0021",
+      "pairing_family": "gene_drug",
+      "pmid": "22025157",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the effect of erlotinib treatment in relation to KRAS mutations in patients with advanced non-small-cell lung cancer.\"}"
+    },
+    {
+      "target_id": "GL_0022",
+      "pairing_family": "gene_drug",
+      "pmid": "23524406",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.85, \"rationale\": \"The abstract discusses the molecular characterization of resistance to a drug (dabrafenib) in relation to a specific gene (KRAS) in the context of non-small-cell lung cancer.\"}"
+    },
+    {
+      "target_id": "GL_0023",
+      "pairing_family": "gene_drug",
+      "pmid": "21531810",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the effectiveness of gefitinib, a drug, in relation to EGFR mutations, indicating a regulatory relationship.\"}"
+    },
+    {
+      "target_id": "GL_0024",
+      "pairing_family": "gene_drug",
+      "pmid": "22912387",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the sensitivity of ALK fusion variants to the ALK inhibitor crizotinib, indicating a regulatory relationship between the drug and the gene.\"}"
+    },
+    {
+      "target_id": "GL_0025",
+      "pairing_family": "gene_drug",
+      "pmid": "17409929",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the relationship between gefitinib treatment and KRAS mutations in lung cancer patients.\"}"
+    },
+    {
+      "target_id": "GL_0026",
+      "pairing_family": "gene_drug",
+      "pmid": "16707605",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"EGFR mRNA expression is associated with gefitinib response.\"}"
+    },
+    {
+      "target_id": "GL_0027",
+      "pairing_family": "gene_drug",
+      "pmid": "21531810",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the effectiveness of gefitinib, a drug, in relation to EGFR mutations, indicating a regulatory relationship.\"}"
+    },
+    {
+      "target_id": "GL_0028",
+      "pairing_family": "gene_drug",
+      "pmid": "19147750",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the relationship between EGFR mutations and the efficacy of the drug erlotinib in non-small cell lung cancer.\"}"
+    },
+    {
+      "target_id": "GL_0029",
+      "pairing_family": "gene_drug",
+      "pmid": "22277784",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the relationship between the drug Alectinib and the ALK gene in the context of resistance mechanisms.\"}"
+    },
+    {
+      "target_id": "GL_0030",
+      "pairing_family": "gene_drug",
+      "pmid": "21531810",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the effectiveness of gefitinib, a drug, in relation to EGFR mutations, indicating a regulatory relationship.\"}"
+    },
+    {
+      "target_id": "GL_0031",
+      "pairing_family": "gene_drug",
+      "pmid": "22277784",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the relationship between the drug Tanespimycin and the ALK gene in the context of resistance mechanisms.\"}"
+    },
+    {
+      "target_id": "GL_0032",
+      "pairing_family": "gene_drug",
+      "pmid": "21575866",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the selective inhibition of the ALK gene by the drug Alectinib.\"}"
+    },
+    {
+      "target_id": "GL_0033",
+      "pairing_family": "gene_drug",
+      "pmid": "19692680",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The presence of an EGFR mutation is a strong predictor of a better outcome with gefitinib.\"}"
+    },
+    {
+      "target_id": "GL_0034",
+      "pairing_family": "gene_drug",
+      "pmid": "20940188",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.85, \"rationale\": \"The abstract discusses the activity of a drug (IPI-504) in relation to molecular subtypes, including ALK gene rearrangements.\"}"
+    },
+    {
+      "target_id": "GL_0035",
+      "pairing_family": "gene_drug",
+      "pmid": "22452895",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the efficacy of afatinib in patients with lung adenocarcinoma and EGFR mutations, indicating a regulatory relationship between the drug and the gene.\"}"
+    },
+    {
+      "target_id": "GL_0036",
+      "pairing_family": "gene_drug",
+      "pmid": "20038723",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the relationship between gefitinib and EGFR mutations in terms of clinical outcomes.\"}"
+    },
+    {
+      "target_id": "GL_0037",
+      "pairing_family": "gene_drug",
+      "pmid": "16818686",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the association between EGFR mutations and the effectiveness of gefitinib treatment.\"}"
+    },
+    {
+      "target_id": "GL_0038",
+      "pairing_family": "gene_drug",
+      "pmid": "23371856",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the relationship between EGFR mutations and the response to the drug erlotinib.\"}"
+    },
+    {
+      "target_id": "GL_0039",
+      "pairing_family": "gene_drug",
+      "pmid": "22277784",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the relationship between the drug Tanespimycin and the ALK gene in the context of resistance mechanisms.\"}"
+    },
+    {
+      "target_id": "GL_0040",
+      "pairing_family": "gene_drug",
+      "pmid": "22235099",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the relationship between crizotinib and the mechanisms of resistance involving the EGFR gene.\"}"
+    },
+    {
+      "target_id": "GL_0041",
+      "pairing_family": "gene_drug",
+      "pmid": "21531810",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the effectiveness of erlotinib, a drug, in relation to EGFR mutations, indicating a regulatory relationship.\"}"
+    },
+    {
+      "target_id": "GL_0042",
+      "pairing_family": "gene_drug",
+      "pmid": "17409929",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the relationship between gefitinib treatment and KRAS mutations in lung cancer patients.\"}"
+    },
+    {
+      "target_id": "GL_0043",
+      "pairing_family": "gene_drug",
+      "pmid": "18408761",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the effectiveness of BIBW2992, an EGFR/HER2 inhibitor, in relation to genetic alterations in the EGFR gene.\"}"
+    },
+    {
+      "target_id": "GL_0044",
+      "pairing_family": "gene_drug",
+      "pmid": "18408761",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the effectiveness of Afatinib in relation to EGFR mutations in lung cancer.\"}"
+    },
+    {
+      "target_id": "GL_0045",
+      "pairing_family": "gene_drug",
+      "pmid": "15118125",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the correlation between EGFR mutations and the clinical response to gefitinib therapy.\"}"
+    },
+    {
+      "target_id": "GL_0046",
+      "pairing_family": "gene_drug",
+      "pmid": "22056021",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "__NEGATIVE__",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 0,
+      "raw_response": "{\"label\": \"__NEGATIVE__\", \"confidence\": 0.8, \"rationale\": \"The abstract discusses the role of EGFR expression in predicting survival with cetuximab treatment, but does not establish a direct relationship between the drug 'Epidermal' and the gene 'EGFR'.\"}"
+    },
+    {
+      "target_id": "GL_0047",
+      "pairing_family": "gene_drug",
+      "pmid": "19147750",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the relationship between EGFR mutations and the efficacy of the drug erlotinib.\"}"
+    },
+    {
+      "target_id": "GL_0048",
+      "pairing_family": "gene_drug",
+      "pmid": "15696205",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the association of KRAS mutations with resistance to the drug Erlotinib.\"}"
+    },
+    {
+      "target_id": "GL_0049",
+      "pairing_family": "gene_drug",
+      "pmid": "16818618",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "__NEGATIVE__",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 0,
+      "raw_response": "{\"label\": \"__NEGATIVE__\", \"confidence\": 0.8, \"rationale\": \"The abstract discusses the sensitivity of ERBB2 mutations to HKI-272, not neratinib, indicating no direct relationship between neratinib and EGFR.\"}"
+    },
+    {
+      "target_id": "GL_0050",
+      "pairing_family": "gene_drug",
+      "pmid": "21847063",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the activity of Salirasib in patients with KRAS mutations, indicating a regulatory relationship between the drug and the gene.\"}"
+    },
+    {
+      "target_id": "GL_0051",
+      "pairing_family": "gene_drug",
+      "pmid": "22452895",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the efficacy of afatinib in patients with lung adenocarcinoma and EGFR mutations, indicating a regulatory relationship between the drug and the gene.\"}"
+    },
+    {
+      "target_id": "GL_0052",
+      "pairing_family": "gene_drug",
+      "pmid": "22025157",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The study investigates the combination of erlotinib, which targets EGFR, in the context of advanced non-small-cell lung cancer.\"}"
+    },
+    {
+      "target_id": "GL_0053",
+      "pairing_family": "gene_drug",
+      "pmid": "22452896",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the efficacy of afatinib, which targets the EGFR gene, in patients with lung cancer.\"}"
+    },
+    {
+      "target_id": "GL_0054",
+      "pairing_family": "gene_drug",
+      "pmid": "21531810",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the effectiveness of gefitinib, a drug, in relation to EGFR mutations, indicating a regulatory relationship.\"}"
+    },
+    {
+      "target_id": "GL_0055",
+      "pairing_family": "gene_drug",
+      "pmid": "22235099",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the mechanisms of resistance to crizotinib in relation to ALK gene rearrangements.\"}"
+    },
+    {
+      "target_id": "GL_0056",
+      "pairing_family": "gene_drug",
+      "pmid": "18927303",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the detection of EML4-ALK fusion transcripts, which are relevant for the action of crizotinib, a drug targeting ALK.\"}"
+    },
+    {
+      "target_id": "GL_0057",
+      "pairing_family": "gene_drug",
+      "pmid": "22277784",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the mechanisms of resistance to the drug crizotinib in relation to mutations in the ALK gene.\"}"
+    },
+    {
+      "target_id": "GL_0058",
+      "pairing_family": "gene_drug",
+      "pmid": "21531810",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the effectiveness of gefitinib, a drug, in relation to EGFR mutations, indicating a regulatory relationship.\"}"
+    },
+    {
+      "target_id": "GL_0059",
+      "pairing_family": "gene_drug",
+      "pmid": "22285168",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the efficacy of erlotinib in relation to EGFR mutations in non-small-cell lung cancer.\"}"
+    },
+    {
+      "target_id": "GL_0060",
+      "pairing_family": "gene_drug",
+      "pmid": "17409929",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the relationship between gefitinib treatment and KRAS mutations in lung cancer patients.\"}"
+    },
+    {
+      "target_id": "GL_0061",
+      "pairing_family": "gene_drug",
+      "pmid": "20038723",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the relationship between gefitinib and EGFR mutations in terms of clinical outcomes.\"}"
+    },
+    {
+      "target_id": "GL_0062",
+      "pairing_family": "gene_drug",
+      "pmid": "22912387",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the sensitivity of ALK fusion variants to ALK inhibitors, indicating a regulatory relationship between the drug and the gene.\"}"
+    },
+    {
+      "target_id": "GL_0063",
+      "pairing_family": "gene_drug",
+      "pmid": "19661358",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the predictive nature of K-ras mutations for response to drugs like panitumumab.\"}"
+    },
+    {
+      "target_id": "GL_0064",
+      "pairing_family": "gene_drug",
+      "pmid": "20522446",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the clinical response to gefitinib in relation to a specific EGFR mutation.\"}"
+    },
+    {
+      "target_id": "GL_0065",
+      "pairing_family": "gene_drug",
+      "pmid": "19147750",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the relationship between EGFR mutations and the efficacy of the drug erlotinib.\"}"
+    },
+    {
+      "target_id": "GL_0066",
+      "pairing_family": "gene_drug",
+      "pmid": "20022809",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the effectiveness of gefitinib in patients with non-small-cell lung cancer harboring EGFR mutations, indicating a regulatory relationship between the drug and the gene.\"}"
+    },
+    {
+      "target_id": "GL_0067",
+      "pairing_family": "gene_drug",
+      "pmid": "23470965",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the relationship between gefitinib and EGFR mutations in the context of acquired resistance to treatment.\"}"
+    },
+    {
+      "target_id": "GL_0068",
+      "pairing_family": "gene_drug",
+      "pmid": "21430269",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the relationship between EGFR mutations and the response to EGFR inhibitors, indicating a regulatory effect of the drug on the gene.\"}"
+    },
+    {
+      "target_id": "GL_0069",
+      "pairing_family": "gene_drug",
+      "pmid": "21531810",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the effectiveness of gefitinib, a drug, in relation to EGFR mutations, indicating a regulatory relationship.\"}"
+    },
+    {
+      "target_id": "GL_0070",
+      "pairing_family": "gene_drug",
+      "pmid": "16730237",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the role of EGFR mutations in lung cancer and their response to gefitinib, indicating a regulatory relationship.\"}"
+    },
+    {
+      "target_id": "GL_0071",
+      "pairing_family": "gene_drug",
+      "pmid": "19692680",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The presence of an EGFR mutation is a strong predictor of a better outcome with gefitinib treatment.\"}"
+    },
+    {
+      "target_id": "GL_0072",
+      "pairing_family": "gene_drug",
+      "pmid": "21716144",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses how crizotinib affects MET signaling and its implications for lung cancer treatment.\"}"
+    },
+    {
+      "target_id": "GL_0073",
+      "pairing_family": "gene_drug",
+      "pmid": "22235099",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the mechanisms of resistance to crizotinib in relation to ALK gene rearrangements.\"}"
+    },
+    {
+      "target_id": "GL_0074",
+      "pairing_family": "gene_drug",
+      "pmid": "20979469",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the therapeutic efficacy of crizotinib, which inhibits the ALK gene in non-small-cell lung cancer.\"}"
+    },
+    {
+      "target_id": "GL_0075",
+      "pairing_family": "gene_drug",
+      "pmid": "22805291",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses trametinib as a MEK inhibitor, which is related to the KRAS signaling pathway.\"}"
+    },
+    {
+      "target_id": "GL_0076",
+      "pairing_family": "gene_drug",
+      "pmid": "17409929",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the relationship between gefitinib treatment and EGFR mutations in lung cancer patients.\"}"
+    },
+    {
+      "target_id": "GL_0077",
+      "pairing_family": "gene_drug",
+      "pmid": "12748244",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses gefitinib, a drug that targets the EGFR gene, indicating a regulatory relationship.\"}"
+    },
+    {
+      "target_id": "GL_0078",
+      "pairing_family": "gene_drug",
+      "pmid": "21783417",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the role of EGFR mutations in determining the effectiveness of erlotinib treatment in non-small-cell lung cancer.\"}"
+    },
+    {
+      "target_id": "GL_0079",
+      "pairing_family": "gene_drug",
+      "pmid": "22277784",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the mechanisms of resistance to the drug crizotinib in relation to mutations in the ALK gene.\"}"
+    },
+    {
+      "target_id": "GL_0080",
+      "pairing_family": "gene_drug",
+      "pmid": "21258250",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the role of EGFR mutations in predicting response to the drug Erlotinib.\"}"
+    },
+    {
+      "target_id": "GL_0081",
+      "pairing_family": "gene_drug",
+      "pmid": "22370314",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the efficacy of gefitinib, a drug that targets the EGFR gene, in treating lung adenocarcinoma.\"}"
+    },
+    {
+      "target_id": "GL_0082",
+      "pairing_family": "gene_drug",
+      "pmid": "15329413",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the association of EGFR mutations with sensitivity to gefitinib.\"}"
+    },
+    {
+      "target_id": "GL_0083",
+      "pairing_family": "gene_drug",
+      "pmid": "15329413",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the association of EGFR mutations with sensitivity to the drug erlotinib.\"}"
+    },
+    {
+      "target_id": "GL_0084",
+      "pairing_family": "gene_drug",
+      "pmid": "22912387",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the sensitivity of ALK fusion variants to the ALK inhibitor crizotinib, indicating a regulatory relationship between the drug and the gene.\"}"
+    },
+    {
+      "target_id": "GL_0085",
+      "pairing_family": "gene_drug",
+      "pmid": "17020982",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the relationship between gefitinib and mutations in the EGFR gene, indicating how these mutations affect drug resistance.\"}"
+    },
+    {
+      "target_id": "GL_0086",
+      "pairing_family": "gene_drug",
+      "pmid": "15329413",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the association of EGFR mutations with sensitivity to the drug erlotinib.\"}"
+    },
+    {
+      "target_id": "GL_0087",
+      "pairing_family": "gene_drug",
+      "pmid": "19147750",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the relationship between EGFR mutations and the efficacy of the drug erlotinib.\"}"
+    },
+    {
+      "target_id": "GL_0088",
+      "pairing_family": "gene_drug",
+      "pmid": "17409929",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the relationship between gefitinib treatment and KRAS mutations in lung cancer patients.\"}"
+    },
+    {
+      "target_id": "GL_0089",
+      "pairing_family": "gene_drug",
+      "pmid": "21531810",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the effectiveness of gefitinib, a drug, in relation to EGFR mutations, indicating a regulatory relationship.\"}"
+    },
+    {
+      "target_id": "GL_0090",
+      "pairing_family": "variant_disease",
+      "pmid": "22810899",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "ASSOCIATION_GENERAL",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 0,
+      "raw_response": "{\"label\": \"ASSOCIATION_GENERAL\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the association of KRAS mutations with survival outcomes in patients with non-small cell lung cancer.\"}"
+    },
+    {
+      "target_id": "GL_0091",
+      "pairing_family": "gene_drug",
+      "pmid": "20826716",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the association of EGFR gene copy number with the effectiveness of gefitinib treatment in non-small-cell lung cancer.\"}"
+    },
+    {
+      "target_id": "GL_0092",
+      "pairing_family": "gene_drug",
+      "pmid": "22215748",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the responsiveness of ROS1-rearranged NSCLC to the drug crizotinib, indicating a regulatory relationship.\"}"
+    },
+    {
+      "target_id": "GL_0093",
+      "pairing_family": "variant_disease",
+      "pmid": "11208838",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "ASSOCIATION_GENERAL",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 0,
+      "raw_response": "{\"label\": \"ASSOCIATION_GENERAL\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the lack of prognostic significance of KRAS mutations in non-small cell lung cancer, indicating a general association.\"}"
+    },
+    {
+      "target_id": "GL_0094",
+      "pairing_family": "gene_drug",
+      "pmid": "19147750",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the relationship between EGFR mutations and the efficacy of the drug erlotinib.\"}"
+    },
+    {
+      "target_id": "GL_0095",
+      "pairing_family": "gene_drug",
+      "pmid": "21623265",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the activity of crizotinib as an inhibitor of the MET gene in a patient with non-small cell lung cancer.\"}"
+    },
+    {
+      "target_id": "GL_0096",
+      "pairing_family": "gene_drug",
+      "pmid": "20979473",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses how mutations in the ALK gene affect the response to the drug crizotinib.\"}"
+    },
+    {
+      "target_id": "GL_0097",
+      "pairing_family": "gene_drug",
+      "pmid": "16818618",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "__NEGATIVE__",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 0,
+      "raw_response": "{\"label\": \"__NEGATIVE__\", \"confidence\": 0.8, \"rationale\": \"The abstract discusses the sensitivity of ERBB2 mutations to HKI-272, not neratinib, indicating no direct relationship between neratinib and EGFR.\"}"
+    },
+    {
+      "target_id": "GL_0098",
+      "pairing_family": "gene_drug",
+      "pmid": "18509184",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses how specific EGFR mutations predict treatment outcomes in patients receiving gefitinib.\"}"
+    },
+    {
+      "target_id": "GL_0099",
+      "pairing_family": "gene_drug",
+      "pmid": "22912387",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the sensitivity of ALK fusion variants to the ALK inhibitor crizotinib, indicating a regulatory relationship between the drug and the gene.\"}"
+    },
+    {
+      "target_id": "GL_0100",
+      "pairing_family": "gene_drug",
+      "pmid": "20826716",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "__NEGATIVE__",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 0,
+      "raw_response": "{\"label\": \"__NEGATIVE__\", \"confidence\": 0.8, \"rationale\": \"The abstract does not support a direct relationship between the drug and gene.\"}"
+    },
+    {
+      "target_id": "GL_0101",
+      "pairing_family": "gene_drug",
+      "pmid": "22277784",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the mechanisms of resistance to the drug crizotinib in relation to mutations in the ALK gene.\"}"
+    },
+    {
+      "target_id": "GL_0102",
+      "pairing_family": "gene_drug",
+      "pmid": "22895145",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the relationship between erlotinib and EGFR mutations, particularly in the context of treatment response.\"}"
+    },
+    {
+      "target_id": "GL_0103",
+      "pairing_family": "gene_drug",
+      "pmid": "15118125",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the correlation between EGFR mutations and the clinical response to gefitinib therapy.\"}"
+    },
+    {
+      "target_id": "GL_0104",
+      "pairing_family": "gene_drug",
+      "pmid": "18593892",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "__NEGATIVE__",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 0,
+      "raw_response": "{\"label\": \"__NEGATIVE__\", \"confidence\": 0.8, \"rationale\": \"The abstract discusses EML4-ALK fusion genes in NSCLC but does not establish a positive relationship between the drug and the gene.\"}"
+    },
+    {
+      "target_id": "GL_0105",
+      "pairing_family": "gene_drug",
+      "pmid": "17463250",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses how MET amplification affects the sensitivity of lung cancer cells to gefitinib, indicating a regulatory relationship.\"}"
+    },
+    {
+      "target_id": "GL_0106",
+      "pairing_family": "gene_drug",
+      "pmid": "22277784",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the mechanisms of resistance to the drug crizotinib in relation to mutations in the ALK gene.\"}"
+    },
+    {
+      "target_id": "GL_0107",
+      "pairing_family": "gene_drug",
+      "pmid": "19029981",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the effectiveness of a drug in relation to KRAS mutations.\"}"
+    },
+    {
+      "target_id": "GL_0108",
+      "pairing_family": "gene_drug",
+      "pmid": "20979473",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses how mutations in the ALK gene confer resistance to the drug Crizotinib.\"}"
+    },
+    {
+      "target_id": "GL_0109",
+      "pairing_family": "gene_drug",
+      "pmid": "21531810",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the effectiveness of erlotinib, a drug, in relation to EGFR mutations, indicating a regulatory relationship.\"}"
+    },
+    {
+      "target_id": "GL_0110",
+      "pairing_family": "gene_drug",
+      "pmid": "22277784",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the relationship between the ALK drug and the ALK gene in the context of resistance mechanisms.\"}"
+    },
+    {
+      "target_id": "GL_0111",
+      "pairing_family": "gene_drug",
+      "pmid": "18408761",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the effectiveness of Canertinib in relation to EGFR mutations in lung cancer.\"}"
+    },
+    {
+      "target_id": "GL_0112",
+      "pairing_family": "gene_drug",
+      "pmid": "23181703",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "__NEGATIVE__",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 0,
+      "raw_response": "{\"label\": \"__NEGATIVE__\", \"confidence\": 0.9, \"rationale\": \"The abstract indicates that erlotinib did not provide any clinical benefit in the presence of the ALK fusion gene.\"}"
+    },
+    {
+      "target_id": "GL_0113",
+      "pairing_family": "gene_drug",
+      "pmid": "15329413",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the association of EGFR mutations with sensitivity to gefitinib.\"}"
+    },
+    {
+      "target_id": "GL_0114",
+      "pairing_family": "gene_drug",
+      "pmid": "18408761",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the effectiveness of BIBW2992, an EGFR/HER2 inhibitor, in relation to genetic alterations in the EGFR gene.\"}"
+    },
+    {
+      "target_id": "GL_0115",
+      "pairing_family": "gene_drug",
+      "pmid": "17625570",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "__NEGATIVE__",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 0,
+      "raw_response": "{\"label\": \"__NEGATIVE__\", \"confidence\": 0.8, \"rationale\": \"The abstract does not indicate a positive relationship between the drug WHI-P154 and the gene ALK.\"}"
+    },
+    {
+      "target_id": "GL_0116",
+      "pairing_family": "gene_drug",
+      "pmid": "21531810",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the effectiveness of gefitinib, a drug, in relation to EGFR mutations, indicating a regulatory relationship.\"}"
+    },
+    {
+      "target_id": "GL_0117",
+      "pairing_family": "gene_drug",
+      "pmid": "18227510",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses how the T790M mutation in EGFR affects the efficacy of drug treatments.\"}"
+    },
+    {
+      "target_id": "GL_0118",
+      "pairing_family": "gene_drug",
+      "pmid": "22370314",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the efficacy of gefitinib, a drug that targets the EGFR gene, in treating lung adenocarcinoma.\"}"
+    },
+    {
+      "target_id": "GL_0119",
+      "pairing_family": "gene_drug",
+      "pmid": "19794967",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the impact of KRAS mutations on the effectiveness of gefitinib treatment in lung cancer patients.\"}"
+    },
+    {
+      "target_id": "GL_0120",
+      "pairing_family": "gene_drug",
+      "pmid": "20979469",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the therapeutic efficacy of crizotinib, which inhibits the ALK gene in non-small-cell lung cancer.\"}"
+    },
+    {
+      "target_id": "GL_0121",
+      "pairing_family": "gene_drug",
+      "pmid": "15329413",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the association between EGFR mutations and the sensitivity of tumors to the drug erlotinib.\"}"
+    },
+    {
+      "target_id": "GL_0122",
+      "pairing_family": "gene_drug",
+      "pmid": "15737014",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses how mutations in the EGFR gene affect the response to the drug gefitinib.\"}"
+    },
+    {
+      "target_id": "GL_0123",
+      "pairing_family": "gene_drug",
+      "pmid": "18408761",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the relationship between erlotinib and its effect on EGFR mutations in lung cancer.\"}"
+    },
+    {
+      "target_id": "GL_0124",
+      "pairing_family": "gene_drug",
+      "pmid": "21531810",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the effectiveness of erlotinib, a drug, in relation to EGFR mutations, indicating a regulatory relationship.\"}"
+    },
+    {
+      "target_id": "GL_0125",
+      "pairing_family": "gene_drug",
+      "pmid": "21258250",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the role of KRAS mutations in predicting resistance to therapy with erlotinib in non-small cell lung cancer.\"}"
+    },
+    {
+      "target_id": "GL_0126",
+      "pairing_family": "gene_drug",
+      "pmid": "18408761",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the effectiveness of Afatinib in relation to EGFR mutations in lung cancer.\"}"
+    },
+    {
+      "target_id": "GL_0127",
+      "pairing_family": "variant_disease",
+      "pmid": "15597105",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "ASSOCIATION_GENERAL",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 0,
+      "raw_response": "{\"label\": \"ASSOCIATION_GENERAL\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the association of KRAS mutations with survival outcomes in non-small cell lung cancer.\"}"
+    },
+    {
+      "target_id": "GL_0128",
+      "pairing_family": "gene_drug",
+      "pmid": "15329413",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the association of EGFR mutations with sensitivity to gefitinib.\"}"
+    },
+    {
+      "target_id": "GL_0129",
+      "pairing_family": "variant_disease",
+      "pmid": "22247021",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "VARIANT_DISEASE",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"VARIANT_DISEASE\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the impact of specific KRAS mutations on clinical outcomes in non-small cell lung cancer.\"}"
+    },
+    {
+      "target_id": "GL_0130",
+      "pairing_family": "gene_drug",
+      "pmid": "19737969",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the role of EML4-ALK fusion in cancer and implies the potential for targeted therapy with crizotinib.\"}"
+    },
+    {
+      "target_id": "GL_0131",
+      "pairing_family": "gene_drug",
+      "pmid": "22895145",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the relationship between erlotinib and EGFR mutations, indicating how these mutations affect the response to the drug.\"}"
+    },
+    {
+      "target_id": "GL_0132",
+      "pairing_family": "gene_drug",
+      "pmid": "21732342",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the effects of a drug on the EGFR gene and its mutations.\"}"
+    },
+    {
+      "target_id": "GL_0133",
+      "pairing_family": "gene_drug",
+      "pmid": "20979473",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses mutations in the ALK gene that confer resistance to the drug crizotinib.\"}"
+    },
+    {
+      "target_id": "GL_0134",
+      "pairing_family": "gene_drug",
+      "pmid": "23344087",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the relationship between crizotinib and genetic alterations in the ALK gene associated with resistance.\"}"
+    },
+    {
+      "target_id": "GL_0135",
+      "pairing_family": "gene_drug",
+      "pmid": "21531810",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the effectiveness of erlotinib, a drug, in relation to EGFR mutations, indicating a regulatory relationship.\"}"
+    },
+    {
+      "target_id": "GL_0137",
+      "pairing_family": "variant_disease",
+      "pmid": "21969500",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "VARIANT_DISEASE",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"VARIANT_DISEASE\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the predictive value of EGFR mutations in relation to non-small cell lung cancer outcomes.\"}"
+    },
+    {
+      "target_id": "GL_0138",
+      "pairing_family": "gene_drug",
+      "pmid": "22025157",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "__NEGATIVE__",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 0,
+      "raw_response": "{\"label\": \"__NEGATIVE__\", \"confidence\": 0.8, \"rationale\": \"The abstract discusses the lack of survival advantage of treatments in patients with KRAS mutations, indicating a negative relationship.\"}"
+    },
+    {
+      "target_id": "GL_0139",
+      "pairing_family": "gene_drug",
+      "pmid": "15728811",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the relationship between gefitinib and EGFR mutations in the context of drug resistance.\"}"
+    },
+    {
+      "target_id": "GL_0140",
+      "pairing_family": "gene_drug",
+      "pmid": "18408761",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the effectiveness of Canertinib in relation to EGFR mutations in lung cancer.\"}"
+    },
+    {
+      "target_id": "GL_0141",
+      "pairing_family": "gene_drug",
+      "pmid": "21642865",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the predictive role of ALK translocation in response to pemetrexed treatment in non-small cell lung cancer.\"}"
+    },
+    {
+      "target_id": "GL_0142",
+      "pairing_family": "gene_drug",
+      "pmid": "22277784",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the mechanisms of resistance to the drug crizotinib in relation to mutations in the ALK gene.\"}"
+    },
+    {
+      "target_id": "GL_0143",
+      "pairing_family": "gene_drug",
+      "pmid": "21791641",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the resistance mechanisms to ALK inhibitors, specifically crizotinib, in relation to the ALK gene.\"}"
+    },
+    {
+      "target_id": "GL_0144",
+      "pairing_family": "gene_drug",
+      "pmid": "18089823",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the effectiveness of Dacomitinib, a drug, in relation to mutations in the EGFR gene.\"}"
+    },
+    {
+      "target_id": "GL_0145",
+      "pairing_family": "variant_disease",
+      "pmid": "20840671",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "VARIANT_DISEASE",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"VARIANT_DISEASE\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the association of EGFR amplification, a variant alteration, with Barrett's adenocarcinomas, which are a type of non-small cell lung cancer.\"}"
+    },
+    {
+      "target_id": "GL_0146",
+      "pairing_family": "gene_drug",
+      "pmid": "17085664",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the relationship between gefitinib and EGFR mutations in the context of resistance to treatment.\"}"
+    },
+    {
+      "target_id": "GL_0147",
+      "pairing_family": "gene_drug",
+      "pmid": "21258415",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the effect of the drug IPI-504 on the ALK gene product, indicating a regulatory relationship.\"}"
+    },
+    {
+      "target_id": "GL_0148",
+      "pairing_family": "gene_drug",
+      "pmid": "22912387",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the sensitivity of ALK fusion variants to ALK inhibitors, indicating a regulatory relationship between the drug and the gene.\"}"
+    },
+    {
+      "target_id": "GL_0149",
+      "pairing_family": "gene_drug",
+      "pmid": "15329413",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the association of EGFR mutations with sensitivity to the drug erlotinib.\"}"
+    },
+    {
+      "target_id": "GL_0150",
+      "pairing_family": "gene_drug",
+      "pmid": "22285168",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the efficacy of erlotinib in relation to EGFR mutations in non-small-cell lung cancer.\"}"
+    },
+    {
+      "target_id": "GL_0151",
+      "pairing_family": "variant_disease",
+      "pmid": "22810899",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "VARIANT_DISEASE",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"VARIANT_DISEASE\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the association of EGFR mutations with survival outcomes in patients with non-small cell lung cancer.\"}"
+    },
+    {
+      "target_id": "GL_0152",
+      "pairing_family": "gene_drug",
+      "pmid": "22285168",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the efficacy of erlotinib in relation to EGFR mutations in non-small-cell lung cancer.\"}"
+    },
+    {
+      "target_id": "GL_0153",
+      "pairing_family": "gene_drug",
+      "pmid": "21531810",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the effectiveness of erlotinib, a drug, in relation to EGFR mutations, indicating a regulatory relationship.\"}"
+    },
+    {
+      "target_id": "GL_0154",
+      "pairing_family": "gene_drug",
+      "pmid": "20038723",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the relationship between gefitinib and EGFR mutations in terms of clinical outcomes.\"}"
+    },
+    {
+      "target_id": "GL_0155",
+      "pairing_family": "gene_drug",
+      "pmid": "22901364",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the predictive role of phosphorylated EGFR in response to EGFR-TKIs therapy, indicating a regulatory relationship between the drug and the gene.\"}"
+    },
+    {
+      "target_id": "GL_0156",
+      "pairing_family": "gene_drug",
+      "pmid": "22389872",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the use of Onartuzumab, which targets the MET gene, indicating a regulatory relationship.\"}"
+    },
+    {
+      "target_id": "GL_0157",
+      "pairing_family": "gene_drug",
+      "pmid": "23344087",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the relationship between crizotinib and genetic alterations in the ALK gene associated with resistance.\"}"
+    },
+    {
+      "target_id": "GL_0160",
+      "pairing_family": "variant_disease",
+      "pmid": "21969500",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "VARIANT_DISEASE",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"VARIANT_DISEASE\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the prognostic significance of KRAS mutations in relation to non-small cell lung cancer.\"}"
+    },
+    {
+      "target_id": "GL_0161",
+      "pairing_family": "gene_drug",
+      "pmid": "20979469",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the therapeutic efficacy of crizotinib, which inhibits the ALK gene in non-small-cell lung cancer.\"}"
+    },
+    {
+      "target_id": "GL_0162",
+      "pairing_family": "gene_drug",
+      "pmid": "22452895",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the efficacy of afatinib in patients with lung adenocarcinoma and EGFR mutations, indicating a regulatory relationship between the drug and the gene.\"}"
+    },
+    {
+      "target_id": "GL_0163",
+      "pairing_family": "gene_drug",
+      "pmid": "21531810",
+      "expected_label": "DRUG_GENE_REGULATION",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the effectiveness of gefitinib, a drug, in relation to EGFR mutations, indicating a regulatory relationship.\"}"
+    },
+    {
+      "target_id": "GL_0164",
+      "pairing_family": "gene_drug",
+      "pmid": "18451166",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the sensitivity of tumors with specific ALK genomic alterations to ALK inhibitors.\"}"
+    },
+    {
+      "target_id": "GL_0165",
+      "pairing_family": "gene_drug",
+      "pmid": "19147750",
+      "expected_label": "ASSOCIATION_GENERAL",
+      "pred_label": "DRUG_GENE_REGULATION",
+      "parse_ok": true,
+      "hit_A_sv_argmax": 1,
+      "raw_response": "{\"label\": \"DRUG_GENE_REGULATION\", \"confidence\": 0.9, \"rationale\": \"The abstract discusses the relationship between EGFR mutations and the efficacy of the drug erlotinib.\"}"
+    }
+  ]
+}
