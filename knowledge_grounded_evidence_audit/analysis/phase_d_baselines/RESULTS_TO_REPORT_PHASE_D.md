@@ -3,10 +3,51 @@
 Frozen artefacts:
 
 - Coverage + PB subsets: `knowledge_grounded_evidence_audit/analysis/phase_d_baselines/outputs/civicmine_baseline_case_c.json`
+- Trivial baselines (IID / always-DGR): `knowledge_grounded_evidence_audit/analysis/phase_d_baselines/outputs/llm_baseline/trivial_baselines.json` (regenerate: `python3.11 knowledge_grounded_evidence_audit/analysis/phase_d_baselines/llm_baseline/compute_trivial_baselines.py`)
 - $R_{\mathrm{B}}$ extensions: `knowledge_grounded_evidence_audit/analysis/phase_d_baselines/outputs/rb_phase_d_extensions.json`
 - Phase~2C $\widehat\alpha$ + paired contrasts: `knowledge_grounded_evidence_audit/analysis/phase_d_baselines/outputs/phase_d_alpha_attribution.json`
+- LLM raw + validity: `outputs/llm_baseline/gpt4o_mini_*.json`, `llm_baseline/llm_validity_checks.md`
 
 **§S13.1 narrative anchor (selection bias):** Any “41-set” accuracy is conditional on CIViCmine’s **self-selected** strict coverage. Those numbers are an **upper-bound slice**, not a draw from the $n=162$ audit population (~**75%** strict non-coverage). Lead with **Layer A** before score rows. Every manuscript table that prints 41-set accuracies must carry the **selection-bias disclaimer** (see Supplement §S13.1 boxed caption + table note).
+
+---
+
+## Phase 2D — Unified KB argmax comparison (162-set vs strict 41-set)
+
+**Method:** Method A **set-valued** KB argmax (`kb_hit_A_setvalued`); **S_pair** primary projection for gold sets. **162-set:** population Goldlite audit (encoder rows: **20-seed means** from `report/data/phase_b_ft_seedlevel.csv`, matching Lustre `eval/`). **41-set:** strict CIViCmine-covered `target_id`s (identical list for every row; **selection bias** on external / extractor rows). **Trivial baselines:** analytic (see `trivial_baselines.json`). **LLM:** one API sweep per condition (`gpt4o_mini_*.json`).
+
+### Row group A — Trivial baselines
+
+| System | KB acc (162) | KB acc (41) |
+|--------|-------------:|-------------:|
+| IID uniform over 8 S_pair labels ($E[\|S\|/8]$) | **0.125** | **0.125** |
+| Always `DRUG_GENE_REGULATION` (modal-constant) | **0.951** (154/162) | **0.951** (39/41) |
+
+### Row group B — External systems
+
+| System | KB acc (162) | KB acc (41) |
+|--------|-------------:|-------------:|
+| CIViCmine deterministic mapping (Phase D script) | **—** (no deterministic strict score on 121/162) | **0.951** (39/41) |
+| GPT-4o-mini **zero-shot** | **0.988** | **1.000** |
+| GPT-4o-mini **six-shot** | **0.920** | **0.927** |
+| GPT-4o-mini **six-shot + rationale** | **0.926** | **0.951** |
+
+### Row group C — Fine-tuned encoder cells (Phase B FT, 20 seeds)
+
+| System | KB acc (162) | KB acc (41) |
+|--------|-------------:|-------------:|
+| PubMedBERT (PB) × **T1B** | 0.150 | 0.262 |
+| PB × **T1F-2048** | 0.477 | 0.549 |
+| PB × **T1F-4096** | 0.619 | 0.782 |
+| PB × **T2** | 0.756 | 0.855 |
+| BioLinkBERT (BL) × **T1B** | 0.310 | 0.567 |
+| BL × **T1F** | 0.690 | 0.844 |
+| BL × **T2** | 0.771 | 0.859 |
+| PubMed-link (PL) × **T1B** | 0.287 | 0.494 |
+| PL × **T1F** | 0.719 | 0.838 |
+| PL × **T2** | 0.777 | 0.845 |
+
+**Caption (unified table — calibration anchor):** The 162-set evaluable population consists of CIViC-curator–anchored abstracts where a **positive** relation-type projection is already established under the schema mapping; **trivial constant prediction** of `DRUG_GENE_REGULATION` achieves **0.951** because **154/162** targets have DGR in their **singleton** expected set (and **39/41** on the strict subset—see `trivial_baselines.json`). Performance in **row groups B and C** should be read **relative to this anchor**: differences within **group C** reflect **training distribution** and **NEG-class behaviour**, not finer relation-head taxonomy. **Apparent** superiority of the LLM (~0.99) and CIViCmine (**0.95** on its self-selected 41) **over** encoder cells (**~0.15–0.78** on 162) **primarily reflects abstention / prior structure on a curated positive-heavy slice**, not a clean estimate of abstract-level relation discrimination comparable to inter-annotator agreement (Supplement~C).
 
 ---
 
@@ -56,20 +97,6 @@ Under **strict** PMID + typed entity-pair matching, **121 / 162 (~74.7%)** of ta
 
 ---
 
-## Unified comparison table (cross-system)
-
-| System | KB acc (162), mean @ 20 seeds | KB acc (41), mean @ 20 seeds |
-|--------|-------------------------------:|-----------------------------:|
-| CIViCmine strict | — | **0.951** (39/41) |
-| PubMedBERT × FT × **T2** | **0.756** | **0.855** |
-| PubMedBERT × FT × **T1F-2048** | **0.477** | **0.549** |
-| PubMedBERT × FT × **T1F-4096** | **0.619** | **0.782** |
-| PubMedBERT × FT × **T1B** | **0.150** | **0.262** |
-
-**Caption / note:** The **41** column shares CIViCmine’s self-selected support list; **selection bias** applies. The **162** column is population KB audit for trainers. Do **not** headline-compare CIViCmine 0.951 to PB 0.756 without Layer A.
-
----
-
 ## §S13.3 — Phase 2C (matched compute) + Discussion paste block
 
 ### Numbers (`phase_d_alpha_attribution.json`)
@@ -114,6 +141,7 @@ python3.11 report/scripts/aggregate_phase_b_ft.py
 python3.11 knowledge_grounded_evidence_audit/analysis/phase_d_baselines/civicmine/run_civicmine_baseline.py
 python3.11 knowledge_grounded_evidence_audit/analysis/phase_d_baselines/analysis/phase_d_rb_extensions.py
 python3.11 knowledge_grounded_evidence_audit/analysis/phase_d_baselines/analysis/phase_d_alpha_attribution.py
+python3.11 knowledge_grounded_evidence_audit/analysis/phase_d_baselines/llm_baseline/compute_trivial_baselines.py
 ```
 
 ## Phase 2B — LLM baseline (`llm_baseline/`)

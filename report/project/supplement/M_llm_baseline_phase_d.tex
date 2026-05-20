@@ -1,0 +1,70 @@
+% Section S14 overall (follows L_civicmine_phase_d.tex which ends at S13).
+\section{GPT-4o-mini KB-surface baseline (Phase~D)}
+\label{supp:llm-phase-d}
+
+This section records an \emph{exploratory} large-language-model baseline on the
+same Goldlite-derived KB audit surface as Phase~B (Method~A set-valued KB argmax,
+$n=162$ evaluable targets after excluding \texttt{VARIANT\_GENE}; matched
+strict-CIViCmine 41-target subset as in \S\ref{supp:civicmine-layer-b}). Numbers
+are \textbf{supplement-only}; they do not enter the pre-registered factorial
+claims in the main text.
+
+\subsection{Setup}
+\label{supp:llm-setup}
+
+\textbf{Model:} \texttt{gpt-4o-mini} (OpenAI API, chat completions, temperature~0).
+\textbf{Prompt contract:} the user message follows the curation template in
+Supplement~C (relation labels, strict JSON output); it is the same structural
+pattern as Figure~\ref{lst:iaa-prompt}, with model identity adapted for
+API use. \textbf{Conditions:} (i)~zero-shot; (ii)~six-shot with frozen exemplars
+drawn deterministically from \texttt{kb\_surface\_pairs.jsonl} (three
+\texttt{gene\_drug} + three \texttt{variant\_disease} exemplars by
+\texttt{target\_id} sort); (iii)~six-shot with extended rationale instructions.
+Raw API traces are archived under
+\texttt{knowledge\_grounded\_evidence\_audit/analysis/phase\_d\_baselines/outputs/llm\_baseline/}.
+
+\subsection{Results}
+\label{supp:llm-results}
+
+Point estimates on the frozen run:
+
+\begin{center}
+\begin{tabular}{lcc}
+  \toprule
+  Condition & KB argmax mean ($n=162$) & KB argmax mean ($n=41$ strict) \\
+  \midrule
+  Zero-shot & 0.988 & 1.000 \\
+  Six-shot & 0.920 & 0.927 \\
+  Six-shot + rationale & 0.926 & 0.951 \\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+\noindent\textit{Table note:} the 41-target column uses Case~C
+\texttt{covered\_targets} identifiers. Compare to the trivial always-\texttt{DRUG\_GENE\_REGULATION}
+calibration in \texttt{outputs/llm\_baseline/trivial\_baselines.json} ($\approx\!0.951$
+on both sets).
+
+\subsection{Validity caveats}
+\label{supp:llm-caveats}
+
+\begin{itemize}[leftmargin=1.15em]
+  \item \textbf{Trivial baseline.} On this curator slice, every target has a
+        singleton expected set under (\texttt{S\_pair}, primary, set-valued); the
+        always-\texttt{DRUG\_GENE\_REGULATION} predictor already scores
+        \textbf{154/162} $(0.951)$ on the 162-set and \textbf{39/41} $(0.951)$ on
+        the strict subset (JSON above). Zero-shot GPT-4o-mini therefore exceeds
+        that constant by only $\approx\!0.04$ on $n=162$.
+  \item \textbf{IAA hard cases.} On all seven inter-annotator disagreement targets
+        where the second annotator abstained (\texttt{\_\_NEGATIVE\_\_}), the
+        model predicted \texttt{DRUG\_GENE\_REGULATION} in every condition with
+        \texttt{hit\_A\_sv\_argmax}$=1$, mirroring the heuristic schema projector
+        rather than Opus-style abstention (see \texttt{llm\_validity\_checks.md}).
+  \item \textbf{Few-shot anti-pattern.} Six-shot conditions \emph{reduce}
+        accuracy versus zero-shot ($0.988\to 0.92$--$0.93$), suggesting few-shot
+        tokens distort an already extreme label-name / entity-type prior.
+  \item \textbf{Interpretation.} We read GPT-4o-mini on this protocol as
+        primarily exploiting entity-type-to-label vocabulary mapping on a
+        curator-positive slice; \textbf{label-name-anonymous} follow-up is
+        required before claiming relation-discrimination capability.
+\end{itemize}

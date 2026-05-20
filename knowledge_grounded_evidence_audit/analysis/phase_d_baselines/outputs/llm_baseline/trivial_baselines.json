@@ -1,0 +1,41 @@
+{
+  "schema_projection": "S_pair / primary / set_valued",
+  "sources": {
+    "kb_surface_pairs": "/home/b5ac/freddieyu.b5ac/project_1/fine_tuning_experiments/schema_exp/eval/inputs/kb_surface_pairs.jsonl",
+    "civicmine_case_c": "/home/b5ac/freddieyu.b5ac/project_1/knowledge_grounded_evidence_audit/analysis/phase_d_baselines/outputs/civicmine_baseline_case_c.json"
+  },
+  "IID_uniform_mean_P_hit": {
+    "definition": "Per target, draw label uniformly from 8 S_pair heads; P(hit)=|expected_set_sv|/8. Report mean.",
+    "162_set": 0.125,
+    "41_set": 0.125
+  },
+  "always_predict_DRUG_GENE_REGULATION": {
+    "definition": "Predict DRUG_GENE_REGULATION for every target; hit iff label \u2208 expected_set_sv.",
+    "162_set": {
+      "n_hits": 154,
+      "n_targets": 162,
+      "accuracy": 0.9506172839506173
+    },
+    "41_set": {
+      "n_hits": 39,
+      "n_targets": 41,
+      "accuracy": 0.9512195121951219
+    }
+  },
+  "strict41_targets_with_DGR_in_expected_set": {
+    "count": 39,
+    "denominator": 41,
+    "fraction": 0.9512195121951219,
+    "note": "Same as always-DGR hits on 41-set (singleton sets: hit iff S={DGR})."
+  },
+  "modal_primary_expected_label_on_162": [
+    {
+      "label": "DRUG_GENE_REGULATION",
+      "count": 90
+    },
+    {
+      "label": "ASSOCIATION_GENERAL",
+      "count": 72
+    }
+  ]
+}
