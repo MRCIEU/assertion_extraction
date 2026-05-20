@@ -118,7 +118,7 @@
 | GL_0118 | `DRUG_GENE_REGULATION` | 1 | False | True |
 | GL_0131 | `DRUG_GENE_REGULATION` | 1 | False | True |
 
-*Interpretation:* On these seven IDs the model **never** mirrors Opus-style **NEG**; where `hit=1`, it aligns with the **schema projector** (singleton DGR), **not** the second annotator’s abstention narrative.
+*Interpretation:* On these seven IDs the model **never** mirrors Opus-style **NEG**; **`hit_A_sv_argmax = 1` for all seven in every condition**, i.e. it tracks the **singleton DGR projector**, not the second annotator’s abstention.
 
 ---
 

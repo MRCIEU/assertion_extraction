@@ -195,8 +195,9 @@ def main() -> None:
 
     lines.append("")
     lines.append(
-        "*Interpretation:* On these seven IDs the model **never** mirrors Opus-style **NEG**; where `hit=1`, it aligns with "
-        "the **schema projector** (singleton DGR), **not** the second annotator’s abstention narrative."
+        "*Interpretation:* On these seven IDs the model **never** mirrors Opus-style **NEG**; "
+        "**`hit_A_sv_argmax = 1` for all seven in every condition**—it tracks the **singleton DGR projector**, "
+        "not the second annotator’s abstention."
     )
     lines.append("")
     lines.append("---")
