@@ -1,0 +1,24 @@
+% =============================================================
+% Plain-Language Summary (optional lay summary; not currently
+% \input from main.tex)
+% =============================================================
+
+Automated programs read medical research papers and extract facts
+about how drugs, genes, and diseases relate to one another. These
+facts feed cancer knowledge databases that doctors and researchers
+rely on. Developers usually test such programs on standard benchmark
+datasets to gauge accuracy. We asked whether scoring well on a
+benchmark also means the program will reliably surface the right
+facts for a real cancer knowledge base.
+
+We trained 310 versions of a text-extraction program, systematically
+varying four design choices, and tested each version against both a
+standard benchmark and 162 expert-curated facts from the CIViC
+oncology database. The two scores did not always agree: some
+versions that looked equally good on the benchmark differed
+substantially in how well they retrieved real cancer knowledge,
+and the disagreement depended on which design choice was varied.
+Because the evidence is mixed and statistical uncertainty is wide,
+we recommend that developers check their programs against both a
+benchmark and a small audit of expert-curated facts, rather than
+relying on benchmark scores alone.

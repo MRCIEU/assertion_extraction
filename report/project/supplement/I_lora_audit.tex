@@ -1,0 +1,133 @@
+\section{Pre-registered LoRA configuration: falsification audit}
+\label{supp:lora-audit}
+
+\textit{Purpose of this supplement.}\;
+This supplement documents the full audit chain for the LoRA
+falsification arm, including the three pre-committed amendment
+configurations, their collapse behaviour, and the three-criterion
+failure rule that led to the methodological-null declaration.
+
+This section documents the audit chain by which the parameter-efficient
+fine-tuning arm was tested under three pre-committed amendments and
+declared empirically undefined within the pre-registered compute
+envelope. The point is methodological: a comparator that collapses to
+the trivial all-negative solution is not a fair test of full
+fine-tuning versus PEFT, regardless of which side ``wins'' in absolute
+terms.
+
+\subsection{Locked specification}
+
+The pre-registered PEFT cell used LoRA \citep{hu2022lora} adapters
+of rank 16 ($\alpha = 32$, dropout 0.05, no bias) on attention query
+and value projections only --- with FFN, key projection, attention
+output, embeddings, and pooler frozen. The classifier head was fully
+trained (the \code{modules\_to\_save} parameter), giving approximately
+0.541\% trainable parameters. Learning rate, budget, and all other
+hyperparameters matched full fine-tuning ($2\times 10^{-5}$ for
+2{,}048 updates).
+
+\subsection{Three falsification attempts}
+
+\paragraph{Attempt 1: locked specification.}
+A 35-run pilot (PubMedBERT-base $\times$ T1B and T1F, 20 + 15 seeds)
+collapsed identically: development macro-F1 stayed at the
+all-\code{\_\_NEGATIVE\_\_} floor of $0.12624584\ldots$ across all 32
+evaluation checkpoints per seed and across all 35 seeds. Test-set
+per-head F1 was zero on every non-negative label across all 26
+completed runs.
+
+The internal evidence ruled out a wiring bug. LoRA adapter parameters
+moved (max delta $8\times 10^{-3}$); the classifier head moved (max
+delta $1.4\times 10^{-2}$); frozen parameters were strictly unchanged
+(zero delta); training loss decreased monotonically from 2.20 to
+0.20. The optimiser was working; the decision boundary simply never
+left the trivial basin.
+
+\paragraph{Attempt 2: 15$\times$ learning rate (retracted).}
+Hypothesis: the locked LR was too low for a smaller trainable
+footprint. A single-seed smoke at LR $3\times 10^{-4}$ (the
+LoRA-paper default) produced bit-identical collapse. LoRA-B norm
+grew 4--5$\times$ and the classifier weight norm grew 14\%,
+confirming the optimiser had more signal --- the decision boundary
+still did not move. The LR-cause hypothesis was falsified and this
+amendment was retracted.
+
+\paragraph{Attempt 3: 2$\times$ budget (falsified).}
+Hypothesis: 2{,}048 updates were insufficient. Budget was doubled to
+4{,}096 with LR restored to $2\times 10^{-5}$. Collapse persisted
+across 64 evaluation checkpoints; training loss decreased 60\%; the
+boundary still did not move.
+
+\begin{table}[H]
+\centering
+\caption{Pre-committed acceptance criteria for the budget probe.}
+\label{tab:s9-acceptance}
+\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Criterion} & \textbf{Outcome} & \textbf{Pass?} \\
+\midrule
+Dev macro-F1 $> 0.20$ at any step $\le 1024$              & maximum 0.127 & no \\
+Dev macro-F1 $> 0.30$ at step 4{,}096                        & 0.127         & no \\
+At least one checkpoint with non-zero ex-NEG dev F1       & all zero      & no \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+All three criteria failed. The pre-committed decision tree drops
+the PEFT arm and reports the FT-vs-LoRA comparison as a
+methodological null.
+
+\subsection{Why this is not ``FT $>$ LoRA''}
+
+Matched full fine-tuning escapes the all-negative basin within
+approximately 512 steps and converges to dev macro-F1 of approximately
+0.51. A naive read would conclude FT outperforms LoRA. We do not
+draw this conclusion: the LoRA comparator is collapsed, not training.
+Comparing a trained model to a collapsed comparator measures whether
+the comparator collapses, not whether LoRA can compete with FT under
+a richer configuration.
+
+\subsection{What the audit rules out and rules in}
+
+The collapse is a property of one cell's pre-registered
+specification on this data: low trainable fraction (0.541\%),
+attention-Q+V-only target modules, an 8-class head with $\sim 80\%$
+\code{\_\_NEGATIVE\_\_} class imbalance, $\sim 1{,}200$ development
+examples, and 2{,}048--4{,}096 optimiser steps. It does not falsify
+LoRA in general or any LoRA result on different data, model size,
+target-module set, or budget. A richer LoRA sweep (varying rank,
+target modules beyond Q and V, custom warmup, class re-weighting)
+would be needed to assess the LoRA-vs-FT comparison properly in
+this small-data, high-imbalance regime; that study is reserved for
+follow-up work.
+
+\subsection{Disposition of degenerate runs}
+
+\begin{table}[H]
+\centering
+\caption{Audit-archived degenerate runs. None enter any analysis,
+figure, or table reported in the paper.}
+\label{tab:s9-disposition}
+\small
+\begin{tabular}{@{}lr@{}}
+\toprule
+\textbf{Source} & \textbf{Runs} \\
+\midrule
+Attempt 1 (LR $2\!\times\!10^{-5}$, 2{,}048 steps)  & 35 \\
+Attempt 2 (LR $3\!\times\!10^{-4}$, 2{,}048 steps)  & 1  \\
+Attempt 3 (LR $2\!\times\!10^{-5}$, 4{,}096 steps)  & 1  \\
+\midrule
+\textbf{Total} & 37 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Realised configuration wave}
+
+The pre-registered wave had been 3 encoders $\times$ 2 update regimes
+$\times$ 3 schedules $\times$ 20 seeds = 360 main runs. Dropping the
+PEFT regime leaves 3 $\times$ 1 $\times$ 3 $\times$ 20 = 180 main
+runs plus 10 RoBERTa-base reference seeds. This is the realised
+sample for every hypothesis test, variance decomposition, slope fit,
+and rank-inversion quantification reported in the paper.

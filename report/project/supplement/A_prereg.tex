@@ -1,0 +1,50 @@
+\section{Pre-Registration}
+\label{supp:prereg}
+
+\textit{Purpose of this supplement.}\;
+This supplement summarises the pre-registration scope, amendment
+families, and the computational environment used for all training
+and evaluation runs.
+
+The factorial study comprised two waves of training
+(\S\ref{sec:training}): the
+schema-comparison wave fixed schedule and varied schema and encoder;
+the configuration wave fixed schema and varied encoder and schedule.
+The configuration wave was preceded by a pre-registration that fixed
+the factorial design, the primary hypotheses, the schema-selection
+rule, the multiple-comparison tier, the bootstrap protocol, and the
+matching radius for the rank-inversion analysis. The document
+was committed before any configuration-wave run was submitted, so
+the analyses reported here followed the plan rather than the data.
+
+Three amendment families are recorded against the lock; the same
+three are listed in \S\ref{sec:prereg} of the main text. Amendment~1
+(pre-unblinding) refined analysis specifications --- the slope
+CI-width reportability gate and the variance-ratio factor set ---
+without changing any hypothesis. Amendment~2 handled the
+parameter-efficient fine-tuning collapse: the original LoRA arm
+was dropped under a pre-committed three-criterion failure rule
+rather than re-tuned post-hoc (audit chain in
+\S\ref{supp:lora-audit}); the deferred architecture hypothesis
+(H5) and the manuscript-preparation reclassification of the
+PubMedBERT-base vs BioLinkBERT-base contrast as architecture
+rather than scale are recorded under the same amendment family.
+Amendment~3 added the inter-annotator audit, the ICC analysis, and
+the $\rho$ sensitivity analysis as post-hoc validity checks during
+manuscript preparation. None of the three amendments changed a
+pre-registered decision rule, threshold, or comparison tier.
+
+The pre-registration document, amendment log, code, and per-run
+analysis outputs are openly available; the location is identified in
+the Data and Code Availability statement.
+
+\subsection{Computational environment}
+
+Training and evaluation ran on the University of Bristol's BriCS
+Isambard-AI system under Slurm, using NVIDIA GH200 Grace Hopper
+Superchips (Grace CPU + H100 GPU, 96~GB HBM3 per GPU). Total
+compute was approximately 60 GPU-hours for the 310 main training
+runs, 8 GPU-hours for evaluation, and 7 GPU-hours for the
+falsification audit. The pinned software environment (Python 3.11,
+PyTorch 2.6, Transformers 5.4, PEFT 0.19) is recorded in
+\code{requirements.lock} at the released code revision.

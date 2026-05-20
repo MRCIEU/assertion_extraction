@@ -1,0 +1,72 @@
+\section{Background and Significance}
+\label{sec:background}
+
+% Para 1: clinical motivation
+Cancer knowledge bases such as the Clinical Interpretation of
+Variants in Cancer (CIViC) \citep{griffith2017civic} depend on
+expert curation to keep pace with growing oncology literature.
+Like OncoKB \citep{chakravarty2017oncokb} and CancerMine
+\citep{lever2019cancermine}, CIViC records curator-validated
+drug, gene, variant, and disease assertions with their supporting
+evidence; manual curation, however, lags the rate at which new
+publications are indexed in PubMed \citep{civicfact2025}. Pretrained
+biomedical encoders, most prominently PubMedBERT
+\citep{gu2021pubmedbert} and BioLinkBERT
+\citep{yasunaga2022biolinkbert}, are increasingly used to flag
+candidate assertions for curator review at scale.
+
+% Para 2: the unexamined assumption + evaluation literature gap
+Models are typically selected by their performance on public
+relation-extraction benchmarks: macro-averaged F1 score (macro-F1)
+on BioRED \citep{luo2022biored}, BC5CDR drug--disease F1
+\citep{li2016bc5cdr}, and component scores in suites such as the
+Biomedical Language Understanding and Reasoning Benchmark
+(BLURB) \citep{gu2021pubmedbert}. The implicit assumption is that
+benchmark performance predicts downstream KB yield. To our
+knowledge, this assumption has not been tested on a
+curator-validated oncology knowledge base. Construct-validity
+audits \citep{bowman2021construct} and evidence-centred benchmark
+designs \citep{liu2024ecbd} have shown that benchmark improvements
+need not imply meaningful capability gains, but those critiques
+address general-domain language understanding rather than
+biomedical curation.
+
+% Para 3: biomedical NLP gap
+Within biomedical NLP, benchmark suites (BLURB
+\citep{gu2021pubmedbert}; BigBIO \citep{fries2022bigbio}) and
+KB-curation pipelines (CIViCmine \citep{lever2019civicmine} for
+variant mining; BioREx \citep{lai2023biorex} for multi-corpus
+relation extraction) have developed in parallel. No study in
+either body of work has tested whether benchmark-selected pipelines
+optimise downstream KB yield in oncology.
+
+% Para 4: LLM-era context and encoder-only scoping
+Decoder-only large language models are now competitive with
+fine-tuned encoders on biomedical relation tasks
+\citep{chen2025nlpbench} and have been evaluated on BioRED and
+CIViC-Fact \citep{civicfact2025}. We restricted the study to
+encoder-only models because their inference pipeline and output
+distribution are homogeneous across the four encoder families
+compared here, so a variance decomposition can isolate encoder,
+schedule, and schema effects without confounding from prompt
+design or decoding configuration. The architectural diversity of
+current LLMs is a separate design axis that the present factorial
+cannot identify; we mark its extension as a stated follow-up
+(\S\ref{sec:discussion}).
+
+% Para 5: contributions and RQs
+To close this gap, we ran a pre-registered factorial study of 310
+training runs across four encoders, three nested relation schemas,
+and three training schedules, evaluated against 162
+curator-validated CIViC assertions. Benchmark and KB performance
+are treated as two evaluation axes to be compared rather than
+merged onto a single ranking
+\citep{lawlor2017triangulation,liugaunt2024asq}, and the
+contribution of each design lever is partitioned across the two
+axes by a variance decomposition. Four research questions follow:
+whether a finer relation schema improves KB surfacing (RQ1);
+whether encoder scale, multi-corpus training, or
+oncology-projected staging improves generalisation (RQ2); whether
+encoder rankings are stable across three KB-audit metrics (RQ3);
+and whether benchmark and KB rankings diverge under matched
+configurations (RQ4).

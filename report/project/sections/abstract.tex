@@ -1,0 +1,48 @@
+% =============================================================
+% STRUCTURED ABSTRACT for JAMIA Research and Applications
+% (≤250 words; five headings:
+%  Objective / Materials and Methods / Results / Discussion /
+%  Conclusion).
+% This file expands inside \begin{abstract}...\end{abstract}.
+% =============================================================
+
+\noindent\textbf{Objective.}
+In cancer knowledge-base (KB) curation, models are typically
+selected by public benchmark scores. We test whether benchmark F1
+predicts KB-surfacing yield in a pre-registered factorial study.
+
+\noindent\textbf{Materials and Methods.}
+We trained 310 models across two waves: a schema-comparison wave
+(4 encoders \(\times\) 3 schemas \(\times\) 10 seeds = 120 runs)
+selecting the operational relation schema, and a configuration
+wave (3 encoders \(\times\) 3 training schedules \(\times\) 20
+seeds + a 10-seed RoBERTa-base reference = 190 runs) under that
+schema. Each model was evaluated against 162 curator-validated
+CIViC oncology assertions. Analyses comprised
+pre-registered paired-difference contrasts on three KB-audit
+metrics, a variance decomposition by design lever, and the
+rank-inversion rate among benchmark-tied configuration pairs.
+
+\noindent\textbf{Results.}
+An entity-pair schema improved KB surfacing over a coarser family
+schema (\(\Delta=+0.117\), 95\% paired-bootstrap CI [+0.045, +0.194]).
+Multi-corpus training improved out-of-domain generalisation on
+BC5CDR drug--disease F1 (\(\Delta=+0.139\), Cohen's \(d=2.04\)).
+Encoder, schedule, and their interaction explained about five
+times more variance in KB argmax accuracy than in BioRED ex-NEG F1
+(\(R_B=0.21\); cluster-bootstrap 95\% CI [0.028, 0.990]), with the
+training-schedule term contributing most of the gap.
+Among 18 benchmark-tied configuration pairs the rank-inversion rate
+was 0.50 (95\% CI [0.14, 0.83]).
+
+\noindent\textbf{Discussion.}
+Benchmark F1 and KB yield diverged most in the training-schedule
+arm: half of benchmark-tied configuration pairs reversed their KB
+ranking. Wide confidence intervals at the realised cell counts
+limit directional claims for the coupling-slope family.
+
+\noindent\textbf{Conclusion.}
+Benchmark scores alone are insufficient for oncology KB curation
+pipelines. We recommend pairing benchmark scoring with a
+lightweight KB-anchor audit on 100--200 curator-validated
+assertions; the audit code and pre-registration are released.

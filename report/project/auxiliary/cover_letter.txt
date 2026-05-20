@@ -1,0 +1,75 @@
+[Your address]
+University of Bristol
+Bristol, UK
+
+[Submission date]
+
+The Editors
+Journal of the American Medical Informatics Association
+
+Dear Editors,
+
+Please consider for publication our manuscript "Heterogeneous
+supervision and evaluation validity in cancer assertion extraction",
+a Research and Applications contribution.
+
+Cancer informatics increasingly relies on automated extraction of
+drug, gene, variant, and disease assertions from the biomedical
+literature to support clinical knowledge-base curation. Practitioners
+typically select among candidate models by their performance on
+public NLP benchmarks (BioRED, BC5CDR), implicitly assuming that
+benchmark performance is a faithful proxy for downstream
+knowledge-base utility. This assumption has not, to our knowledge,
+been tested directly at scale on a curator-validated oncology
+knowledge base. We test it through a pre-registered factorial study
+of 310 training runs evaluated against 162 curator-validated CIViC
+assertions, introducing three KB-audit metrics and a variance
+decomposition that contrasts benchmark- and KB-explained variance
+under the same design lever.
+
+The result contradicts the implicit benchmark-as-proxy assumption.
+Training schedule explained more variance in KB surfacing than in
+benchmark F1 (configuration-arm variance ratio 0.21, 95% CI
+[0.03, 0.99]), opposite to our pre-registered direction; half of
+benchmark-tied configurations reversed their KB ordering. Without
+the pre-registration the reversed direction would have been
+difficult to distinguish from selective reporting. The implication
+for clinical-NLP pipelines is concrete: selection on benchmark F1
+alone risks selecting configurations whose downstream KB yield is
+not maximised, and KB-anchored evaluation should be a routine
+component of model-selection protocols.
+
+The main text is approximately 3,000 words with two tables and five
+figures; the supplementary material contains full numerical results,
+the falsification audit chain for the parameter-efficient
+fine-tuning arm, and the pre-registered statistical analysis plan.
+All training and analysis code, the pre-registration document, and
+the amendment log are openly available at
+https://github.com/MRCIEU/assertion_extraction. The work has not
+been published or submitted elsewhere, and we declare no competing
+interests.
+
+AI disclosure (per JAMIA policy): A large language model (Claude
+Opus 4.7, temperature = 0, deterministic decoding) was used as the
+second annotator in an inter-annotator audit of the heuristic
+knowledge-base projection (Section 2.4 of the manuscript). The
+model was prompted with the same label definitions used by the
+heuristic but blind to the heuristic's output. The audit is treated
+as a model-based validity check; its Cohen's kappa is reported as a
+lower bound on human-level agreement. No generative AI was used in
+manuscript drafting, data analysis, or statistical interpretation.
+
+We suggest the following potential reviewers, none of whom we have
+collaborated with directly:
+- [Reviewer 1 name and affiliation -- biomedical-NLP benchmark expert]
+- [Reviewer 2 name and affiliation -- CIViC / cancer-NLP expert]
+- [Reviewer 3 name and affiliation -- biomedical relation-extraction
+  expert]
+
+Thank you for your consideration.
+
+Sincerely,
+
+[Your name]
+On behalf of all authors
+[your.email@bristol.ac.uk]
