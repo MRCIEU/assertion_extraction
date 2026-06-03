@@ -1,4 +1,0 @@
-# Large CIViCmine TSVs are reproducible from Zenodo
-# (DOI 10.5281/zenodo.7689629). Don't commit them to git.
-civicmine/*.tsv.gz
-civicmine/*.tsv

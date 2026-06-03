@@ -1,5 +1,0 @@
-pairing_family,n_documents,n_examples,n_positive_instances
-drug_disease,70,3036,1012
-drug_gene,34,417,139
-gene_disease,73,822,274
-variant_disease,40,453,151

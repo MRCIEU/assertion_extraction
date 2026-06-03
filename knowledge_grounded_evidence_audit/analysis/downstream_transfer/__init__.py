@@ -1,1 +1,0 @@
-# Downstream transfer sweep package.

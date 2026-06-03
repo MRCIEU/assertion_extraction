@@ -1,4 +1,0 @@
-comparison_id,baseline_type,family_id,model_reference,model_comparator,biored_f1_reference,biored_f1_comparator,delta_biored,bc5cdr_f1_reference,bc5cdr_f1_comparator,delta_bc5cdr,executed,evidence,audit_classification
-B2_pipeline_vs_shared,in_family,family_2_architecture_update,M003,M009,0.2837,0.2775,0.0062,0.5483,0.4729,0.0754,true,primary_external_results.csv,genuine_executed_baseline
-B3_full_vs_top4,ablation,family_2_architecture_update,M015,M025,0.2857,0.2667,0.019,0.5572,0.4199,0.1373,true,primary_external_results.csv,genuine_executed_baseline
-B4_mainline_vs_t3_control,control_contrast,family_1_simpler_training_policy,M015,M005,0.2857,0.2746,0.0111,0.5572,0.4798,0.0774,true,primary_external_results.csv,genuine_executed_baseline

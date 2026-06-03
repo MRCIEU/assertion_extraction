@@ -1,86 +1,28 @@
+# Non-code outputs (not tracked)
+../projects/project_1/
+
+# SLURM logs (local to repo checkout)
+*.slurm.out
+*.slurm.err
+
 # Python
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
 *.egg-info/
-.python-version
-.venv/
-venv/
+.ipynb_checkpoints/
 
-# Generated experiment artifacts (re-derivable from code + raw data)
-*.csv
-*.json
-*.jsonl
-*.json.gz
-*.jsonl.gz
-*.parquet
-*.pkl
-*.npz
-
-# Generated configs (use generate_*_configs.py to recreate)
-**/configs/
-**/inputs/
-*.yaml
-!**/sbatch/*.yaml
-
-# Logs and run outputs
-logs/
-runs/
-slurm-*.out
-slurm-*.err
-*.log
-*.tsv
-
-# Model checkpoints
+# Models / checkpoints
 *.pt
-*.pth
 *.bin
 *.safetensors
 checkpoints/
 
-# Embedded IDE / build artifacts inside LaTeX tree (large; do not commit)
-report/project/.prism/
-report/project/.claudeprism/
+# Environment
+.env
+.venv/
 
-# Documentation drafts (kept locally only; canonical paper-design doc is not uploaded)
-*.md
-!README.md
-# Exception: the frozen lock-time snapshot is git-tracked as a GitHub-visible
-# reference for reviewers (see paper_development_design.md Appendix B row 3,
-# 2026-04-16). The evolving paper_development_design.md remains ignored.
-!paper_development_design_locked_v1.md
-# Exception: the paper-ready scientific skeleton extracted at lock v2
-# (2026-04-27). Tracked so the prelock_v2 tag has a complete reproducibility
-# package on GitHub.
-!paper_methods_draft.md
-
-# ID lists and submission records (regenerable)
-phase_*_ids.txt
-phase_*_submission_record.json
-phase_*_eval_submission.json
-
-# Cached data (PubMed, HuggingFace)
-pubmed_cache/
-hf_hub_cache/
-.cache/
-
-# Editor / OS
+# OS
 .DS_Store
-.idea/
-.vscode/
-*.swp
 
-# ---------------------------------------------------------------------------
-# Manuscript (report/project): force-track sources despite broad ignores above
-# Git applies last matching rule — keep this block at end of file.
-# Repo-root docs (e.g. PRE_PHASE_3_AUDIT.md, RESULTS_*.md) stay *.md-ignored;
-# use: git add -f <path> when you intend to track them.
-# ---------------------------------------------------------------------------
-!report/project/**/*.tex
-!report/project/*.tex
-!report/project/**/*.bib
-!report/project/**/*.cls
-!report/project/**/*.sty
-!report/project/figures/**
-!report/project/auxiliary/**
+# Migration helper (optional local)
+_migrate_paths.py

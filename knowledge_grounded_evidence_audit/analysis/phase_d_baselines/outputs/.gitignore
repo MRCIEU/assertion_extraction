@@ -1,5 +1,0 @@
-# Plotted / large artefacts (regenerate from Zenodo)
-civicmine/*.tsv.gz
-
-# LLM calls (may contain prompts)
-outputs/llm_baseline/
