@@ -16,8 +16,10 @@ from .analysis import (
     encoder_summary,
     encoder_summary_seed_bootstrap,
     filter_clean_runs,
+    filter_easy_hard_runs,
     flag_degenerate_runs,
     mean_level_correlations,
+    print_deberta_kb_audit,
     seed_level_association_table,
     variance_components_table,
 )
@@ -203,6 +205,8 @@ def run_analysis() -> None:
     for _, d in degenerate.iterrows():
         print(f"  {d['model_id']} seed={int(d['seed'])}  flags={d.get('flags', '')}")
 
+    print_deberta_kb_audit(per_run_all)
+
     per_run_clean = filter_clean_runs(per_run_all)
     encoder_primary = encoder_summary_seed_bootstrap(per_run_clean)
     encoder_primary.to_csv(OUTPUT_DIR / "10_encoder_summary.csv", index=False)
@@ -225,13 +229,17 @@ def run_analysis() -> None:
     seed_assoc_primary = seed_level_association_table(per_run_clean, "primary_clean_seeds")
     seed_assoc_primary.to_csv(OUTPUT_DIR / "10_benchmark_kb_seed_association.csv", index=False)
 
-    ece_corr = benchmark_ece_correlation(encoder_primary, "primary_clean_seeds")
+    ece_corr_primary = benchmark_ece_correlation(encoder_primary, "primary_clean_seeds")
+    ece_corr_all = benchmark_ece_correlation(encoder_all, "sensitivity_all_seeds")
+    ece_corr = pd.concat([ece_corr_primary, ece_corr_all], ignore_index=True)
     ece_corr.to_csv(OUTPUT_DIR / "10_benchmark_ece_correlations.csv", index=False)
 
     sensitivity = collapsed_seed_sensitivity(per_run_all, per_run_clean)
     sensitivity.to_csv(OUTPUT_DIR / "10_collapsed_seed_sensitivity.csv", index=False)
 
-    easy_hard = _load_required_csv("10_easy_hard_ranking.csv")
+    easy_hard = filter_easy_hard_runs(
+        _load_required_csv("10_easy_hard_ranking.csv"), per_run_clean
+    )
     eh_summary: dict[str, Any] = {}
     for subset_key, label in [("hard_cross_sentence", "hard"), ("easy_co_sentence", "easy")]:
         sub = easy_hard[easy_hard["subset"] == subset_key]
@@ -262,7 +270,8 @@ def run_analysis() -> None:
         encoder_primary=encoder_primary,
         encoder_all=encoder_all,
         range_check=range_check,
-        ece_corr=ece_corr,
+        ece_corr_primary=ece_corr_primary,
+        ece_corr_all=ece_corr_all,
     )
 
     write_report(
@@ -274,9 +283,11 @@ def run_analysis() -> None:
         mean_corr_sensitivity=mean_sensitivity,
         variance_primary=variance_primary,
         seed_assoc_primary=seed_assoc_primary,
-        ece_corr=ece_corr,
+        ece_corr=ece_corr_primary,
+        ece_corr_all=ece_corr_all,
         sensitivity=sensitivity,
         easy_hard_summary=eh_summary,
+        encoder_all=encoder_all,
     )
     print("\n=== Round 1 re-analysis complete ===")
 
@@ -291,7 +302,8 @@ def _print_analysis_stdout(
     encoder_primary: pd.DataFrame,
     encoder_all: pd.DataFrame,
     range_check: dict,
-    ece_corr: pd.DataFrame,
+    ece_corr_primary: pd.DataFrame,
+    ece_corr_all: pd.DataFrame,
 ) -> None:
     print("\n=== Variance shares (primary, clean seeds) ===")
     for _, row in variance_primary.iterrows():
@@ -328,8 +340,19 @@ def _print_analysis_stdout(
     print(f"DeBERTa benchmark F1 (primary, 6 clean seeds): {deb:.3f}")
     print(f"DeBERTa benchmark F1 (all 8 seeds): {deb_all:.3f}")
 
-    sp = ece_corr[ece_corr["metric"] == "spearman"].iloc[0]
+    gd = encoder_primary["kb_mrr_gene_drug_mean"]
     print(
-        f"Benchmark vs ECE (mean-level): Spearman={sp['estimate']:.3f} "
+        f"\n=== Gene-drug KB MRR range (primary, nine encoder means) ===\n"
+        f"  {gd.min():.3f} to {gd.max():.3f} (DeBERTa at {encoder_primary.loc[encoder_primary['model_id']=='deberta_base','kb_mrr_gene_drug_mean'].iloc[0]:.3f})"
+    )
+
+    sp = ece_corr_primary[ece_corr_primary["metric"] == "spearman"].iloc[0]
+    print(
+        f"Benchmark vs ECE (mean-level, primary clean seeds): Spearman={sp['estimate']:.3f} "
         f"[{sp.get('ci_lo')}, {sp.get('ci_hi')}]"
+    )
+    sp_all = ece_corr_all[ece_corr_all["metric"] == "spearman"].iloc[0]
+    print(
+        f"Benchmark vs ECE (mean-level, all seeds incl. collapsed): Spearman={sp_all['estimate']:.3f} "
+        f"[{sp_all.get('ci_lo')}, {sp_all.get('ci_hi')}]"
     )

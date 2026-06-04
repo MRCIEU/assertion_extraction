@@ -13,8 +13,17 @@ from .config import BOOTSTRAP_N, MODEL_BY_ID, TRAIN_SEEDS
 DEGENERATE_BENCHMARK_MAX = 1e-6
 DEGENERATE_VAL_MAX = 1e-6
 
+# DeBERTa training failures (Round 1): excluded from all primary metrics.
+COLLAPSED_DEBERTA_SEEDS = frozenset({45, 49})
+
+
+def is_collapsed_deberta(row: pd.Series) -> bool:
+    return row["model_id"] == "deberta_base" and int(row["seed"]) in COLLAPSED_DEBERTA_SEEDS
+
 
 def is_clean_run(row: pd.Series) -> bool:
+    if is_collapsed_deberta(row):
+        return False
     return float(row["benchmark_f1"]) > DEGENERATE_BENCHMARK_MAX and float(
         row.get("best_val_f1", 1)
     ) > DEGENERATE_VAL_MAX
@@ -23,6 +32,49 @@ def is_clean_run(row: pd.Series) -> bool:
 def filter_clean_runs(per_run: pd.DataFrame) -> pd.DataFrame:
     mask = per_run.apply(is_clean_run, axis=1)
     return per_run.loc[mask].copy()
+
+
+def filter_easy_hard_runs(easy_hard: pd.DataFrame, per_run_clean: pd.DataFrame) -> pd.DataFrame:
+    """Drop collapsed DeBERTa seeds from easy/hard subset averages (distance ranker kept)."""
+    clean_keys = set(zip(per_run_clean["model_id"].astype(str), per_run_clean["seed"].astype(int)))
+
+    def keep(row: pd.Series) -> bool:
+        if row["model_id"] == "distance_ranker":
+            return True
+        return (str(row["model_id"]), int(row["seed"])) in clean_keys
+
+    return easy_hard.loc[easy_hard.apply(keep, axis=1)].copy()
+
+
+def print_deberta_kb_audit(per_run_all: pd.DataFrame) -> None:
+    """Stdout audit: per-seed KB MRR and clean means (blocking data check)."""
+    sub = per_run_all[per_run_all["model_id"] == "deberta_base"].sort_values("seed")
+    print("\n=== DeBERTa per-seed KB MRR (stored results, all 8 seeds) ===")
+    for _, r in sub.iterrows():
+        seed = int(r["seed"])
+        clean = is_clean_run(r)
+        flag = "PRIMARY" if clean else "EXCLUDED (collapsed)"
+        print(
+            f"  seed {seed:2d} [{flag}]  benchmark_f1={float(r['benchmark_f1']):.4f}  "
+            f"kb_gene_drug={float(r['kb_mrr_gene_drug']):.4f}  "
+            f"kb_gene_disease={float(r['kb_mrr_gene_disease']):.4f}  ece={float(r['ece']):.4f}"
+        )
+    clean = filter_clean_runs(sub)
+    print("\n=== DeBERTa clean-seed means (seeds 42,43,44,46,47,48 only) ===")
+    print(
+        f"  kb_gene_drug={clean['kb_mrr_gene_drug'].mean():.4f}  "
+        f"kb_gene_disease={clean['kb_mrr_gene_disease'].mean():.4f}  "
+        f"benchmark_f1={clean['benchmark_f1'].mean():.4f}  ece={clean['ece'].mean():.4f}"
+    )
+    print(
+        f"  benchmark_f1 if all 8 seeds averaged (sensitivity)={sub['benchmark_f1'].mean():.4f}"
+    )
+    collapsed = sub[sub.apply(is_collapsed_deberta, axis=1)]
+    if not collapsed.empty:
+        print(
+            "  Collapsed seeds carry non-missing KB MRR (~0.54) but are excluded; "
+            "they do not inflate clean means (~0.68)."
+        )
 
 
 def flag_degenerate_runs(per_run_df: pd.DataFrame) -> pd.DataFrame:

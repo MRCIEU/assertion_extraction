@@ -23,12 +23,14 @@ def write_report(
     per_run_clean: pd.DataFrame,
     degenerate: pd.DataFrame,
     encoder_primary: pd.DataFrame,
+    encoder_all: pd.DataFrame,
     range_check: dict[str, Any],
     mean_corr_primary: pd.DataFrame,
     mean_corr_sensitivity: pd.DataFrame,
     variance_primary: pd.DataFrame,
     seed_assoc_primary: pd.DataFrame,
     ece_corr: pd.DataFrame,
+    ece_corr_all: pd.DataFrame,
     sensitivity: pd.DataFrame,
     easy_hard_summary: dict[str, Any],
 ) -> Path:
@@ -46,6 +48,18 @@ def write_report(
 
     gd_means = encoder_primary["kb_mrr_gene_drug_mean"]
     gdis_means = encoder_primary["kb_mrr_gene_disease_mean"]
+    gd_lo, gd_hi = float(gd_means.min()), float(gd_means.max())
+
+    deb_primary = encoder_primary[encoder_primary["model_id"] == "deberta_base"].iloc[0]
+    deb_all = encoder_all[encoder_all["model_id"] == "deberta_base"].iloc[0]
+    deb_bench_clean = float(deb_primary["benchmark_f1_mean"])
+    deb_bench_all8 = float(deb_all["benchmark_f1_mean"])
+    deb_kb_gd = float(deb_primary["kb_mrr_gene_drug_mean"])
+    deb_kb_gdis = float(deb_primary["kb_mrr_gene_disease_mean"])
+
+    eight_enc = encoder_primary[encoder_primary["model_id"] != "deberta_base"]
+    eight_gd_lo = float(eight_enc["kb_mrr_gene_drug_mean"].min())
+    eight_gd_hi = float(eight_enc["kb_mrr_gene_drug_mean"].max())
 
     lines = [
         "# Round 1: Does benchmark rank predict knowledge-base ranking and calibration?",
@@ -83,15 +97,35 @@ def write_report(
             )
         lines.append("")
         lines.append(
-            "In the primary analysis, DeBERTa remains one of nine encoders, but its mean and "
-            "uncertainty intervals use only its six clean seeds. The two collapsed seeds are "
-            "retained in a sensitivity comparison that includes all eight seeds when averaging."
+            "In the primary analysis, DeBERTa remains one of nine encoders, but every "
+            "summary (benchmark F1, both KB mean reciprocal rank axes, expected calibration "
+            "error, and easy or hard subset ranking) uses only its six clean seeds. Seeds 45 "
+            "and 49 still have stored KB scores near 0.54 on gene-drug, but those values are "
+            "excluded because the runs collapsed; they do not inflate the clean-seed means "
+            f"near {deb_kb_gd:.3f} on gene-drug and {deb_kb_gdis:.3f} on gene-disease."
         )
     else:
         lines.append("No collapsed runs were flagged in the stored results.")
 
     lines.extend(
         [
+            "",
+            "## DeBERTa as a stated limitation of Round 1",
+            "",
+            "DeBERTa-base is the only encoder with catastrophic seed failures in this round. "
+            f"When all eight seeds are averaged naively, its benchmark F1 ({deb_bench_all8:.3f}) "
+            "is the lowest among encoders. With the two failed seeds excluded, its six-seed "
+            f"benchmark mean ({deb_bench_clean:.3f}) is mid-pack, but the pair of zero runs "
+            "shows the shared recipe was unstable for this model. The recipe (learning rate "
+            "2e-05, no warmup, validation-F1 checkpoint) was chosen from warmup-tolerant "
+            "encoders and was not verified on DeBERTa, which is known to train poorly under "
+            "no-warmup settings. Round 1's benchmark gradient and any nine-point mean-level "
+            "correlation therefore depend partly on one encoder whose low or missing scores "
+            "may reflect the training recipe as much as intrinsic capability. This is a "
+            "limitation of Round 1 as run, not a verdict on DeBERTa in general. The same "
+            "point applies on both axes: two failed seeds pull its benchmark mean down while "
+            "two high seeds pull its gene-drug KB mean up, so its encoder averages should be "
+            "read with wide seed uncertainty rather than as fixed points.",
             "",
             "## Prerequisite: ranking beyond entity proximity (Analysis A)",
             "",
@@ -106,10 +140,10 @@ def write_report(
             f"distance ranker reached mean reciprocal rank {easy.get('distance_mrr', 0):.3f}. "
             f"On cross-sentence pairs (the hard subset), its mean reciprocal rank was "
             f"{hard.get('distance_mrr', 0):.3f}. "
-            f"Across nine encoders (seed-averaged), {hard.get('n_beats', 0)} of nine exceeded the "
-            f"distance ranker on the hard subset and {easy.get('n_beats', 0)} of nine on the easy "
-            "subset. Hard-subset performance is the main check that learned models capture "
-            "relation signal rather than proximity alone.",
+            f"Across nine encoders (clean seeds only, seed-averaged), {hard.get('n_beats', 0)} of "
+            f"nine exceeded the distance ranker on the hard subset and {easy.get('n_beats', 0)} of "
+            "nine on the easy subset. Hard-subset performance is the main check that learned "
+            "models capture relation signal rather than proximity alone.",
             "",
             "## Benchmark gradient across encoders",
             "",
@@ -118,9 +152,9 @@ def write_report(
             f"{range_check['spread']:.3f}). The spread is wide enough to order encoders on "
             "the benchmark axis, but that ordering is only one part of the story.",
             "",
-            "DeBERTa sits at the lower end of the benchmark distribution when collapsed seeds "
-            "are excluded. Its mean from six clean seeds should be read alongside its wide "
-            "seed uncertainty, not as a single precise point estimate.",
+            f"DeBERTa's six-seed benchmark mean is {deb_bench_clean:.3f}; averaging all eight "
+            f"seeds including failures yields {deb_bench_all8:.3f}, clearly separated in "
+            "Figure 2. Read both numbers when interpreting the benchmark gradient.",
             "",
             "## Simpler analysis: nine encoder means (weaker approach)",
             "",
@@ -186,10 +220,17 @@ def write_report(
             "",
             "## Headline: pair-type-specific pattern, not a global anti-correlation",
             "",
-            f"Gene-drug KB mean reciprocal rank is essentially flat across encoders "
-            f"(roughly {gd_means.min():.3f} to {gd_means.max():.3f}). Benchmark rank carries "
-            "little information for this pair type: the encoder choice barely shifts a "
-            "plateau near 0.62 to 0.65.",
+            f"Gene-drug KB mean reciprocal rank spans {gd_lo:.3f} to {gd_hi:.3f} across the "
+            f"nine encoder means (primary analysis). Eight encoders cluster between "
+            f"{eight_gd_lo:.3f} and {eight_gd_hi:.3f}; DeBERTa's six-seed mean looks higher "
+            f"at {deb_kb_gd:.3f}, but that is carried by two high seeds while its remaining "
+            "clean seeds fall within the same pack near 0.635 to 0.645. That pattern is the "
+            "same underlying story as elsewhere in this round: individual seeds can dominate "
+            f"an encoder's average while between-encoder differences stay small (about "
+            f"{vc_gd['encoder_variance_share']*100:.0f}% of variance between encoders on "
+            "gene-drug). The 0.680 does not establish an encoder-level KB advantage; it "
+            "reinforces the insensitivity reading. Benchmark rank still carries limited "
+            "information for gene-drug.",
             "",
             "Gene-disease shows a subtler pattern. Domain-specialised encoders (BioLinkBERT, "
             "BioMedBERT, PubMedBERT, SciBERT, BioBERT) sit slightly below general-domain "
@@ -199,8 +240,11 @@ def write_report(
             "divergence, not a clean global rule that higher benchmark score implies higher "
             "KB ranking.",
             "",
-            "The accurate story is insensitivity of KB ranking to encoder choice, plus a "
-            "small gene-disease tilt, not a headline negative correlation.",
+            "The accurate story is insensitivity of KB ranking to encoder choice on "
+            "gene-drug, with seed noise larger than between-encoder differences, a mild "
+            "gene-disease tilt, and no general rule that benchmark score predicts KB rank. "
+            "DeBERTa's elevated gene-drug mean is a seed-driven artifact on the same logic "
+            "as its split benchmark means, not evidence of an encoder-level KB advantage.",
             "",
             "## Calibration behaves differently from ranking",
             "",
@@ -208,14 +252,27 @@ def write_report(
     )
 
     ece_sp = ece_corr[ece_corr["metric"] == "spearman"]
+    ece_sp_all = ece_corr_all[ece_corr_all["metric"] == "spearman"]
     if not ece_sp.empty:
         r = ece_sp.iloc[0]
-        lines.append(
-            f"At the nine encoder means, higher benchmark F1 associates with lower expected "
-            f"calibration error (Spearman {_fmt(r['estimate'], r.get('ci_lo'), r.get('ci_hi'))}). "
+        cal_lines = [
+            f"At the nine encoder means (primary, clean seeds only), higher benchmark F1 "
+            f"associates with lower expected calibration error (Spearman "
+            f"{_fmt(r['estimate'], r.get('ci_lo'), r.get('ci_hi'))})."
+        ]
+        if not ece_sp_all.empty:
+            ra = ece_sp_all.iloc[0]
+            cal_lines.append(
+                f"Averaging all eight seeds per encoder gives Spearman "
+                f"{_fmt(ra['estimate'], ra.get('ci_lo'), ra.get('ci_hi'))}, matching the "
+                "earlier Round 1 value; excluding the two collapsed DeBERTa seeds gives "
+                f"{r['estimate']:.3f} (primary)."
+            )
+        cal_lines.append(
             "Calibration and ranking therefore tell different stories in Round 1: benchmark "
             "score tracks alignment with CIViC curation inclusion more than it tracks KB rank."
         )
+        lines.extend(cal_lines)
     lines.append(
         "Expected calibration error is measured against CIViC curation inclusion, not against "
         "objective biomedical truth. A confident score on a pair CIViC did not curate may "
@@ -231,16 +288,16 @@ def write_report(
             "averages shifts DeBERTa's benchmark mean downward and widens apparent "
             "between-encoder spread on the benchmark axis. Mean-level correlations and "
             "variance shares move accordingly; the primary insensitivity reading on KB "
-            "ranking is unchanged.",
+            "ranking for the eight stable encoders is unchanged.",
             "",
             "## What Round 1 does and does not show",
             "",
             "Round 1 shows that KB ranking on the frozen CIViC pool is largely insensitive "
-            "to encoder choice relative to seed noise, with gene-drug scores almost flat and "
-            "gene-disease showing only a modest domain-versus-general tilt. Benchmark F1 "
-            "separates encoders more clearly, but that separation does not reliably carry "
-            "over to KB ranking. Calibration follows benchmark score more closely than "
-            "ranking does.",
+            "to encoder choice relative to seed noise, with gene-drug scores clustered for "
+            "most encoders and gene-disease showing only a modest domain-versus-general tilt. "
+            "Benchmark F1 separates encoders more clearly, but that separation does not "
+            "reliably carry over to KB ranking. Calibration follows benchmark score more "
+            "closely than ranking does.",
             "",
             "Round 1 does not establish a strong predictive rule from benchmark rank to KB "
             "rank. It also does not rule out weak or pair-specific structure: the data allow "
