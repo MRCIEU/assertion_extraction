@@ -24,6 +24,8 @@ ROUND10_OUTPUTS = OUTPUT_ROOT / "outputs" / "10_round1_benchmark_kb"
 ROUND10_DATA = OUTPUT_ROOT / "data" / "10_round1_benchmark_kb"
 ROUND10_DEGENERATE_CSV = ROUND10_OUTPUTS / "10_degenerate_runs.csv"
 ROUND10_ENCODER_SUMMARY = ROUND10_OUTPUTS / "10_encoder_summary.csv"
+ROUND10_PER_RUN_CSV = ROUND10_OUTPUTS / "10_per_run_scores.csv"
+ROUND1_RECIPE_LR = 2e-5
 ROUND10_DEBERTA_COLLAPSED_META = (
     ROUND10_DATA / "checkpoints" / "deberta_base" / "seed_45" / "10_train_metadata.json"
 )

@@ -1,7 +1,25 @@
-# Round 2 diagnostic
+# Round 2 diagnostic (folder 20)
 
-Read-only analysis on Round 1 to judge whether a training-configuration Round 2 is worth compute.
+Reads per-epoch checkpoints from folder-10 step-2 matrix. Inference only; no training.
 
-## Key findings (fill after run)
+## Fast run (CPU, validation curves from logs only)
 
-Checkpoint policy on the main matrix: **val_f1-best weights only** (one recoverable epoch per run). Matched sweep (lr 2e-5, no warmup, seed 42) retains **val_loss-best and val_f1-best** weights for PubMedBERT, RoBERTa, DistilBERT.
+```bash
+source ~/miniforge3/etc/profile.d/conda.sh && conda activate hf-hpc
+export REPO=/home/b5ac/freddieyu.b5ac/project_1
+export OUTPUT_ROOT=${REPO}/../projects/project_1
+cd ${REPO}/20_round2_diagnostic
+python run.py
+```
+
+## Full two-axis run (GPU, focus encoders only)
+
+Computes per-epoch self-measured benchmark F1 and KB from saved epoch checkpoints for PubMedBERT, RoBERTa, and DistilBERT (three encoders x eight seeds x up to ten epochs).
+
+```bash
+python run.py --rescore-epochs
+```
+
+Cluster: `sbatch step_diagnostic.sbatch` (defaults to `--rescore-epochs`; use `STEP_ARGS=""` for fast CPU-only).
+
+Requires folder-11 best-point scores for comparison (`11_per_run_scores.csv`).

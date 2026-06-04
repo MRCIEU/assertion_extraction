@@ -1,9 +1,25 @@
-# Preparation pipeline (steps 00–04)
+# Project 1: two-stage encoder study
 
-This repo holds code to study the divergence between public benchmark rank and knowledge-base (KB) ranking/calibration on curator-validated oncology relations. The divergence is rooted in incommensurability between training-corpus labels and KB clinical assertions. It is a descriptive study to understand the relationship between public benchmark rank and KB ranking/calibration on curator-validated oncology relations.
+Preparation steps 00–04 freeze data, protocol, and the CIViC candidate pool.
 
-## Research questions
+## Main study (rebuilt layout)
 
-- **RQ1:** How does training-label granularity affect KB relation-presence performance?
-- **RQ2:** How do training schedule/configuration choices affect benchmark vs KB axes?
-- **RQ3:** When do benchmark rank and KB ranking/calibration diverge?
+| Folder | Role |
+|--------|------|
+| `10_recipe_sweep_and_training/` | **Produces models** — step 1 recipe sweep, step 2 full matrix (72 runs) |
+| `11_round1_analysis/` | **Consumes models** — Round 1 benchmark vs KB analysis |
+| `20_round2_diagnostic/` | **Consumes models** — training-dynamics diagnostic and power check |
+| `21_round2_experiment/` | Placeholder for Round 2 main experiment (after folder 20) |
+| `shared/` | Unified training, benchmark F1, KB scoring, distance analysis |
+
+Legacy folders `10_round1_benchmark_kb/` and `11_encoder_recipe_check/` are deprecated; see their `DEPRECATED.md` files.
+
+## Environment
+
+```bash
+source ~/miniforge3/etc/profile.d/conda.sh && conda activate hf-hpc
+export REPO=/home/b5ac/freddieyu.b5ac/project_1
+export OUTPUT_ROOT=${REPO}/../projects/project_1
+```
+
+Each stage has its own standalone sbatch script. Run stages separately; nothing auto-chains.

@@ -1,0 +1,29 @@
+"""Cross-stage constants: leak guard, training hyperparameters, metrics."""
+
+from __future__ import annotations
+
+LEAKED_PMIDS = frozenset({"16434489", "18794803", "23430109"})
+
+SAMPLING_SEED = 42
+TRAIN_SEEDS = list(range(42, 50))
+PRIMARY_SCOPE = "primary"
+RECALL_K_VALUES = (1, 3, 5)
+ECE_N_BINS = 10
+PAIR_TYPES = ("gene-drug", "gene-disease")
+TRAIN_PAIR_TYPES = {"gene-drug", "gene-disease"}
+
+MAX_TRAIN_EXAMPLES = 24_000
+NEGATIVES_PER_POSITIVE = 2
+TRAIN_BATCH_SIZE = 16
+MAX_SEQ_LENGTH = 256
+INFER_BATCH_SIZE = 32
+MAX_EPOCHS = 10
+EARLY_STOPPING_PATIENCE = 3
+CHECKPOINT_CRITERION = "val_f1"
+
+DEGENERATE_VAL_F1_MAX = 1e-6
+DEGENERATE_BENCHMARK_F1_MAX = 1e-6
+GUARD_SEEDS = (43, 44)
+
+BOOTSTRAP_N = 5000
+POSITIVE_FRACTION_PRIOR = 0.148
