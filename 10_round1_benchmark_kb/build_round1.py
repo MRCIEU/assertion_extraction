@@ -5,18 +5,21 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 
 from .analysis import (
     benchmark_ece_correlation,
     benchmark_f1_range_check,
-    benchmark_kb_correlation,
-    easy_hard_encoder_summary,
+    collapsed_seed_sensitivity,
     encoder_summary,
-    encoder_vs_seed_noise,
+    encoder_summary_seed_bootstrap,
+    filter_clean_runs,
     flag_degenerate_runs,
-    sensitivity_correlations,
+    mean_level_correlations,
+    seed_level_association_table,
+    variance_components_table,
 )
 from .benchmark_eval import build_biored_test_examples, evaluate_benchmark_f1
 from .config import (
@@ -38,7 +41,7 @@ from .distance_analysis import (
     score_proximity_correlations,
     subset_ranking_metrics,
 )
-from .figures import generate_all_figures
+from .figures import generate_publication_figures
 from .inference import load_all_scores, score_checkpoint
 from .metrics_calibration import calibration_baselines, calibration_for_scores, expected_calibration_error
 from .metrics_ranking import metrics_by_pair_type, ranking_metrics_for_scores
@@ -157,182 +160,176 @@ def run_matrix(
         run_analysis()
 
 
-def run_analysis() -> None:
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    print(f"\nTraining strategy: {TRAINING_STRATEGY}")
-
-    n_markers = sum(
-        1
-        for spec in MODELS
-        for seed in TRAIN_SEEDS
-        if result_path(spec, seed).exists()
-    )
-    n_scores = len(list(SCORES_DIR.glob("*/*.jsonl"))) if SCORES_DIR.exists() else 0
-    print(f"Completion markers: {n_markers} / {len(MODELS) * len(TRAIN_SEEDS)}")
-    print(f"Score files: {n_scores} / {len(MODELS) * len(TRAIN_SEEDS)}")
-    if n_markers < len(MODELS) * len(TRAIN_SEEDS):
-        raise SystemExit("Analysis aborted: not all round1_complete.json markers present.")
-
-    candidates = load_primary_candidates()
-    pool = enrich_with_proximity(candidates)
+def _load_per_run_from_disk() -> pd.DataFrame:
+    """Load seventy-two runs from stored summary or completion markers (no rescoring)."""
+    summary = OUTPUT_DIR / "10_per_run_scores.csv"
+    if summary.exists():
+        df = pd.read_csv(summary)
+        if len(df) >= len(MODELS) * len(TRAIN_SEEDS):
+            return df
 
     rows: list[dict] = []
     for spec in MODELS:
         for seed in TRAIN_SEEDS:
             marker = result_path(spec, seed)
-            if marker.exists():
-                rows.append(json.loads(marker.read_text(encoding="utf-8")))
-    if not rows:
-        print("No completed models for analysis.")
-        return
+            if not marker.exists():
+                raise SystemExit(
+                    f"Analysis aborted: missing {marker}. "
+                    "Need all 72 completion markers or 10_per_run_scores.csv."
+                )
+            rows.append(json.loads(marker.read_text(encoding="utf-8")))
+    return pd.DataFrame(rows)
 
-    per_run = pd.DataFrame(rows)
-    degenerate = flag_degenerate_runs(per_run)
-    if not degenerate.empty:
-        degenerate.to_csv(OUTPUT_DIR / "10_degenerate_runs.csv", index=False)
-        print(f"WARNING: {len(degenerate)} degenerate run(s) flagged (see 10_degenerate_runs.csv)")
-    per_run.to_csv(OUTPUT_DIR / "10_per_run_scores.csv", index=False)
 
-    encoder_df = encoder_summary(per_run)
-    encoder_df.to_csv(OUTPUT_DIR / "10_encoder_summary.csv", index=False)
+def _load_required_csv(name: str) -> pd.DataFrame:
+    path = OUTPUT_DIR / name
+    if not path.exists():
+        raise SystemExit(f"Analysis aborted: missing required file {path}")
+    return pd.read_csv(path)
 
-    range_check = benchmark_f1_range_check(encoder_df)
-    range_row = {k: v for k, v in range_check.items() if k != "encoder_f1_values"}
-    pd.DataFrame([range_row]).to_csv(OUTPUT_DIR / "10_benchmark_f1_range.csv", index=False)
-    pd.DataFrame(
-        [{"short_name": n, "benchmark_f1_mean": v} for n, v in range_check.get("encoder_f1_values", [])]
-    ).to_csv(OUTPUT_DIR / "10_benchmark_f1_by_encoder.csv", index=False)
-    print(
-        f"\nBenchmark F1 gradient ({range_check['n_encoders']} encoders): "
-        f"min={range_check['min_f1']:.3f}, max={range_check['max_f1']:.3f}, "
-        f"mean={range_check['mean_f1']:.3f}, median={range_check['median_f1']:.3f}, "
-        f"spread={range_check['spread']:.3f}"
+
+def run_analysis() -> None:
+    """Re-analyse from disk only: no training, no rescoring, no GPU."""
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    print(f"\nRound 1 re-analysis (stored results only). Training strategy: {TRAINING_STRATEGY}")
+
+    per_run_all = _load_per_run_from_disk()
+    per_run_all.to_csv(OUTPUT_DIR / "10_per_run_scores.csv", index=False)
+
+    degenerate = flag_degenerate_runs(per_run_all)
+    degenerate.to_csv(OUTPUT_DIR / "10_degenerate_runs.csv", index=False)
+
+    print("\n=== Collapsed seeds (training failures) ===")
+    for _, d in degenerate.iterrows():
+        print(f"  {d['model_id']} seed={int(d['seed'])}  flags={d.get('flags', '')}")
+
+    per_run_clean = filter_clean_runs(per_run_all)
+    encoder_primary = encoder_summary_seed_bootstrap(per_run_clean)
+    encoder_primary.to_csv(OUTPUT_DIR / "10_encoder_summary.csv", index=False)
+
+    encoder_all = encoder_summary(per_run_all)
+    range_check = benchmark_f1_range_check(encoder_primary)
+    pd.DataFrame([{k: v for k, v in range_check.items() if k != "encoder_f1_values"}]).to_csv(
+        OUTPUT_DIR / "10_benchmark_f1_range.csv", index=False
     )
 
-    corr_rows = []
-    for pt, col in [
-        ("gene-drug", "kb_mrr_gene_drug_mean"),
-        ("gene-disease", "kb_mrr_gene_disease_mean"),
-        ("overall", "kb_mrr_overall_mean"),
-    ]:
-        if col not in encoder_df.columns:
-            continue
-        res = benchmark_kb_correlation(encoder_df, col, pt)
-        corr_rows.append(
-            {
-                "pair_type": pt,
-                "metric": "spearman",
-                "estimate": res["spearman"].get("estimate"),
-                "ci_lo": res["spearman"].get("ci_lo"),
-                "ci_hi": res["spearman"].get("ci_hi"),
-                "n": res["spearman"].get("n"),
-            }
-        )
-        corr_rows.append(
-            {
-                "pair_type": pt,
-                "metric": "pearson",
-                "estimate": res["pearson"].get("estimate"),
-                "ci_lo": res["pearson"].get("ci_lo"),
-                "ci_hi": res["pearson"].get("ci_hi"),
-                "n": res["pearson"].get("n"),
-            }
-        )
-        res["rank_flips"].to_csv(OUTPUT_DIR / f"10_rank_flips_{pt.replace('-', '_')}.csv", index=False)
+    variance_primary = variance_components_table(per_run_clean)
+    variance_primary.to_csv(OUTPUT_DIR / "10_variance_components.csv", index=False)
 
-    pd.DataFrame(corr_rows).to_csv(OUTPUT_DIR / "10_benchmark_kb_correlations.csv", index=False)
-    for row in corr_rows:
-        if row.get("metric") == "spearman":
-            print(
-                f"  Benchmark vs KB ({row['pair_type']}): "
-                f"Spearman={row.get('estimate')} "
-                f"[{row.get('ci_lo')}, {row.get('ci_hi')}]"
-            )
-
-    ece_corr = benchmark_ece_correlation(encoder_df)
-    pd.DataFrame(
-        [
-            {"metric": "spearman", **ece_corr["spearman"]},
-            {"metric": "pearson", **ece_corr["pearson"]},
-        ]
-    ).to_csv(OUTPUT_DIR / "10_benchmark_ece_correlations.csv", index=False)
-    sp = ece_corr.get("spearman", {})
-    print(
-        f"  Benchmark vs ECE: Spearman={sp.get('estimate')} "
-        f"[{sp.get('ci_lo')}, {sp.get('ci_hi')}]"
+    mean_primary = mean_level_correlations(encoder_primary, "primary_clean_seeds")
+    mean_sensitivity = mean_level_correlations(encoder_all, "sensitivity_all_seeds")
+    pd.concat([mean_primary, mean_sensitivity], ignore_index=True).to_csv(
+        OUTPUT_DIR / "10_benchmark_kb_correlations.csv", index=False
     )
 
-    noise = encoder_vs_seed_noise(per_run)
-    noise.to_csv(OUTPUT_DIR / "10_encoder_vs_seed_noise.csv", index=False)
+    seed_assoc_primary = seed_level_association_table(per_run_clean, "primary_clean_seeds")
+    seed_assoc_primary.to_csv(OUTPUT_DIR / "10_benchmark_kb_seed_association.csv", index=False)
 
-    sens_rows = sensitivity_correlations(encoder_df, per_run)
-    pd.DataFrame(sens_rows).to_csv(OUTPUT_DIR / "10_benchmark_kb_correlations_sensitivity.csv", index=False)
+    ece_corr = benchmark_ece_correlation(encoder_primary, "primary_clean_seeds")
+    ece_corr.to_csv(OUTPUT_DIR / "10_benchmark_ece_correlations.csv", index=False)
 
-    try:
-        scores_df = load_all_scores()
-    except FileNotFoundError as exc:
-        raise SystemExit(
-            f"Analysis aborted: score files required for analyses A/C/D ({exc})"
-        ) from exc
+    sensitivity = collapsed_seed_sensitivity(per_run_all, per_run_clean)
+    sensitivity.to_csv(OUTPUT_DIR / "10_collapsed_seed_sensitivity.csv", index=False)
 
-    if scores_df.empty:
-        raise SystemExit("Analysis aborted: no score files loaded.")
+    easy_hard = _load_required_csv("10_easy_hard_ranking.csv")
+    eh_summary: dict[str, Any] = {}
+    for subset_key, label in [("hard_cross_sentence", "hard"), ("easy_co_sentence", "easy")]:
+        sub = easy_hard[easy_hard["subset"] == subset_key]
+        dr = sub[sub["model_id"] == "distance_ranker"]["mrr"].iloc[0]
+        enc = sub[sub["model_id"] != "distance_ranker"].groupby("model_id")["mrr"].mean()
+        eh_summary[label] = {
+            "distance_mrr": float(dr),
+            "n_beats": int((enc > dr).sum()),
+        }
 
-    if len(scores_df["run_id"].unique()) < len(MODELS) * len(TRAIN_SEEDS):
-        print(
-            f"WARNING: expected {len(MODELS) * len(TRAIN_SEEDS)} score runs, "
-            f"got {len(scores_df['run_id'].unique())}"
-        )
-
-    subset = subset_ranking_metrics(scores_df, pool)
-    dr_subset = distance_ranker_subset_metrics(pool)
-    subset_all = pd.concat([subset, dr_subset], ignore_index=True)
-    subset_all.to_csv(OUTPUT_DIR / "10_easy_hard_ranking.csv", index=False)
-    eh_summary = easy_hard_encoder_summary(subset_all)
-    eh_summary.to_csv(OUTPUT_DIR / "10_easy_hard_encoder_summary.csv", index=False)
-    n_beats_hard = int(eh_summary[eh_summary["subset"] == "hard"]["beats_distance_ranker"].sum())
-    print(
-        f"  Easy/hard: {n_beats_hard}/{len(MODELS)} encoders beat distance ranker on hard subset "
-        f"(step-03 distance MRR ref ≈ 0.489)"
+    deberta_all_mean = float(
+        encoder_all.loc[encoder_all["model_id"] == "deberta_base", "benchmark_f1_mean"].iloc[0]
     )
 
-    prox = score_proximity_correlations(scores_df, pool)
-    prox.to_csv(OUTPUT_DIR / "10_distance_score_correlation.csv", index=False)
-    print(f"  Mean score–proximity Pearson r: {prox['pearson_r'].mean():.3f}")
+    generate_publication_figures(
+        encoder_primary,
+        easy_hard,
+        deberta_all_seeds_mean=deberta_all_mean,
+    )
+    print(f"Figures (4 PNG) -> {FIGURE_DIR}")
 
-    cal_rows = []
-    for run_id, sub in scores_df.groupby("run_id"):
-        cal_rows.append(calibration_for_scores(sub, run_id))
-    cal_df = pd.DataFrame(cal_rows)
-    cal_df.to_csv(OUTPUT_DIR / "10_calibration_ece.csv", index=False)
-
-    base_rows = []
-    for name, sub in calibration_baselines(candidates).items():
-        base_rows.append(calibration_for_scores(sub, name))
-    pd.DataFrame(base_rows).to_csv(OUTPUT_DIR / "10_calibration_baselines.csv", index=False)
-
-    kb_detail = []
-    for run_id, sub in scores_df.groupby("run_id"):
-        for pt, ss in sub.groupby("pair_type"):
-            row = ranking_metrics_for_scores(ss, run_id)
-            row["run_id"] = run_id
-            row["model_id"] = ss["model_id"].iloc[0]
-            row["seed"] = int(ss["seed"].iloc[0])
-            row["pair_type"] = pt
-            kb_detail.append(row)
-    pd.DataFrame(kb_detail).to_csv(OUTPUT_DIR / "10_kb_metrics_by_pair_type.csv", index=False)
-
-    generate_all_figures(encoder_df, per_run, subset_all, scores_df, candidates)
-    print(f"  Figures -> {FIGURE_DIR}")
+    _print_analysis_stdout(
+        degenerate=degenerate,
+        variance_primary=variance_primary,
+        seed_assoc_primary=seed_assoc_primary,
+        mean_primary=mean_primary,
+        mean_sensitivity=mean_sensitivity,
+        encoder_primary=encoder_primary,
+        encoder_all=encoder_all,
+        range_check=range_check,
+        ece_corr=ece_corr,
+    )
 
     write_report(
-        per_run=per_run,
-        encoder_df=encoder_df,
-        range_check=range_check,
-        corr_rows=corr_rows,
-        ece_corr=ece_corr,
-        noise=noise,
+        per_run_clean=per_run_clean,
         degenerate=degenerate,
-        sens_rows=sens_rows,
+        encoder_primary=encoder_primary,
+        range_check=range_check,
+        mean_corr_primary=mean_primary,
+        mean_corr_sensitivity=mean_sensitivity,
+        variance_primary=variance_primary,
+        seed_assoc_primary=seed_assoc_primary,
+        ece_corr=ece_corr,
+        sensitivity=sensitivity,
+        easy_hard_summary=eh_summary,
     )
-    print("\n=== Round 1 analysis complete ===")
+    print("\n=== Round 1 re-analysis complete ===")
+
+
+def _print_analysis_stdout(
+    *,
+    degenerate: pd.DataFrame,
+    variance_primary: pd.DataFrame,
+    seed_assoc_primary: pd.DataFrame,
+    mean_primary: pd.DataFrame,
+    mean_sensitivity: pd.DataFrame,
+    encoder_primary: pd.DataFrame,
+    encoder_all: pd.DataFrame,
+    range_check: dict,
+    ece_corr: pd.DataFrame,
+) -> None:
+    print("\n=== Variance shares (primary, clean seeds) ===")
+    for _, row in variance_primary.iterrows():
+        print(
+            f"  {row['metric']}: encoder share={row['encoder_variance_share']:.3f} "
+            f"seed share={row['seed_variance_share']:.3f} icc={row['icc']:.3f}"
+        )
+
+    print("\n=== Seed-level benchmark vs KB (cluster bootstrap, primary) ===")
+    for _, row in seed_assoc_primary.iterrows():
+        lo, hi = row.get("ci_lo"), row.get("ci_hi")
+        ci_txt = f"[{lo:.3f}, {hi:.3f}]" if lo is not None and hi is not None else "[n/a]"
+        print(f"  {row['pair_type']}: Spearman={row['spearman']:.3f} {ci_txt}")
+
+    print("\n=== Mean-level correlations (weaker, nine encoder means) ===")
+    for label, mdf in [("primary", mean_primary), ("sensitivity_all_seeds", mean_sensitivity)]:
+        for pt in ["gene-drug", "gene-disease"]:
+            sub = mdf[(mdf["pair_type"] == pt) & (mdf["metric"] == "spearman")]
+            if not sub.empty:
+                r = sub.iloc[0]
+                print(
+                    f"  [{label}] {pt}: Spearman={r['estimate']:.3f} "
+                    f"[{r.get('ci_lo')}, {r.get('ci_hi')}]"
+                )
+
+    others = encoder_primary[encoder_primary["model_id"] != "deberta_base"]
+    print(
+        f"\nEight-encoder benchmark F1 (primary): "
+        f"{others['benchmark_f1_mean'].min():.3f} to {others['benchmark_f1_mean'].max():.3f} "
+        f"(spread {range_check['spread']:.3f})"
+    )
+    deb = encoder_primary[encoder_primary["model_id"] == "deberta_base"]["benchmark_f1_mean"].iloc[0]
+    deb_all = encoder_all[encoder_all["model_id"] == "deberta_base"]["benchmark_f1_mean"].iloc[0]
+    print(f"DeBERTa benchmark F1 (primary, 6 clean seeds): {deb:.3f}")
+    print(f"DeBERTa benchmark F1 (all 8 seeds): {deb_all:.3f}")
+
+    sp = ece_corr[ece_corr["metric"] == "spearman"].iloc[0]
+    print(
+        f"Benchmark vs ECE (mean-level): Spearman={sp['estimate']:.3f} "
+        f"[{sp.get('ci_lo')}, {sp.get('ci_hi')}]"
+    )

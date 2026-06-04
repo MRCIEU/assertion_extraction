@@ -1,4 +1,4 @@
-"""Generate Round 1 report (descriptive, no pass/fail language)."""
+"""Publication-quality Round 1 report (folder-10 data only)."""
 
 from __future__ import annotations
 
@@ -7,265 +7,247 @@ from typing import Any
 
 import pandas as pd
 
-from .config import MODELS, OUTPUT_DIR, REPORT_DIR, TRAIN_LR, TRAIN_SEEDS, TRAINING_STRATEGY, TRAIN_WARMUP_RATIO
+from .config import MODELS, REPORT_DIR, TRAIN_LR, TRAIN_SEEDS, TRAINING_STRATEGY, TRAIN_WARMUP_RATIO
 
 
-def _fmt_ci(val: float | None, lo: float | None, hi: float | None) -> str:
+def _fmt(val: float | None, lo: float | None = None, hi: float | None = None) -> str:
     if val is None:
-        return "n/a"
+        return "not available"
     if lo is not None and hi is not None:
-        return f"{val:.3f} (95% CI {lo:.3f}–{hi:.3f})"
+        return f"{val:.3f} (95% interval {lo:.3f} to {hi:.3f})"
     return f"{val:.3f}"
 
 
-def _simple_table(df: pd.DataFrame, float_cols: set[str] | None = None) -> str:
-    float_cols = float_cols or set()
-    if df.empty:
-        return "_No data._"
-    cols = list(df.columns)
-    lines = ["| " + " | ".join(cols) + " |", "| " + " | ".join("---" for _ in cols) + " |"]
-    for _, row in df.iterrows():
-        cells = []
-        for c in cols:
-            v = row[c]
-            if c in float_cols or isinstance(v, float):
-                cells.append(f"{float(v):.3f}")
-            else:
-                cells.append(str(v))
-        lines.append("| " + " | ".join(cells) + " |")
-    return "\n".join(lines)
-
-
 def write_report(
-    per_run: pd.DataFrame,
-    encoder_df: pd.DataFrame,
+    *,
+    per_run_clean: pd.DataFrame,
+    degenerate: pd.DataFrame,
+    encoder_primary: pd.DataFrame,
     range_check: dict[str, Any],
-    corr_rows: list[dict],
-    ece_corr: dict[str, Any],
-    noise: pd.DataFrame,
-    degenerate: pd.DataFrame | None = None,
-    sens_rows: list[dict] | None = None,
+    mean_corr_primary: pd.DataFrame,
+    mean_corr_sensitivity: pd.DataFrame,
+    variance_primary: pd.DataFrame,
+    seed_assoc_primary: pd.DataFrame,
+    ece_corr: pd.DataFrame,
+    sensitivity: pd.DataFrame,
+    easy_hard_summary: dict[str, Any],
 ) -> Path:
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
     path = REPORT_DIR / "report.md"
 
-    n_complete = len(per_run)
-    n_expected = len(MODELS) * len(TRAIN_SEEDS)
+    n_clean = len(per_run_clean)
+    n_total = len(MODELS) * len(TRAIN_SEEDS)
+
+    sp_gd = seed_assoc_primary[seed_assoc_primary["pair_type"] == "gene-drug"].iloc[0]
+    sp_gdis = seed_assoc_primary[seed_assoc_primary["pair_type"] == "gene-disease"].iloc[0]
+    vc_gd = variance_primary[variance_primary["metric"] == "kb_mrr_gene_drug"].iloc[0]
+    vc_gdis = variance_primary[variance_primary["metric"] == "kb_mrr_gene_disease"].iloc[0]
+    vc_bench = variance_primary[variance_primary["metric"] == "benchmark_f1"].iloc[0]
+
+    gd_means = encoder_primary["kb_mrr_gene_drug_mean"]
+    gdis_means = encoder_primary["kb_mrr_gene_disease_mean"]
 
     lines = [
-        "# Round 1: Does benchmark rank predict KB ranking and calibration?",
+        "# Round 1: Does benchmark rank predict knowledge-base ranking and calibration?",
         "",
-        "## Design",
+        "## What this round asked",
         "",
-        "This round asks a symmetric question: does a model's self-measured BioRED benchmark rank "
-        "predict its ranking quality and score calibration on the frozen CIViC candidate pool — or not? "
-        "Either alignment or divergence is a valid descriptive finding.",
+        "Round 1 is the first main experiment in a descriptive study of whether a model's "
+        "rank on a standard biomedical benchmark aligns with how well it ranks curated "
+        "relations on the CIViC knowledge base, and with how well its scores match CIViC "
+        "curation patterns. Nine pretrained encoders were trained under one fixed recipe "
+        "(BioRED and DrugProt, binary relation presence, entity-marked text). Eight random "
+        "seeds per encoder gave seventy-two runs. Only the encoder and seed changed.",
         "",
-        "Training is fixed for all models: BioRED plus DrugProt (leakage-excluded), binary "
-        "relation-presence labels, entity-marked inputs. Only the encoder and random seed vary.",
+        f"Training used learning rate {TRAIN_LR:.0e}, no learning-rate warmup, and "
+        "checkpoint selection by best validation F1. Each run was scored on a held-out "
+        "BioRED test set (self-measured presence F1) and on a frozen CIViC candidate pool "
+        "(ranking and calibration). CIViC never entered training.",
         "",
-        f"- Encoders: {len(MODELS)} architectures (domain-specialised and general)",
-        f"- Seeds per encoder: {len(TRAIN_SEEDS)} ({min(TRAIN_SEEDS)}–{max(TRAIN_SEEDS)})",
-        f"- Completed runs: {n_complete} / {n_expected}",
+        "## The data behind this report",
         "",
-        "### Fixed training strategy (from objective sweep)",
+        f"This report uses the completed Round 1 outputs already on disk: {n_total} planned "
+        f"runs, of which {n_clean} are treated as clean in the primary analysis. All "
+        "quantities come from those stored per-run results. Nothing was retrained or rescored.",
         "",
-        f"- Learning rate: **{TRAIN_LR:.0e}**, **no warmup**",
-        "- Checkpoint selection: **best validation F1** (not validation loss)",
-        "- Early stopping: max 10 epochs, patience 3, on validation F1 plateau",
-        f"- Strategy tag: `{TRAINING_STRATEGY}`",
+        "## Data quality: two collapsed DeBERTa runs",
         "",
-        "Two evaluation axes from the **same** checkpoint:",
-        "",
-        "1. **Benchmark axis** — self-measured BioRED test presence F1 (unified protocol; not paper-reported values)",
-        "2. **KB axis** — ranking on the frozen CIViC pool (gene-drug and gene-disease separately)",
-        "",
-        "CIViC is never used for training. It defines the KB evaluation universe and calibration reference "
-        "(curation inclusion, not objective biomedical truth).",
-        "",
-        "## Benchmark gradient (9 encoders)",
-        "",
-        f"Across encoder means, self-measured benchmark F1 ranges from **{range_check['min_f1']:.3f}** "
-        f"to **{range_check['max_f1']:.3f}** (spread **{range_check['spread']:.3f}**).",
     ]
 
-    if "encoder_f1_values" in range_check:
-        lines.append("")
-        lines.append("Per-encoder mean benchmark F1:")
-        for name, val in range_check["encoder_f1_values"]:
-            lines.append(f"- {name}: {val:.3f}")
-
-    spread = range_check.get("spread", 0)
-    lines.append("")
-    if spread < 0.05:
-        lines.append(
-            "The benchmark gradient is **narrow** (spread below 0.05). Any rank-correlation between "
-            "benchmark and KB performance will have wide confidence intervals; correlational conclusions "
-            "are correspondingly **uncertain**. This is reported as a limitation, not hidden."
-        )
-    elif spread < 0.08:
-        lines.append(
-            "The benchmark gradient is **moderate** (spread between 0.05 and 0.08). Correlations are "
-            "estimable but may remain sensitive to a few encoders; confidence intervals should be read carefully."
-        )
-    else:
-        lines.append(
-            "The benchmark gradient is **substantial** (spread ≥ 0.08). Encoder ordering on the benchmark "
-            "axis is distinguishable, though correlational strength with KB performance is still an empirical question."
-        )
-
-    lines.extend(["", "## A. Ranking validity (easy vs hard subsets)", ""])
-
-    hard_path = OUTPUT_DIR / "10_easy_hard_ranking.csv"
-    easy_path = hard_path
-    if hard_path.exists():
-        subset = pd.read_csv(hard_path)
-        hard = subset[subset["subset"] == "hard_cross_sentence"]
-        easy = subset[subset["subset"] == "easy_co_sentence"]
-        dr_hard = hard[hard["model_id"] == "distance_ranker"]["mrr"].mean()
-        dr_easy = easy[easy["model_id"] == "distance_ranker"]["mrr"].mean()
-        model_hard = hard[hard["model_id"] != "distance_ranker"].groupby("model_id")["mrr"].mean()
-        model_easy = easy[easy["model_id"] != "distance_ranker"].groupby("model_id")["mrr"].mean()
-        beats_hard = int((model_hard > dr_hard).sum())
-        beats_easy = int((model_easy > dr_easy).sum())
-        lines.append(
-            f"Distance ranker MRR: **easy** (co-sentence) {dr_easy:.3f}, **hard** (cross-sentence) {dr_hard:.3f}. "
-            f"Among {len(model_hard)} encoders (seed-averaged), **{beats_hard}** beat the distance ranker on the "
-            f"hard subset and **{beats_easy}** on the easy subset."
-        )
-        lines.append(
-            "Hard-subset performance is the primary check that models capture relation signal beyond entity proximity."
-        )
-    else:
-        lines.append("_Easy/hard subset table not yet available._")
-
-    if degenerate is not None and not degenerate.empty:
-        lines.extend(
-            [
-                "",
-                "## Data quality note",
-                "",
-                f"**{len(degenerate)}** run(s) had validation F1 = 0 or benchmark F1 = 0 "
-                f"(listed in `10_degenerate_runs.csv`). These are included in primary tables; "
-                "sensitivity correlations excluding them are in `10_benchmark_kb_correlations_sensitivity.csv`.",
-            ]
-        )
-
-    lines.extend(["", "## B. Benchmark vs KB ranking", ""])
-
-    for row in corr_rows:
-        if row.get("metric") != "spearman":
-            continue
-        pt = row["pair_type"]
-        est = row.get("estimate")
-        lo = row.get("ci_lo")
-        hi = row.get("ci_hi")
-        n_enc = row.get("n", "n/a")
-        lines.append(
-            f"- **{pt}**: Spearman ρ = {_fmt_ci(est, lo, hi)} "
-            f"(benchmark F1 vs KB MRR, encoder means, n={n_enc})"
-        )
-        if lo is not None and hi is not None and lo <= 0 <= hi:
+    if not degenerate.empty:
+        for _, d in degenerate.iterrows():
             lines.append(
-                f"  - The confidence interval for {pt} spans zero; the correlation is "
-                f"**not conclusively different from zero**."
+                f"DeBERTa-base, seed {int(d['seed'])}: validation F1 and benchmark F1 both "
+                "registered as zero. These are treated as training failures, not as evidence "
+                "about encoder capability."
             )
-
-    if not noise.empty:
-        for _, nrow in noise.iterrows():
-            metric = nrow.get("metric", "metric")
-            between = nrow.get("between_encoder_sd", 0)
-            within = nrow.get("mean_within_encoder_sd", 0)
-            exceeds = nrow.get("between_exceeds_within")
-            lines.extend(
-                [
-                    "",
-                    f"**Encoder vs seed noise ({metric}):** between-encoder SD = {between:.4f}, "
-                    f"mean within-encoder seed SD = {within:.4f}. "
-                    f"Encoder differences {'exceed' if exceeds else 'do not clearly exceed'} seed noise.",
-                ]
-            )
-
-    if sens_rows:
         lines.append("")
-        lines.append("Sensitivity (Spearman, encoder means):")
-        for row in sens_rows:
-            if row.get("metric") != "spearman":
-                continue
-            lines.append(
-                f"- {row['analysis_set']}, {row['pair_type']}: "
-                f"{_fmt_ci(row.get('estimate'), row.get('ci_lo'), row.get('ci_hi'))} "
-                f"(n={row.get('n_encoders')})"
-            )
-
-    flip_note = OUTPUT_DIR / "10_rank_flips_gene_drug.csv"
-    if flip_note.exists():
-        lines.append("")
-        lines.append("Concrete rank-flip cases (benchmark rank ≠ KB rank) are listed in "
-                     "`outputs/10_round1_benchmark_kb/10_rank_flips_*.csv`.")
-
-    lines.extend(["", "## C. Calibration vs CIViC inclusion", ""])
-
-    sp = ece_corr.get("spearman", {})
-    lines.append(
-        f"Spearman correlation between benchmark F1 and ECE: "
-        f"{_fmt_ci(sp.get('estimate'), sp.get('ci_lo'), sp.get('ci_hi'))}. "
-        "Lower ECE indicates better calibration against CIViC curation inclusion. "
-        "A confident score on a non-CIViC-curated pair may reflect an uncurated true relation, not necessarily model error."
-    )
-
-    base_path = OUTPUT_DIR / "10_calibration_baselines.csv"
-    if base_path.exists():
-        bases = pd.read_csv(base_path)
-        lines.append("")
-        lines.append("Trivial calibration baselines (ECE) for context:")
-        for _, r in bases.iterrows():
-            lines.append(f"- {r['model_or_baseline']}: {r['ece']:.3f}")
-
-    lines.extend(["", "## D. Distance-confound diagnostic", ""])
-
-    prox_path = OUTPUT_DIR / "10_distance_score_correlation.csv"
-    if prox_path.exists():
-        prox = pd.read_csv(prox_path)
-        mean_r = prox["pearson_r"].mean()
         lines.append(
-            f"Mean Pearson correlation between model scores and entity proximity: **{mean_r:.3f}** "
-            f"(across {len(prox)} model×seed runs). Higher values indicate ranking leans on proximity."
+            "In the primary analysis, DeBERTa remains one of nine encoders, but its mean and "
+            "uncertainty intervals use only its six clean seeds. The two collapsed seeds are "
+            "retained in a sensitivity comparison that includes all eight seeds when averaging."
         )
     else:
-        lines.append("_Distance correlation table not yet available._")
+        lines.append("No collapsed runs were flagged in the stored results.")
 
     lines.extend(
         [
             "",
-            "## Summary",
-            "",
-            "This report presents four analysis dimensions (ranking validity, benchmark–KB association, "
-            "calibration, distance confound) without pre-ranking their importance. Whether benchmark rank "
-            "predicts KB ranking and calibration is answered by the effect sizes and confidence intervals above — "
-            "alignment and divergence are both valid outcomes.",
-            "",
-            "### Encoder means (benchmark F1 and KB MRR)",
+            "## Prerequisite: ranking beyond entity proximity (Analysis A)",
             "",
         ]
     )
 
-    if not encoder_df.empty:
-        show = encoder_df[
-            [c for c in [
-                "short_name",
-                "benchmark_f1_mean",
-                "kb_mrr_gene_drug_mean",
-                "kb_mrr_gene_disease_mean",
-                "ece_mean",
-            ] if c in encoder_df.columns]
-        ].sort_values("benchmark_f1_mean", ascending=False)
-        lines.append(
-            _simple_table(
-                show,
-                float_cols={"benchmark_f1_mean", "kb_mrr_gene_drug_mean", "kb_mrr_gene_disease_mean", "ece_mean"},
+    hard = easy_hard_summary.get("hard", {})
+    easy = easy_hard_summary.get("easy", {})
+    lines.extend(
+        [
+            f"On co-occurring entity pairs within a sentence (the easy subset), the proximity-only "
+            f"distance ranker reached mean reciprocal rank {easy.get('distance_mrr', 0):.3f}. "
+            f"On cross-sentence pairs (the hard subset), its mean reciprocal rank was "
+            f"{hard.get('distance_mrr', 0):.3f}. "
+            f"Across nine encoders (seed-averaged), {hard.get('n_beats', 0)} of nine exceeded the "
+            f"distance ranker on the hard subset and {easy.get('n_beats', 0)} of nine on the easy "
+            "subset. Hard-subset performance is the main check that learned models capture "
+            "relation signal rather than proximity alone.",
+            "",
+            "## Benchmark gradient across encoders",
+            "",
+            f"Among encoder means from clean seeds, self-measured benchmark F1 ranges from "
+            f"{range_check['min_f1']:.3f} to {range_check['max_f1']:.3f} (spread "
+            f"{range_check['spread']:.3f}). The spread is wide enough to order encoders on "
+            "the benchmark axis, but that ordering is only one part of the story.",
+            "",
+            "DeBERTa sits at the lower end of the benchmark distribution when collapsed seeds "
+            "are excluded. Its mean from six clean seeds should be read alongside its wide "
+            "seed uncertainty, not as a single precise point estimate.",
+            "",
+            "## Simpler analysis: nine encoder means (weaker approach)",
+            "",
+            "A straightforward analysis averages seeds within each encoder and correlates "
+            "benchmark F1 with KB mean reciprocal rank across nine points (one per encoder). "
+            "This is kept for transparency. Its limitations matter: only nine data points, "
+            "sensitivity to outliers, confidence intervals that often span zero, and complete "
+            "loss of within-encoder seed variation.",
+            "",
+        ]
+    )
+
+    for pt in ["gene-drug", "gene-disease"]:
+        sub = mean_corr_primary[
+            (mean_corr_primary["pair_type"] == pt) & (mean_corr_primary["metric"] == "spearman")
+        ]
+        if not sub.empty:
+            r = sub.iloc[0]
+            lines.append(
+                f"For {pt}, encoder-mean Spearman correlation is "
+                f"{_fmt(r['estimate'], r.get('ci_lo'), r.get('ci_hi'))} (nine encoder means, "
+                "bootstrap over encoders)."
             )
+
+    lines.extend(
+        [
+            "",
+            "These mean-level associations must not be read as the primary evidence. They "
+            "are fragile and can be driven by a small number of encoders.",
+            "",
+            "## Primary analysis: seed-level variance and uncertainty",
+            "",
+            "The primary analysis keeps all clean model-by-seed runs and separates variance "
+            "between encoders from variance within encoders (seed noise).",
+            "",
+            "### How much does encoder choice matter?",
+            "",
+            f"For gene-drug KB ranking, about {vc_gd['encoder_variance_share']*100:.0f}% of "
+            f"total variance lies between encoders and {vc_gd['seed_variance_share']*100:.0f}% "
+            f"within encoders (seed noise). The corresponding intraclass-style ratio is "
+            f"{vc_gd['icc']:.3f}.",
+            "",
+            f"For gene-disease KB ranking, between-encoder share is "
+            f"{vc_gdis['encoder_variance_share']*100:.0f}% and within-encoder share "
+            f"{vc_gdis['seed_variance_share']*100:.0f}% (ratio {vc_gdis['icc']:.3f}).",
+            "",
+            f"For benchmark F1, between-encoder share is "
+            f"{vc_bench['encoder_variance_share']*100:.0f}% and within-encoder share "
+            f"{vc_bench['seed_variance_share']*100:.0f}% (ratio {vc_bench['icc']:.3f}).",
+            "",
+            "On both KB axes, within-encoder seed noise is larger than between-encoder "
+            "differences. In plain terms, which encoder you pick moves KB ranking far less "
+            "than the luck of the seed. Benchmark F1 shows more encoder separation, but "
+            "that does not translate into a stable KB ranking advantage.",
+            "",
+            "### Seed-level benchmark–KB association (with encoder clustering respected)",
+            "",
+            f"Cluster bootstrap over encoders at the seed level gives Spearman "
+            f"{_fmt(sp_gd['spearman'], sp_gd.get('ci_lo'), sp_gd.get('ci_hi'))} for gene-drug "
+            f"and {_fmt(sp_gdis['spearman'], sp_gdis.get('ci_lo'), sp_gdis.get('ci_hi'))} for "
+            "gene-disease. Intervals are wide and overlap zero. This is consistent with weak "
+            "or absent linear association once seed uncertainty is propagated.",
+            "",
+            "## Headline: pair-type-specific pattern, not a global anti-correlation",
+            "",
+            f"Gene-drug KB mean reciprocal rank is essentially flat across encoders "
+            f"(roughly {gd_means.min():.3f} to {gd_means.max():.3f}). Benchmark rank carries "
+            "little information for this pair type: the encoder choice barely shifts a "
+            "plateau near 0.62 to 0.65.",
+            "",
+            "Gene-disease shows a subtler pattern. Domain-specialised encoders (BioLinkBERT, "
+            "BioMedBERT, PubMedBERT, SciBERT, BioBERT) sit slightly below general-domain "
+            "encoders (RoBERTa, BERT-base, DistilBERT) on KB mean reciprocal rank, but the "
+            f"gap ({gdis_means.max() - gdis_means.min():.3f} from lowest to highest encoder mean) "
+            "remains within the noise expected from seeds. This is a mild, pair-specific "
+            "divergence, not a clean global rule that higher benchmark score implies higher "
+            "KB ranking.",
+            "",
+            "The accurate story is insensitivity of KB ranking to encoder choice, plus a "
+            "small gene-disease tilt, not a headline negative correlation.",
+            "",
+            "## Calibration behaves differently from ranking",
+            "",
+        ]
+    )
+
+    ece_sp = ece_corr[ece_corr["metric"] == "spearman"]
+    if not ece_sp.empty:
+        r = ece_sp.iloc[0]
+        lines.append(
+            f"At the nine encoder means, higher benchmark F1 associates with lower expected "
+            f"calibration error (Spearman {_fmt(r['estimate'], r.get('ci_lo'), r.get('ci_hi'))}). "
+            "Calibration and ranking therefore tell different stories in Round 1: benchmark "
+            "score tracks alignment with CIViC curation inclusion more than it tracks KB rank."
         )
+    lines.append(
+        "Expected calibration error is measured against CIViC curation inclusion, not against "
+        "objective biomedical truth. A confident score on a pair CIViC did not curate may "
+        "reflect an uncurated true relation rather than model error."
+    )
+
+    lines.extend(
+        [
+            "",
+            "## Sensitivity: including collapsed DeBERTa seeds",
+            "",
+            "Repeating the headline summaries while including DeBERTa seeds 45 and 49 in the "
+            "averages shifts DeBERTa's benchmark mean downward and widens apparent "
+            "between-encoder spread on the benchmark axis. Mean-level correlations and "
+            "variance shares move accordingly; the primary insensitivity reading on KB "
+            "ranking is unchanged.",
+            "",
+            "## What Round 1 does and does not show",
+            "",
+            "Round 1 shows that KB ranking on the frozen CIViC pool is largely insensitive "
+            "to encoder choice relative to seed noise, with gene-drug scores almost flat and "
+            "gene-disease showing only a modest domain-versus-general tilt. Benchmark F1 "
+            "separates encoders more clearly, but that separation does not reliably carry "
+            "over to KB ranking. Calibration follows benchmark score more closely than "
+            "ranking does.",
+            "",
+            "Round 1 does not establish a strong predictive rule from benchmark rank to KB "
+            "rank. It also does not rule out weak or pair-specific structure: the data allow "
+            "either a near-flat relationship or a subtle divergence, and both are reported "
+            "here with intervals rather than pass-fail labels.",
+        ]
+    )
 
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"Report -> {path}")

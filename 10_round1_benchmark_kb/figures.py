@@ -1,156 +1,294 @@
-"""Figures for Round 1."""
+"""Four publication figures for Round 1 (300 dpi, IEU-style)."""
 
 from __future__ import annotations
 
-from pathlib import Path
-
-import matplotlib
-
-matplotlib.use("Agg")
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from .config import FIGURE_DIR, MODEL_BY_ID, PAIR_TYPES
-from .metrics_calibration import reliability_bins
+from .config import FIGURE_DIR, MODEL_BY_ID
+
+# Colour-blind-safe palette; single accent for reference lines only
+PALETTE = {
+    "encoder": "#4477AA",
+    "encoder_fill": "#4477AA",
+    "accent": "#EE6677",
+    "grid": "#CCCCCC",
+    "text": "#222222",
+    "domain": "#66CCEE",
+    "general": "#4477AA",
+}
+
+DPI = 300
 
 
-def _save(fig, name: str) -> Path:
+def _apply_style() -> None:
+    mpl.rcParams.update(
+        {
+            "font.family": "sans-serif",
+            "font.size": 11,
+            "axes.labelsize": 12,
+            "axes.titlesize": 13,
+            "xtick.labelsize": 10,
+            "ytick.labelsize": 10,
+            "legend.fontsize": 9,
+            "axes.edgecolor": PALETTE["text"],
+            "axes.linewidth": 0.8,
+            "axes.grid": True,
+            "grid.color": PALETTE["grid"],
+            "grid.linewidth": 0.5,
+            "axes.spines.top": False,
+            "axes.spines.right": False,
+            "figure.dpi": DPI,
+            "savefig.dpi": DPI,
+            "savefig.bbox": "tight",
+        }
+    )
+
+
+def _save(fig: plt.Figure, name: str) -> None:
     FIGURE_DIR.mkdir(parents=True, exist_ok=True)
     path = FIGURE_DIR / name
-    fig.savefig(path, dpi=150, bbox_inches="tight")
+    fig.savefig(path, dpi=DPI, bbox_inches="tight", facecolor="white")
     plt.close(fig)
-    return path
 
 
-def plot_benchmark_kb_scatter(encoder_df: pd.DataFrame) -> None:
-    for pt, col in [
-        ("gene-drug", "kb_mrr_gene_drug_mean"),
-        ("gene-disease", "kb_mrr_gene_disease_mean"),
-    ]:
-        if col not in encoder_df.columns:
+def figure1_benchmark_kb_faceted(encoder_df: pd.DataFrame) -> None:
+    """Figure 1: benchmark F1 vs KB MRR, faceted by pair type, seed-based error bars."""
+    _apply_style()
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4.8), sharex=True)
+    specs = [
+        ("gene-drug", "kb_mrr_gene_drug_mean", "kb_mrr_gene_drug_ci_lo", "kb_mrr_gene_drug_ci_hi"),
+        (
+            "gene-disease",
+            "kb_mrr_gene_disease_mean",
+            "kb_mrr_gene_disease_ci_lo",
+            "kb_mrr_gene_disease_ci_hi",
+        ),
+    ]
+    for ax, (pt, ymean, ylo, yhi) in zip(axes, specs):
+        if ymean not in encoder_df.columns:
             continue
-        fig, ax = plt.subplots(figsize=(7, 5))
         x = encoder_df["benchmark_f1_mean"]
-        y = encoder_df[col]
-        xerr = [
-            encoder_df["benchmark_f1_mean"] - encoder_df.get("benchmark_f1_ci_lo", x),
-            encoder_df.get("benchmark_f1_ci_hi", x) - encoder_df["benchmark_f1_mean"],
-        ]
-        yerr = [
-            encoder_df[col] - encoder_df.get(f"{col.replace('_mean', '_ci_lo')}", y),
-            encoder_df.get(f"{col.replace('_mean', '_ci_hi')}", y) - encoder_df[col],
-        ]
-        ax.errorbar(x, y, xerr=xerr, yerr=yerr, fmt="o", capsize=3, alpha=0.8)
+        y = encoder_df[ymean]
+        xerr = np.array(
+            [
+                x - encoder_df.get("benchmark_f1_ci_lo", x),
+                encoder_df.get("benchmark_f1_ci_hi", x) - x,
+            ]
+        )
+        yerr = np.array(
+            [
+                y - encoder_df.get(ylo, y),
+                encoder_df.get(yhi, y) - y,
+            ]
+        )
+        ax.errorbar(
+            x,
+            y,
+            xerr=xerr,
+            yerr=yerr,
+            fmt="o",
+            color=PALETTE["encoder"],
+            ecolor=PALETTE["encoder"],
+            elinewidth=1.2,
+            capsize=3,
+            markersize=7,
+            alpha=0.9,
+            zorder=3,
+        )
         for _, row in encoder_df.iterrows():
-            ax.annotate(row["short_name"], (row["benchmark_f1_mean"], row[col]), fontsize=7, alpha=0.8)
-        ax.set_xlabel("Self-measured BioRED test presence F1")
-        ax.set_ylabel(f"KB MRR ({pt})")
-        ax.set_title(f"Benchmark F1 vs KB ranking ({pt})")
-        _save(fig, f"10_benchmark_vs_kb_mrr_{pt.replace('-', '_')}.png")
+            ax.annotate(
+                row["short_name"].replace("-base", ""),
+                (row["benchmark_f1_mean"], row[ymean]),
+                fontsize=8,
+                ha="left",
+                va="bottom",
+                xytext=(4, 4),
+                textcoords="offset points",
+                color=PALETTE["text"],
+            )
+        ax.set_xlabel("BioRED test presence F1 (self-measured)")
+        ax.set_ylabel(f"KB mean reciprocal rank ({pt})")
+        ax.set_title(pt)
+    fig.suptitle(
+        "Benchmark score versus knowledge-base ranking by entity-pair type\n"
+        "(encoder means with seed-based uncertainty)",
+        y=1.05,
+        fontsize=13,
+    )
+    fig.subplots_adjust(wspace=0.32, top=0.82)
+    _save(fig, "fig1_benchmark_kb_scatter.png")
 
 
-def plot_benchmark_f1_range(encoder_df: pd.DataFrame) -> None:
-    fig, ax = plt.subplots(figsize=(8, 4))
+def figure2_benchmark_f1_range(encoder_df: pd.DataFrame, deberta_old_mean: float | None = None) -> None:
+    """Figure 2: ordered benchmark F1 strip for nine encoders."""
+    _apply_style()
     order = encoder_df.sort_values("benchmark_f1_mean")
-    ax.barh(order["short_name"], order["benchmark_f1_mean"], xerr=0.02, capsize=3, alpha=0.8)
-    ax.set_xlabel("Self-measured BioRED test presence F1 (encoder mean)")
-    ax.set_title("Benchmark quality gradient across encoders")
-    _save(fig, "10_benchmark_f1_range.png")
+    fig, ax = plt.subplots(figsize=(8.5, 4.2))
+    y_pos = np.arange(len(order))
+    xerr = np.array(
+        [
+            order["benchmark_f1_mean"] - order.get("benchmark_f1_ci_lo", order["benchmark_f1_mean"]),
+            order.get("benchmark_f1_ci_hi", order["benchmark_f1_mean"]) - order["benchmark_f1_mean"],
+        ]
+    )
+    colors = [
+        PALETTE["domain"] if "Bio" in n or "Sci" in n or "PubMed" in n else PALETTE["general"]
+        for n in order["short_name"]
+    ]
+    ax.barh(
+        y_pos,
+        order["benchmark_f1_mean"],
+        xerr=xerr,
+        color=colors,
+        edgecolor=PALETTE["text"],
+        linewidth=0.6,
+        height=0.65,
+        capsize=3,
+        alpha=0.85,
+    )
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(order["short_name"])
+    ax.set_xlabel("BioRED test presence F1 (encoder mean, seed uncertainty)")
+    ax.set_title("Benchmark quality gradient across nine encoders")
+    spread = order["benchmark_f1_mean"].max() - order["benchmark_f1_mean"].min()
+    ax.text(
+        0.98,
+        0.04,
+        f"Spread = {spread:.3f}",
+        transform=ax.transAxes,
+        ha="right",
+        va="bottom",
+        fontsize=10,
+    )
+    if deberta_old_mean is not None:
+        deb_row = order[order["model_id"] == "deberta_base"]
+        if not deb_row.empty:
+            ax.axvline(
+                deberta_old_mean,
+                color=PALETTE["accent"],
+                linestyle="--",
+                linewidth=1.5,
+                label=f"DeBERTa mean if collapsed seeds included ({deberta_old_mean:.3f})",
+            )
+            ax.legend(loc="lower right", frameon=True)
+    _save(fig, "fig2_benchmark_f1_range.png")
 
 
-def plot_easy_hard_bars(subset_df: pd.DataFrame) -> None:
-    for subset_name, subset_key, fname, title in [
-        (
-            "hard (cross-sentence)",
-            "hard_cross_sentence",
-            "10_easy_hard_hard_subset.png",
-            "Ranking validity: hard subset vs distance ranker",
-        ),
-        (
-            "easy (co-sentence)",
-            "easy_co_sentence",
-            "10_easy_hard_easy_subset.png",
-            "Ranking validity: easy subset vs distance ranker",
-        ),
-    ]:
-        sub = subset_df[subset_df["subset"] == subset_key].copy()
+def figure3_easy_hard_prerequisite(easy_hard_df: pd.DataFrame) -> None:
+    """Figure 3: model MRR vs distance ranker on easy and hard subsets."""
+    _apply_style()
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4.8), sharey=False)
+    panels = [
+        ("easy_co_sentence", "Co-sentence pairs (easy)"),
+        ("hard_cross_sentence", "Cross-sentence pairs (hard)"),
+    ]
+    for ax, (subset_key, title) in zip(axes, panels):
+        sub = easy_hard_df[easy_hard_df["subset"] == subset_key]
         if sub.empty:
             continue
+        dr = sub[sub["model_id"] == "distance_ranker"]["mrr"].iloc[0]
         enc = sub[sub["model_id"] != "distance_ranker"].groupby("model_id")["mrr"].mean().reset_index()
         enc["short_name"] = enc["model_id"].map(
             lambda m: MODEL_BY_ID[m].short_name if m in MODEL_BY_ID else m
         )
-        dr = (
-            sub[sub["model_id"] == "distance_ranker"]["mrr"].iloc[0]
-            if (sub["model_id"] == "distance_ranker").any()
-            else 0
-        )
-
-        fig, ax = plt.subplots(figsize=(9, 4))
         enc = enc.sort_values("mrr")
-        ax.barh(enc["short_name"], enc["mrr"], alpha=0.8, label=f"trained models ({subset_name} mean)")
-        ax.axvline(dr, color="red", linestyle="--", label=f"distance ranker ({dr:.3f})")
-        ax.set_xlabel(f"MRR on {subset_name} subset")
-        ax.set_title(title)
-        ax.legend()
-        _save(fig, fname)
-
-
-def plot_benchmark_ece_scatter(encoder_df: pd.DataFrame) -> None:
-    if "ece_mean" not in encoder_df.columns:
-        return
-    fig, ax = plt.subplots(figsize=(6, 5))
-    ax.scatter(encoder_df["benchmark_f1_mean"], encoder_df["ece_mean"], s=60, alpha=0.8)
-    for _, row in encoder_df.iterrows():
-        ax.annotate(row["short_name"], (row["benchmark_f1_mean"], row["ece_mean"]), fontsize=7)
-    ax.set_xlabel("Self-measured BioRED test presence F1")
-    ax.set_ylabel("ECE vs CIViC inclusion")
-    ax.set_title("Benchmark F1 vs calibration (lower ECE = better)")
-    _save(fig, "10_benchmark_vs_ece.png")
-
-
-def plot_reliability_diagrams(scores_df: pd.DataFrame, n_models: int = 3) -> None:
-    top = (
-        scores_df.groupby("run_id")["score"]
-        .count()
-        .sort_values(ascending=False)
-        .head(n_models)
-        .index.tolist()
-    )
-    for run_id in top[:3]:
-        sub = scores_df[scores_df["run_id"] == run_id]
-        y = sub["label_civic_curated_positive"].astype(int).values
-        p = sub["score"].values.astype(float)
-        bins = reliability_bins(y, p)
-        fig, ax = plt.subplots(figsize=(5, 4))
-        valid = bins["n"] > 0
-        ax.plot([0, 1], [0, 1], "k--", alpha=0.5, label="perfect calibration")
+        x = np.arange(len(enc))
         ax.bar(
-            bins.loc[valid, "bin_center"],
-            bins.loc[valid, "empirical_rate"],
-            width=0.08,
-            alpha=0.7,
-            label="empirical rate",
+            x,
+            enc["mrr"],
+            color=PALETTE["encoder"],
+            edgecolor=PALETTE["text"],
+            linewidth=0.5,
+            width=0.72,
+            label="Trained models (seed-averaged)",
         )
-        ax.set_xlabel("Predicted P(relation present)")
-        ax.set_ylabel("CIViC inclusion rate")
-        ax.set_title(f"Reliability diagram: {run_id}")
-        ax.legend(fontsize=8)
-        safe = run_id.replace("/", "_")
-        _save(fig, f"10_reliability_{safe}.png")
+        ax.axhline(
+            dr,
+            color=PALETTE["accent"],
+            linestyle="--",
+            linewidth=2,
+            label=f"Distance ranker ({dr:.3f})",
+        )
+        ax.set_xticks(x)
+        ax.set_xticklabels(
+            [s.replace("-base", "") for s in enc["short_name"]],
+            rotation=45,
+            ha="right",
+        )
+        ax.set_ylabel("Mean reciprocal rank")
+        ax.set_title(title)
+        ax.legend(loc="upper left", frameon=True)
+    fig.suptitle(
+        "Ranking validity: trained models compared with the proximity-only ranker",
+        y=1.02,
+        fontsize=13,
+    )
+    fig.subplots_adjust(wspace=0.28, bottom=0.22, top=0.88)
+    _save(fig, "fig3_easy_hard_prerequisite.png")
 
 
-def generate_all_figures(
+def figure4_calibration_benchmark_ece(encoder_df: pd.DataFrame) -> None:
+    """Figure 4: benchmark F1 vs ECE (calibration axis, opposite to ranking)."""
+    _apply_style()
+    fig, ax = plt.subplots(figsize=(6.5, 5))
+    x = encoder_df["benchmark_f1_mean"]
+    y = encoder_df["ece_mean"]
+    xerr = np.array(
+        [
+            x - encoder_df.get("benchmark_f1_ci_lo", x),
+            encoder_df.get("benchmark_f1_ci_hi", x) - x,
+        ]
+    )
+    yerr = np.array(
+        [
+            y - encoder_df.get("ece_ci_lo", y),
+            encoder_df.get("ece_ci_hi", y) - y,
+        ]
+    )
+    ax.errorbar(
+        x,
+        y,
+        xerr=xerr,
+        yerr=yerr,
+        fmt="o",
+        color=PALETTE["encoder"],
+        ecolor=PALETTE["encoder"],
+        capsize=3,
+        markersize=7,
+    )
+    for _, row in encoder_df.iterrows():
+        ax.annotate(
+            row["short_name"].replace("-base", ""),
+            (row["benchmark_f1_mean"], row["ece_mean"]),
+            fontsize=8,
+            xytext=(4, 4),
+            textcoords="offset points",
+        )
+    ax.set_xlabel("BioRED test presence F1 (self-measured)")
+    ax.set_ylabel("Expected calibration error vs CIViC curation inclusion")
+    ax.set_title("Calibration tracks benchmark score (lower ECE is better)")
+    ax.text(
+        0.03,
+        0.97,
+        "Ground truth is curation inclusion, not objective biomedical truth.",
+        transform=ax.transAxes,
+        va="top",
+        fontsize=9,
+        color=PALETTE["text"],
+    )
+    _save(fig, "fig4_calibration_benchmark_ece.png")
+
+
+def generate_publication_figures(
     encoder_df: pd.DataFrame,
-    per_run: pd.DataFrame,
-    subset_df: pd.DataFrame,
-    scores_df: pd.DataFrame,
-    candidates: pd.DataFrame,
+    easy_hard_df: pd.DataFrame,
+    deberta_all_seeds_mean: float | None = None,
 ) -> None:
-    plot_benchmark_kb_scatter(encoder_df)
-    plot_benchmark_f1_range(encoder_df)
-    plot_easy_hard_bars(subset_df)
-    plot_benchmark_ece_scatter(encoder_df)
-    if not scores_df.empty:
-        plot_reliability_diagrams(scores_df)
+    """Emit exactly four PNG figures (replaces prior figure set)."""
+    figure1_benchmark_kb_faceted(encoder_df)
+    figure2_benchmark_f1_range(encoder_df, deberta_old_mean=deberta_all_seeds_mean)
+    figure3_easy_hard_prerequisite(easy_hard_df)
+    figure4_calibration_benchmark_ece(encoder_df)
