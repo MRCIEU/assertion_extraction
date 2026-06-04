@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import matplotlib
+
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -57,21 +60,41 @@ def plot_benchmark_f1_range(encoder_df: pd.DataFrame) -> None:
 
 
 def plot_easy_hard_bars(subset_df: pd.DataFrame) -> None:
-    hard = subset_df[subset_df["subset"] == "hard_cross_sentence"].copy()
-    if hard.empty:
-        return
-    enc = hard[hard["model_id"] != "distance_ranker"].groupby("model_id")["mrr"].mean().reset_index()
-    enc["short_name"] = enc["model_id"].map(lambda m: MODEL_BY_ID[m].short_name if m in MODEL_BY_ID else m)
-    dr = hard[hard["model_id"] == "distance_ranker"]["mrr"].iloc[0] if (hard["model_id"] == "distance_ranker").any() else 0
+    for subset_name, subset_key, fname, title in [
+        (
+            "hard (cross-sentence)",
+            "hard_cross_sentence",
+            "10_easy_hard_hard_subset.png",
+            "Ranking validity: hard subset vs distance ranker",
+        ),
+        (
+            "easy (co-sentence)",
+            "easy_co_sentence",
+            "10_easy_hard_easy_subset.png",
+            "Ranking validity: easy subset vs distance ranker",
+        ),
+    ]:
+        sub = subset_df[subset_df["subset"] == subset_key].copy()
+        if sub.empty:
+            continue
+        enc = sub[sub["model_id"] != "distance_ranker"].groupby("model_id")["mrr"].mean().reset_index()
+        enc["short_name"] = enc["model_id"].map(
+            lambda m: MODEL_BY_ID[m].short_name if m in MODEL_BY_ID else m
+        )
+        dr = (
+            sub[sub["model_id"] == "distance_ranker"]["mrr"].iloc[0]
+            if (sub["model_id"] == "distance_ranker").any()
+            else 0
+        )
 
-    fig, ax = plt.subplots(figsize=(9, 4))
-    enc = enc.sort_values("mrr")
-    ax.barh(enc["short_name"], enc["mrr"], alpha=0.8, label="trained models (hard subset mean)")
-    ax.axvline(dr, color="red", linestyle="--", label=f"distance ranker ({dr:.3f})")
-    ax.set_xlabel("MRR on hard (cross-sentence) subset")
-    ax.set_title("Ranking validity: hard subset vs distance ranker")
-    ax.legend()
-    _save(fig, "10_easy_hard_hard_subset.png")
+        fig, ax = plt.subplots(figsize=(9, 4))
+        enc = enc.sort_values("mrr")
+        ax.barh(enc["short_name"], enc["mrr"], alpha=0.8, label=f"trained models ({subset_name} mean)")
+        ax.axvline(dr, color="red", linestyle="--", label=f"distance ranker ({dr:.3f})")
+        ax.set_xlabel(f"MRR on {subset_name} subset")
+        ax.set_title(title)
+        ax.legend()
+        _save(fig, fname)
 
 
 def plot_benchmark_ece_scatter(encoder_df: pd.DataFrame) -> None:

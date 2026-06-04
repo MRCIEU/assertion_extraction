@@ -1,15 +1,16 @@
 #!/bin/bash -l
 #SBATCH -A brics.b5ac
 #SBATCH -p workq
+#SBATCH --job-name=r11_deberta_grid
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --gpus=1
-#SBATCH --time=24:00:00
-# Submit with explicit --job-name, --output, --error from submit_round1_parallel.sh
+#SBATCH --time=04:00:00
+# Submit via submit_grid.sh
 
-STEP=10_round1_benchmark_kb
+STEP=11_encoder_recipe_check
 set -euo pipefail
 : "${REPO:?export REPO=/path/to/project_1 before sbatch}"
 export OUTPUT_ROOT="${OUTPUT_ROOT:-${REPO}/../projects/project_1}"
@@ -21,15 +22,9 @@ export TMPDIR="${SLURM_TMPDIR:-${OUTPUT_ROOT}/tmp/${SLURM_JOB_ID:-local}}"
 mkdir -p "${TMPDIR}"
 export TEMP="${TMPDIR}" TMP="${TMPDIR}"
 
-RUNS="${OUTPUT_ROOT}/runs/${STEP}"
-mkdir -p "${RUNS}"
-
-# Default: train all assigned models/seeds and evaluate (no cross-model analysis).
-export STEP_ARGS="${STEP_ARGS:---train-eval-only}"
-
 source "${HOME}/miniforge3/etc/profile.d/conda.sh" && conda activate hf-hpc
 cd "${REPO}/${STEP}"
-echo "=== Round 1 train/eval job ${SLURM_JOB_ID:-local} ${JOB_LABEL:-} ==="
-echo "STEP_ARGS=${STEP_ARGS}"
+echo "=== Encoder recipe check train job ${SLURM_JOB_ID:-local} ==="
+export STEP_ARGS="${STEP_ARGS:---train-only}"
 python run.py ${STEP_ARGS}
-echo "=== Round 1 train/eval complete ${SLURM_JOB_ID:-local} ==="
+echo "=== Encoder recipe check train complete ==="

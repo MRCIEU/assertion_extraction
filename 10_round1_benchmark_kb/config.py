@@ -51,11 +51,13 @@ MAX_TRAIN_EXAMPLES = 24_000
 NEGATIVES_PER_POSITIVE = 2
 TRAIN_BATCH_SIZE = 16
 TRAIN_LR = 2e-5
-TRAIN_WARMUP_RATIO = 0.06
+TRAIN_WARMUP_RATIO = 0.0  # no warmup (settled by sweep diagnostic)
 MAX_SEQ_LENGTH = 256
 INFER_BATCH_SIZE = 32
 MAX_EPOCHS = 10
 EARLY_STOPPING_PATIENCE = 3
+CHECKPOINT_CRITERION = "val_f1"  # save/use checkpoint with highest validation F1
+TRAINING_STRATEGY = "val_f1_lr2e5_nowarmup"
 TRAIN_PAIR_TYPES = {"gene-drug", "gene-disease"}
 
 COMPLETE_MARKER = "round1_complete.json"

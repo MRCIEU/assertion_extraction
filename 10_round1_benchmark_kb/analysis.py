@@ -127,10 +127,49 @@ def benchmark_ece_correlation(encoder_df: pd.DataFrame) -> dict[str, Any]:
     return {"spearman": spearman, "pearson": pearson, "n_encoders": int(len(x))}
 
 
+def flag_degenerate_runs(per_run_df: pd.DataFrame) -> pd.DataFrame:
+    """Runs with failed validation (val F1=0) or collapsed benchmark F1."""
+    rows: list[dict] = []
+    for _, r in per_run_df.iterrows():
+        reasons: list[str] = []
+        if float(r.get("best_val_f1", 1)) <= 0.0:
+            reasons.append("val_f1_zero")
+        if float(r.get("benchmark_f1", 1)) <= 0.0:
+            reasons.append("benchmark_f1_zero")
+        if reasons:
+            rows.append(
+                {
+                    "model_id": r["model_id"],
+                    "seed": int(r["seed"]),
+                    "run_id": r.get("run_id"),
+                    "best_val_f1": float(r.get("best_val_f1", np.nan)),
+                    "benchmark_f1": float(r.get("benchmark_f1", np.nan)),
+                    "kb_mrr_overall": float(r.get("kb_mrr_overall", np.nan)),
+                    "flags": ",".join(reasons),
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+def encoder_summary_robust(per_run_df: pd.DataFrame) -> pd.DataFrame:
+    """Encoder means excluding degenerate runs (for sensitivity analysis)."""
+    clean = per_run_df[
+        (per_run_df["benchmark_f1"].astype(float) > 0)
+        & (per_run_df["best_val_f1"].astype(float) > 0)
+    ]
+    return encoder_summary(clean)
+
+
 def encoder_vs_seed_noise(per_run_df: pd.DataFrame) -> pd.DataFrame:
     """Compare between-encoder spread to within-encoder seed SD for key metrics."""
     rows: list[dict] = []
-    for metric in ["benchmark_f1", "kb_mrr_overall"]:
+    for metric in [
+        "benchmark_f1",
+        "kb_mrr_gene_drug",
+        "kb_mrr_gene_disease",
+        "kb_mrr_overall",
+        "ece",
+    ]:
         if metric not in per_run_df.columns:
             continue
         within = per_run_df.groupby("model_id")[metric].std(ddof=1).mean()
@@ -146,15 +185,81 @@ def encoder_vs_seed_noise(per_run_df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def easy_hard_encoder_summary(subset_df: pd.DataFrame) -> pd.DataFrame:
+    """Seed-averaged MRR on easy/hard subsets vs distance ranker baseline."""
+    rows: list[dict] = []
+    for subset_key, label in [
+        ("easy_co_sentence", "easy"),
+        ("hard_cross_sentence", "hard"),
+    ]:
+        sub = subset_df[subset_df["subset"] == subset_key]
+        if sub.empty:
+            continue
+        dr_row = sub[sub["model_id"] == "distance_ranker"]
+        dr_mrr = float(dr_row["mrr"].iloc[0]) if not dr_row.empty else np.nan
+        models = sub[sub["model_id"] != "distance_ranker"].groupby("model_id")["mrr"].mean()
+        for model_id, mrr in models.items():
+            spec = MODEL_BY_ID.get(model_id)
+            rows.append(
+                {
+                    "subset": label,
+                    "model_id": model_id,
+                    "short_name": spec.short_name if spec else model_id,
+                    "mrr_mean": float(mrr),
+                    "distance_ranker_mrr": dr_mrr,
+                    "beats_distance_ranker": bool(mrr > dr_mrr) if not np.isnan(dr_mrr) else None,
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+def sensitivity_correlations(
+    encoder_df: pd.DataFrame,
+    per_run_df: pd.DataFrame,
+) -> list[dict]:
+    """Benchmark–KB correlations on all encoders vs excluding degenerate runs."""
+    rows: list[dict] = []
+    robust = encoder_summary_robust(per_run_df)
+    for label, edf in [("all_encoders", encoder_df), ("exclude_degenerate_runs", robust)]:
+        if len(edf) < 3:
+            continue
+        for pt, col in [
+            ("gene-drug", "kb_mrr_gene_drug_mean"),
+            ("gene-disease", "kb_mrr_gene_disease_mean"),
+        ]:
+            if col not in edf.columns:
+                continue
+            res = benchmark_kb_correlation(edf, col, pt)
+            rows.append(
+                {
+                    "analysis_set": label,
+                    "pair_type": pt,
+                    "metric": "spearman",
+                    "estimate": res["spearman"].get("estimate"),
+                    "ci_lo": res["spearman"].get("ci_lo"),
+                    "ci_hi": res["spearman"].get("ci_hi"),
+                    "n_encoders": res["n_encoders"],
+                }
+            )
+    return rows
+
+
 def benchmark_f1_range_check(encoder_df: pd.DataFrame) -> dict[str, Any]:
     vals = encoder_df["benchmark_f1_mean"].astype(float)
     spread = float(vals.max() - vals.min())
+    encoder_f1_values = list(
+        zip(encoder_df["short_name"], vals)
+    )
+    encoder_f1_values.sort(key=lambda x: x[1], reverse=True)
     return {
         "min_f1": float(vals.min()),
         "max_f1": float(vals.max()),
+        "mean_f1": float(vals.mean()),
+        "median_f1": float(vals.median()),
+        "std_f1": float(vals.std(ddof=1)) if len(vals) > 1 else 0.0,
         "spread": spread,
         "n_encoders": len(vals),
-        "wide_enough": spread >= 0.05,
+        "encoder_f1_values": encoder_f1_values,
     }
 
 

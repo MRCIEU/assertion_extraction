@@ -85,6 +85,7 @@ def score_model(spec: ModelSpec, candidates: pd.DataFrame | None = None, force: 
     out["model_id"] = spec.model_id
     out["score"] = mean_probs
 
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     with out_path.open("w", encoding="utf-8") as f:
         for _, row in out.iterrows():
             f.write(
