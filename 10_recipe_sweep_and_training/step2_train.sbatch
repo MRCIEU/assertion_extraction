@@ -7,7 +7,7 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --gres=gpu:1
 #SBATCH --mem=64G
-#SBATCH --time=48:00:00
+#SBATCH --time=24:00:00
 
 set -euo pipefail
 
@@ -27,7 +27,13 @@ exec > >(tee "${RUNS}/train_${JOB_TAG}.out") 2> >(tee "${RUNS}/train_${JOB_TAG}.
 
 echo "=== Step 2: full-matrix training ==="
 echo "Host: $(hostname)"
+echo "SLURM_JOB_ID=${SLURM_JOB_ID:-local}"
+echo "SLURM_JOB_NAME=${SLURM_JOB_NAME:-step2_train}"
 echo "Start: $(date -u)"
+echo "REPO=${REPO}"
+echo "OUTPUT_ROOT=${OUTPUT_ROOT}"
+echo "STEP_ARGS=${STEP_ARGS:-<all 9 encoders>}"
+echo "Log: ${RUNS}/train_${JOB_TAG}.out"
 echo "Ensure CHOSEN_RECIPE is set in config.py (not None) before submitting."
 
 source "${HOME}/miniforge3/etc/profile.d/conda.sh"

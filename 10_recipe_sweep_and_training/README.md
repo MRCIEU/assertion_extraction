@@ -13,9 +13,10 @@ export OUTPUT_ROOT=${REPO}/../projects/project_1
 cd ${REPO}/10_recipe_sweep_and_training
 python run.py --sweep-only
 python run.py --sweep-advisory-only
+python run.py --decide-recipe
 ```
 
-Outputs: `sweep_advisory_table.csv` (seed 42), `sweep_guard_outcomes.csv` (seeds 43/44), `reports/.../sweep_guard_outcomes.md`.
+Outputs (under `outputs/.../sweep/`): advisory table, guard outcomes, `recipe_decision_table.csv`. Figure: `figures/.../sweep/recipe_spread_vs_deberta_health.png`. Report: `reports/.../sweep_report.md` (Recipe decision section).
 
 Cluster: `sbatch step1_sweep.sbatch`
 

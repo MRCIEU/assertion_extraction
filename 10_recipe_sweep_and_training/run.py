@@ -22,15 +22,22 @@ def main() -> None:
         action="store_true",
         help="Step 1: build advisory table from existing sweep results",
     )
+    parser.add_argument(
+        "--decide-recipe",
+        action="store_true",
+        help="Step 1: recipe decision aid from sweep CSVs (CPU; non-binding)",
+    )
     parser.add_argument("--train-only", action="store_true", help="Step 2: full matrix training")
     parser.add_argument("--force", action="store_true", help="Re-run even if markers exist")
     parser.add_argument("--models", nargs="+", default=None, help="Limit to model IDs")
     parser.add_argument("--seeds", nargs="+", type=int, default=None, help="Limit to seeds")
     args = parser.parse_args()
 
-    n = sum([args.sweep_only, args.sweep_advisory_only, args.train_only])
+    n = sum([args.sweep_only, args.sweep_advisory_only, args.decide_recipe, args.train_only])
     if n != 1:
-        raise SystemExit("Specify exactly one of --sweep-only, --sweep-advisory-only, --train-only")
+        raise SystemExit(
+            "Specify exactly one of --sweep-only, --sweep-advisory-only, --decide-recipe, --train-only"
+        )
 
     print(f"=== Recipe sweep and training {__import__('datetime').datetime.now().isoformat()} ===", flush=True)
 
@@ -42,8 +49,15 @@ def main() -> None:
     elif args.sweep_advisory_only:
         print("[run] mode=sweep-advisory-only", flush=True)
         import_module("10_recipe_sweep_and_training.step1_advisory").run_advisory()
+    elif args.decide_recipe:
+        print("[run] mode=decide-recipe", flush=True)
+        import_module("10_recipe_sweep_and_training.step1_decide").run_decide_recipe()
     else:
         print("[run] mode=train-only (step 2)", flush=True)
+        if args.models:
+            print(f"[run] model filter: {args.models}", flush=True)
+        if args.seeds:
+            print(f"[run] seed filter: {args.seeds}", flush=True)
         import_module("10_recipe_sweep_and_training.step2_train").run_matrix_training(
             force=args.force, model_ids=args.models, seeds=args.seeds
         )

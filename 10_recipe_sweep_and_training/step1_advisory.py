@@ -10,7 +10,7 @@ import pandas as pd
 
 from shared.constants import GUARD_SEEDS
 
-from .config import OUTPUT_DIR, REPORT_DIR, SWEEP_COMPLETE, SWEEP_RESULTS_DIR, all_sweep_points
+from .config import REPORT_DIR, SWEEP_COMPLETE, SWEEP_OUTPUT_DIR, SWEEP_RESULTS_DIR, all_sweep_points
 
 
 def _load_all_sweep_markers() -> list[dict]:
@@ -184,20 +184,20 @@ def _write_guard_report(guard_table: pd.DataFrame) -> None:
 
 
 def run_advisory() -> pd.DataFrame:
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    SWEEP_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     all_markers = _load_all_sweep_markers()
     all_df = pd.DataFrame(all_markers) if all_markers else pd.DataFrame()
     if not all_df.empty:
-        all_df.to_csv(OUTPUT_DIR / "sweep_all_runs.csv", index=False)
+        all_df.to_csv(SWEEP_OUTPUT_DIR / "sweep_all_runs.csv", index=False)
 
     df = load_sweep_results_seed42()
-    df.to_csv(OUTPUT_DIR / "sweep_per_run_seed42.csv", index=False)
+    df.to_csv(SWEEP_OUTPUT_DIR / "sweep_per_run_seed42.csv", index=False)
 
     guard_table = build_guard_outcomes_table(all_df)
-    guard_table.to_csv(OUTPUT_DIR / "sweep_guard_outcomes.csv", index=False)
+    guard_table.to_csv(SWEEP_OUTPUT_DIR / "sweep_guard_outcomes.csv", index=False)
 
     table = build_advisory_table(df)
-    table.to_csv(OUTPUT_DIR / "sweep_advisory_table.csv", index=False)
+    table.to_csv(SWEEP_OUTPUT_DIR / "sweep_advisory_table.csv", index=False)
 
     print_advisory(table, guard_table)
     _write_guard_report(guard_table)

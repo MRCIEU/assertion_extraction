@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from shared.benchmark_eval import build_biored_test_examples, evaluate_checkpoint_benchmark_f1
-from shared.constants import TRAIN_SEEDS
+from shared.constants import TRAIN_SEEDS, CHECKPOINT_CRITERION
 from shared.models import MODELS, MODEL_BY_ID
 from shared.train_core import train_with_epoch_checkpoints
 from shared.train_data import build_train_val_examples
@@ -80,20 +80,31 @@ def run_matrix_training(
 
     print(
         f"\n=== Step-2 matrix training ===\n"
-        f"Recipe: lr={recipe.lr}, warmup={recipe.warmup_label}\n"
-        f"Encoders: {len(specs)}, seeds: {seed_list}\n"
+        f"Recipe: lr={recipe.lr}, warmup={recipe.warmup_label} "
+        f"(checkpoint criterion={CHECKPOINT_CRITERION})\n"
+        f"Encoders ({len(specs)}): {[s.model_id for s in specs]}\n"
+        f"Seeds ({len(seed_list)}): {seed_list}\n"
+        f"Planned runs this job: {len(specs) * len(seed_list)}\n"
     )
     print_checkpoint_footprint_estimate(len(specs), len(seed_list))
 
     train_examples, val_examples = build_train_val_examples(TRAIN_CACHE_DIR)
     test_examples = build_biored_test_examples()
 
+    n_skip, n_complete, n_planned = 0, 0, len(specs) * len(seed_list)
+
     for spec in specs:
         for seed in seed_list:
             if is_matrix_complete(spec.model_id, seed) and not force:
-                print(f"  skip (complete): {spec.model_id} seed={seed}")
+                n_skip += 1
+                print(f"  skip (complete): {spec.short_name} ({spec.model_id}) seed={seed}", flush=True)
                 continue
 
+            print(
+                f"  RUN START {spec.short_name} ({spec.model_id}) seed={seed} "
+                f"[{n_complete + n_skip + 1}/{n_planned} in this job]",
+                flush=True,
+            )
             run_root = matrix_run_root(spec.model_id, seed)
             log = train_with_epoch_checkpoints(
                 spec,
@@ -108,10 +119,18 @@ def run_matrix_training(
             )
             best_ckpt = Path(log["best_checkpoint"])
             bench = evaluate_checkpoint_benchmark_f1(best_ckpt, test_examples)
-            _write_complete(spec.model_id, seed, recipe, log, bench)
+            marker = _write_complete(spec.model_id, seed, recipe, log, bench)
+            n_complete += 1
             print(
-                f"  COMPLETE {spec.model_id} seed={seed}: "
-                f"benchmark_f1={bench['benchmark_f1']:.3f} best_epoch={log['best_epoch_val_f1']}"
+                f"  COMPLETE {spec.short_name} ({spec.model_id}) seed={seed}: "
+                f"benchmark_f1={bench['benchmark_f1']:.3f} best_epoch={log['best_epoch_val_f1']} "
+                f"marker={marker}",
+                flush=True,
             )
 
-    print("\n=== Step-2 matrix training complete ===")
+    print(
+        f"\n=== Step-2 matrix training complete (this job) ===\n"
+        f"  Trained: {n_complete}, skipped (already done): {n_skip}, "
+        f"planned: {n_planned}\n",
+        flush=True,
+    )
