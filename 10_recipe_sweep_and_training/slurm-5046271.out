@@ -1,0 +1,4 @@
+=== Step 1: recipe sweep ===
+Host: nid010193
+Start: Thu Jun  4 21:50:02 UTC 2026
+python: can't open file '/var/spool/slurmd/job5046271/run.py': [Errno 2] No such file or directory

@@ -117,6 +117,7 @@ def _examples_from_doc(doc: dict[str, Any], rng: random.Random) -> list[dict[str
 
 
 def build_biored_test_examples(seed: int = SAMPLING_SEED) -> list[dict]:
+    print("[benchmark] building BioRED test examples...", flush=True)
     rng = random.Random(seed)
     biored = load_dataset("bigbio/biored", "biored_bigbio_kb", trust_remote_code=True)
     examples: list[dict] = []
@@ -125,6 +126,7 @@ def build_biored_test_examples(seed: int = SAMPLING_SEED) -> list[dict]:
         if pmid in LEAKED_PMIDS:
             continue
         examples.extend(_examples_from_doc(doc, rng))
+    print(f"[benchmark] built {len(examples)} test examples (leaked PMIDs excluded)", flush=True)
     return examples
 
 
@@ -132,6 +134,10 @@ def evaluate_checkpoint_benchmark_f1(ckpt_dir: Path, test_examples: list[dict] |
     if test_examples is None:
         test_examples = build_biored_test_examples()
 
+    print(
+        f"[benchmark] evaluating {ckpt_dir} on {len(test_examples)} BioRED test examples",
+        flush=True,
+    )
     device = require_gpu()
     tokenizer = AutoTokenizer.from_pretrained(ckpt_dir)
     model = AutoModelForSequenceClassification.from_pretrained(ckpt_dir)
@@ -140,19 +146,32 @@ def evaluate_checkpoint_benchmark_f1(ckpt_dir: Path, test_examples: list[dict] |
 
     ds = RelationDataset(test_examples, tokenizer, MAX_SEQ_LENGTH)
     loader = DataLoader(ds, batch_size=INFER_BATCH_SIZE, shuffle=False)
+    n_batches = len(loader)
+    log_every = max(1, n_batches // 10)
 
     preds: list[int] = []
     labels: list[int] = []
     with torch.no_grad():
-        for batch in loader:
+        for batch_idx, batch in enumerate(loader, start=1):
             batch = {k: v.to(device) for k, v in batch.items()}
             logits = model(**batch).logits
             pred = logits.argmax(dim=-1).cpu().numpy()
             preds.extend(pred.tolist())
             labels.extend(batch["labels"].cpu().numpy().tolist())
+            if batch_idx == 1 or batch_idx == n_batches or batch_idx % log_every == 0:
+                print(
+                    f"[benchmark] batch {batch_idx}/{n_batches} "
+                    f"examples={len(labels)}/{len(test_examples)}",
+                    flush=True,
+                )
 
     f1 = float(f1_score(labels, preds, average="binary", zero_division=0))
     prec, rec, _, _ = precision_recall_fscore_support(labels, preds, average="binary", zero_division=0)
+    print(
+        f"[benchmark] done f1={f1:.4f} precision={float(prec):.4f} recall={float(rec):.4f} "
+        f"n_positives={int(sum(labels))}",
+        flush=True,
+    )
     return {
         "benchmark_f1": f1,
         "benchmark_precision": float(prec),

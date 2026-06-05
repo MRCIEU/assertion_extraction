@@ -164,5 +164,5 @@ def build_train_val_examples(cache_dir: Path, *, force: bool = False) -> tuple[l
         with p.open("w") as f:
             for ex in rows:
                 f.write(json.dumps(ex) + "\n")
-    print(f"Built train={len(train_examples)} val={len(val_examples)}; leak check passed")
+    print(f"Built train={len(train_examples)} val={len(val_examples)}; leak check passed", flush=True)
     return train_examples, val_examples

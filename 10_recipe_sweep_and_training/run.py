@@ -32,20 +32,23 @@ def main() -> None:
     if n != 1:
         raise SystemExit("Specify exactly one of --sweep-only, --sweep-advisory-only, --train-only")
 
-    print(f"=== Recipe sweep and training {__import__('datetime').datetime.now().isoformat()} ===")
+    print(f"=== Recipe sweep and training {__import__('datetime').datetime.now().isoformat()} ===", flush=True)
 
     if args.sweep_only:
+        print("[run] mode=sweep-only", flush=True)
         import_module("10_recipe_sweep_and_training.step1_sweep").run_sweep(
             force=args.force, model_ids=args.models
         )
     elif args.sweep_advisory_only:
+        print("[run] mode=sweep-advisory-only", flush=True)
         import_module("10_recipe_sweep_and_training.step1_advisory").run_advisory()
     else:
+        print("[run] mode=train-only (step 2)", flush=True)
         import_module("10_recipe_sweep_and_training.step2_train").run_matrix_training(
             force=args.force, model_ids=args.models, seeds=args.seeds
         )
 
-    print("=== Done ===")
+    print("=== Done ===", flush=True)
 
 
 if __name__ == "__main__":

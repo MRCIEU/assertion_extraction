@@ -12,7 +12,12 @@
 set -euo pipefail
 
 STEP="10_recipe_sweep_and_training"
-REPO="${SLURM_SUBMIT_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
+if [[ -n "${SLURM_SUBMIT_DIR:-}" ]]; then
+  SWEEP_DIR="${SLURM_SUBMIT_DIR}"
+else
+  SWEEP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+fi
+REPO="$(cd "${SWEEP_DIR}/.." && pwd)"
 OUTPUT_ROOT="${OUTPUT_ROOT:-${REPO}/../projects/project_1}"
 RUNS="${OUTPUT_ROOT}/runs/${STEP}"
 mkdir -p "${RUNS}"
@@ -33,6 +38,6 @@ export PYTHONUNBUFFERED=1
 export HF_HOME="${HF_HOME:-${HOME}/.cache/huggingface}"
 export TOKENIZERS_PARALLELISM=false
 
-cd "${REPO}/${STEP}"
+cd "${SWEEP_DIR}"
 python run.py --train-only ${STEP_ARGS:-}
 echo "End: $(date -u)"

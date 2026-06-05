@@ -12,7 +12,12 @@
 set -euo pipefail
 
 STEP="10_recipe_sweep_and_training"
-SWEEP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# SLURM copies the script into /var/spool/slurmd/...; BASH_SOURCE points there, not the repo.
+if [[ -n "${SLURM_SUBMIT_DIR:-}" ]]; then
+  SWEEP_DIR="${SLURM_SUBMIT_DIR}"
+else
+  SWEEP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+fi
 REPO="$(cd "${SWEEP_DIR}/.." && pwd)"
 OUTPUT_ROOT="${OUTPUT_ROOT:-${REPO}/../projects/project_1}"
 RUNS="${OUTPUT_ROOT}/runs/${STEP}"
