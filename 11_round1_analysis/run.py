@@ -20,18 +20,25 @@ def main() -> None:
     parser.add_argument("--score-only", action="store_true", help="Score KB at best checkpoints only")
     parser.add_argument("--rescore", action="store_true", help="Force KB rescoring before analysis")
     parser.add_argument("--force-score", action="store_true", help="Overwrite existing score files")
+    parser.add_argument("--model-id", action="append", default=None, help="Limit scoring to encoder(s)")
+    parser.add_argument("--seed", type=int, action="append", default=None, help="Limit scoring to seed(s)")
     args = parser.parse_args()
 
     if args.score_only:
-        import_module("11_round1_analysis.score_runs").score_all_runs(force=args.force_score)
+        import_module("11_round1_analysis.score_runs").score_all_runs(
+            force=args.force_score,
+            model_ids=args.model_id,
+            seeds=args.seed,
+        )
         return
 
-    if not args.analyze_only and not args.rescore:
-        raise SystemExit("Use --analyze-only, --score-only, or --analyze-only --rescore")
+    if args.analyze_only or args.rescore:
+        import_module("11_round1_analysis.run_analysis").run_analysis(
+            rescore=args.rescore, force_score=args.force_score
+        )
+        return
 
-    import_module("11_round1_analysis.run_analysis").run_analysis(
-        rescore=args.rescore, force_score=args.force_score
-    )
+    raise SystemExit("Use --score-only, --analyze-only, or --analyze-only --rescore")
 
 
 if __name__ == "__main__":

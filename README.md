@@ -1,6 +1,6 @@
 # Project 1: two-stage encoder study
 
-Preparation steps 00–04 freeze data, protocol, and the CIViC candidate pool.
+Preparation steps 00–05 freeze data, protocol, the CIViC candidate pool, and marker-quality verification.
 
 ## Main study (rebuilt layout)
 

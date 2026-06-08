@@ -30,7 +30,10 @@ MATRIX_RESULTS_DIR = MATRIX_DATA / "results"
 MATRIX_COMPLETE = "matrix_complete.json"
 
 SCORES_DIR = DATA_DIR / "scores"
+SCORE_COMPLETE = "scoring_complete.json"
 PER_RUN_CSV = OUTPUT_DIR / "11_per_run_scores.csv"
+POOL_SIZE_CSV = OUTPUT_DIR / "11_abstract_pool_sizes.csv"
+EXPECTED_RUNS = len(MODELS) * len(TRAIN_SEEDS)
 
 # Re-export for analysis modules
 PAIR_TYPES = ("gene-drug", "gene-disease")

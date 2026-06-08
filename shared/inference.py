@@ -50,3 +50,13 @@ def write_scores_jsonl(df: pd.DataFrame, out_path: Path) -> None:
     with out_path.open("w") as f:
         for _, row in df.iterrows():
             f.write(json.dumps(row.to_dict(), default=str) + "\n")
+
+
+def load_scores_jsonl(path: Path) -> pd.DataFrame:
+    rows: list[dict] = []
+    with path.open(encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                rows.append(json.loads(line))
+    return pd.DataFrame(rows)

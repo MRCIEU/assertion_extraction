@@ -25,37 +25,12 @@ from .constants import (
     SAMPLING_SEED,
     TRAIN_PAIR_TYPES,
 )
+from .marker_insert import bigbio_doc_text, format_marked_pair
 from .paths import upstream_paths
 
 
-def _doc_text(doc: dict[str, Any]) -> str:
-    parts: list[str] = []
-    for passage in doc.get("passages") or []:
-        text = passage.get("text")
-        if isinstance(text, list):
-            parts.extend(str(t) for t in text if t)
-        elif text:
-            parts.append(str(text))
-    return " ".join(parts).strip()
-
-
-def _entity_surface(entity: dict[str, Any]) -> str:
-    text = entity.get("text") or [""]
-    if isinstance(text, list):
-        return str(text[0]) if text else ""
-    return str(text)
-
-
-def _format_input(text: str, head: str, tail: str) -> str:
-    if head and head in text and tail and tail in text:
-        marked = text.replace(head, f"[E1]{head}[/E1]", 1)
-        marked = marked.replace(tail, f"[E2]{tail}[/E2]", 1)
-        return marked
-    return f"[E1]{head}[/E1] {text} [E2]{tail}[/E2]"
-
-
 def _examples_from_doc(doc: dict[str, Any], corpus: str, rng: random.Random) -> list[dict[str, Any]]:
-    text = _doc_text(doc)
+    text = bigbio_doc_text(doc)
     if not text:
         return []
     entities = {e["id"]: e for e in doc.get("entities") or []}
@@ -79,10 +54,14 @@ def _examples_from_doc(doc: dict[str, Any], corpus: str, rng: random.Random) -> 
         if key in asserted:
             continue
         asserted.add(key)
+        marked, _method, span_meta = format_marked_pair(text, head_ent, tail_ent)
         positives.append({
-            "text": _format_input(text, _entity_surface(head_ent), _entity_surface(tail_ent)),
-            "label": 1, "corpus": corpus, "pair_type": pt,
+            "text": marked,
+            "label": 1,
+            "corpus": corpus,
+            "pair_type": pt,
             "pmid": str(doc.get("document_id", "")),
+            **span_meta,
         })
     by_type: dict[str, list] = {}
     for ent in entities.values():
@@ -107,10 +86,14 @@ def _examples_from_doc(doc: dict[str, Any], corpus: str, rng: random.Random) -> 
             if key in asserted:
                 continue
             asserted.add(key)
+            marked, _method, span_meta = format_marked_pair(text, head_ent, tail_ent)
             negatives.append({
-                "text": _format_input(text, _entity_surface(head_ent), _entity_surface(tail_ent)),
-                "label": 0, "corpus": corpus, "pair_type": pt,
+                "text": marked,
+                "label": 0,
+                "corpus": corpus,
+                "pair_type": pt,
                 "pmid": str(doc.get("document_id", "")),
+                **span_meta,
             })
             added += 1
     return positives + negatives

@@ -1,31 +1,45 @@
-# Round 1 analysis (folder 11)
+# Round 1 analysis
 
-Consumes folder-10 step-2 matrix checkpoints. No training.
+Consumes folder-10 step-2 matrix checkpoints. **Does not train.**
 
-## Workflow
+## Stages
 
-1. After step-2 training completes, score KB at best checkpoints (GPU):
+| Stage | Resource | Entry point | Output |
+|-------|----------|-------------|--------|
+| 1 — KB scoring | GPU | `step_score.sbatch` or `python run.py --score-only` | `data/11_round1_analysis/scores/` + per-run `scoring_complete.json` markers |
+| 2 — Analysis | CPU | `step_analyze.sbatch` or `python run.py --analyze-only` | `outputs/`, `figures/`, `reports/` |
+
+Stage 2 requires **72/72** scoring markers. It will not auto-score on the CPU path.
+
+## Pre-flight (before submit)
 
 ```bash
 source ~/miniforge3/etc/profile.d/conda.sh && conda activate hf-hpc
 export REPO=/home/b5ac/freddieyu.b5ac/project_1
 export OUTPUT_ROOT=${REPO}/../projects/project_1
 cd ${REPO}/11_round1_analysis
-python run.py --score-only
+python preflight.py
 ```
 
-2. Run full analysis (CPU):
+## Submit (parallel scoring + auto stage 2)
 
 ```bash
-python run.py --analyze-only
+source ~/miniforge3/etc/profile.d/conda.sh && conda activate hf-hpc
+export REPO=/home/b5ac/freddieyu.b5ac/project_1
+export OUTPUT_ROOT=${REPO}/../projects/project_1
+cd ${REPO}/11_round1_analysis
+./submit_round1.sh
 ```
 
-Or combine rescoring and analysis: `python run.py --analyze-only --rescore`
+This submits **9 GPU scoring jobs** (one encoder each) and **1 CPU analysis job** with `--dependency=afterok:...` so stage 2 starts only after all scoring jobs succeed.
 
-Cluster: `sbatch step_analyze.sbatch`
+Manual single-job alternative: `sbatch step_score.sbatch` then `sbatch step_analyze.sbatch` after 72/72 markers.
 
 ## Outputs
 
-Flat under `outputs/11_round1_analysis/`, `figures/11_round1_analysis/`, `reports/11_round1_analysis/report.md`.
+- `data/11_round1_analysis/scores/{model_id}/seed_{seed}.jsonl` — per-candidate scores
+- `outputs/11_round1_analysis/` — flat CSVs (encoder summary, variance components, pool-size robustness, RoBERTa table, etc.)
+- `figures/11_round1_analysis/` — four publication PNGs
+- `reports/11_round1_analysis/report.md` — full prose; `README.md` — key numbers (filled after analysis)
 
-Includes RoBERTa versus domain-specialised encoder analysis (`11_roberta_analysis.csv`).
+Shared pool-size table for folder 20: `outputs/11_round1_analysis/11_abstract_pool_sizes.csv`.

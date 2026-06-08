@@ -1,5 +1,5 @@
 #!/bin/bash -l
-# Submit preparation pipeline steps 00-04 sequentially on Isambard.
+# Submit preparation pipeline steps 00-05 sequentially on Isambard.
 
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")" && pwd)"
@@ -34,6 +34,8 @@ J2=$(submit "02_evaluation_protocol" "" "${J1}")
 echo "Submitted 02: ${J2}"
 J3=$(submit "03_candidate_pool" "" "${J2}")
 echo "Submitted 03: ${J3}"
-J4=$(submit "04_pilot_study" "" "${J3}")
+J5=$(submit "05_marker_quality_gate" "" "${J3}")
+echo "Submitted 05: ${J5}"
+J4=$(submit "04_pilot_study" "" "${J5}")
 echo "Submitted 04: ${J4}"
 echo "Chain complete. Logs under ${OUTPUT_ROOT}/runs/"

@@ -34,6 +34,8 @@ _R11 = step_dirs(R1_STEP)
 R11_OUTPUTS = _R11["outputs"]
 R11_PER_RUN_CSV = R11_OUTPUTS / "11_per_run_scores.csv"
 R11_EASY_HARD_CSV = R11_OUTPUTS / "11_easy_hard_ranking.csv"
+R11_VARIANCE_CSV = R11_OUTPUTS / "11_variance_components.csv"
+EPOCH_SCORE_COMPLETE = DATA_DIR / "epoch_scoring_complete.json"
 
 FOCUS_MODEL_IDS = ("pubmedbert_base", "roberta_base", "distilbert_base")
 

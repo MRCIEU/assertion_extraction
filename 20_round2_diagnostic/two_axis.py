@@ -2,51 +2,63 @@
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
 
 from .config import (
     EPOCH_KB_CACHE,
     FOCUS_MODEL_IDS,
-    MATRIX_CKPT_DIR,
     R11_EASY_HARD_CSV,
     R11_PER_RUN_CSV,
     TRAIN_SEEDS,
 )
+from .matrix_io import epoch_checkpoint_dir, list_recoverable_epochs, load_training_meta
 from .pool_cache import load_enriched_pool
 from .scoring import benchmark_f1_at_checkpoint, kb_metrics_from_scores, score_candidates_at_checkpoint
 
 
-def _epoch_ckpt(model_id: str, seed: int, epoch: int) -> Path:
-    return MATRIX_CKPT_DIR / model_id / f"seed_{seed}" / "epochs" / f"epoch_{epoch:02d}"
+def _cache_key(model_id: str, seed: int, epoch: int) -> str:
+    return f"{model_id}|{seed}|{epoch}"
+
+
+def _load_scored_cache() -> pd.DataFrame:
+    if EPOCH_KB_CACHE.exists():
+        return pd.read_csv(EPOCH_KB_CACHE)
+    return pd.DataFrame()
+
+
+def _row_is_scored(row: pd.Series) -> bool:
+    return bool(row.get("benchmark_f1_scored")) and bool(row.get("kb_scored"))
 
 
 def trajectory_from_training_logs(*, rescore_epochs: bool = False) -> pd.DataFrame:
     """
-    Val metrics always from training_log.json (cheap).
+    Val metrics always from training logs (cheap).
     Per-epoch benchmark F1 and KB scored on demand from saved epoch checkpoints
-    when rescore_epochs=True (focus encoders only).
+    when rescore_epochs=True (focus encoders only; resumable via epoch_kb_trajectory.csv).
     """
-    if EPOCH_KB_CACHE.exists() and not rescore_epochs:
-        cached = pd.read_csv(EPOCH_KB_CACHE)
-        if not cached.empty and cached["benchmark_f1"].notna().any():
-            return cached
+    cached = _load_scored_cache()
+    cache_index: dict[str, pd.Series] = {}
+    if not cached.empty:
+        for _, r in cached.iterrows():
+            cache_index[_cache_key(r["model_id"], int(r["seed"]), int(r["epoch"]))] = r
 
     pool = load_enriched_pool()
     candidates = pool.drop(columns=["subset"], errors="ignore")
     rows: list[dict] = []
+    n_scored_this_run = 0
+    n_skipped = 0
 
     for model_id in FOCUS_MODEL_IDS:
         for seed in TRAIN_SEEDS:
-            log_path = MATRIX_CKPT_DIR / model_id / f"seed_{seed}" / "training_log.json"
-            if not log_path.exists():
+            meta = load_training_meta(model_id, seed)
+            if not meta:
                 continue
-            meta = json.loads(log_path.read_text(encoding="utf-8"))
+            recoverable = set(list_recoverable_epochs(model_id, seed, meta))
             for ep in meta.get("epoch_curve") or []:
                 epoch = int(ep["epoch"])
+                key = _cache_key(model_id, seed, epoch)
+                prior = cache_index.get(key)
                 row = {
                     "source": "matrix_per_epoch",
                     "model_id": model_id,
@@ -55,19 +67,40 @@ def trajectory_from_training_logs(*, rescore_epochs: bool = False) -> pd.DataFra
                     "val_f1": float(ep.get("val_f1", np.nan)),
                     "val_loss": float(ep.get("val_loss", np.nan)),
                     "benchmark_f1": np.nan,
+                    "benchmark_f1_scored": False,
+                    "kb_scored": False,
                 }
-                if rescore_epochs:
-                    ckpt = _epoch_ckpt(model_id, seed, epoch)
+                if prior is not None and not rescore_epochs:
+                    row.update(prior.to_dict())
+                elif prior is not None and _row_is_scored(prior) and not rescore_epochs:
+                    row.update(prior.to_dict())
+                    n_skipped += 1
+                elif prior is not None and _row_is_scored(prior) and rescore_epochs:
+                    row.update(prior.to_dict())
+                    n_skipped += 1
+                elif epoch in recoverable and rescore_epochs:
+                    ckpt = epoch_checkpoint_dir(model_id, seed, epoch)
                     if ckpt.exists():
+                        print(f"  SCORE epoch {model_id} seed={seed} ep={epoch}")
                         row["benchmark_f1"] = benchmark_f1_at_checkpoint(ckpt)
+                        row["benchmark_f1_scored"] = True
                         scores = score_candidates_at_checkpoint(ckpt, candidates)
                         row.update(kb_metrics_from_scores(scores, pool))
+                        row["kb_scored"] = True
+                        n_scored_this_run += 1
+                elif prior is not None:
+                    row.update({k: prior[k] for k in prior.index if k in row or k.startswith("kb_")})
+                    if _row_is_scored(prior):
+                        n_skipped += 1
+
                 rows.append(row)
 
     traj = pd.DataFrame(rows)
-    if rescore_epochs and not traj.empty:
+    if not traj.empty:
         EPOCH_KB_CACHE.parent.mkdir(parents=True, exist_ok=True)
         traj.to_csv(EPOCH_KB_CACHE, index=False)
+    if rescore_epochs:
+        print(f"  Epoch scoring this run: {n_scored_this_run}, skipped (cached): {n_skipped}")
     return traj
 
 
@@ -106,6 +139,23 @@ def trajectory_best_point_from_r11() -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def count_epoch_checkpoints_to_score() -> int:
+    total = 0
+    for model_id in FOCUS_MODEL_IDS:
+        for seed in TRAIN_SEEDS:
+            total += len(list_recoverable_epochs(model_id, seed))
+    return total
+
+
+def count_scored_epochs() -> int:
+    cached = _load_scored_cache()
+    if cached.empty:
+        return 0
+    if "kb_scored" in cached.columns:
+        return int(cached["kb_scored"].fillna(False).astype(bool).sum())
+    return int(cached["kb_mrr_hard"].notna().sum()) if "kb_mrr_hard" in cached.columns else 0
+
+
 def build_two_axis_trajectory(*, rescore_epochs: bool = False) -> pd.DataFrame:
     parts = [trajectory_best_point_from_r11()]
     per_epoch = trajectory_from_training_logs(rescore_epochs=rescore_epochs)
@@ -124,8 +174,8 @@ def summarize_timing(traj: pd.DataFrame) -> dict[str, str]:
         return {
             "narrative": (
                 "Validation curves are available from step-2 logs. "
-                "Run with --rescore-epochs to compute per-epoch benchmark F1 and KB "
-                "from saved checkpoints for PubMedBERT, RoBERTa, and DistilBERT."
+                "Run epoch scoring (--score-epochs-only) to compute per-epoch benchmark F1 "
+                "and KB from saved checkpoints for PubMedBERT, RoBERTa, and DistilBERT."
             )
         }
     return {

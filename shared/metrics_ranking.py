@@ -24,16 +24,21 @@ def _rank_within_abstracts(df: pd.DataFrame, seed: int = SAMPLING_SEED) -> pd.Da
     return pd.concat(parts, ignore_index=True)
 
 
-def compute_mrr(df: pd.DataFrame, seed: int = SAMPLING_SEED) -> float:
+def per_abstract_mrr(df: pd.DataFrame, seed: int = SAMPLING_SEED) -> pd.Series:
+    """MRR per abstract (only abstracts with at least one curated positive)."""
     ranked = _rank_within_abstracts(df, seed=seed)
-    mrrs: list[float] = []
-    for _, group in ranked.groupby("pmid", sort=False):
+    mrrs: dict[str, float] = {}
+    for pmid, group in ranked.groupby("pmid", sort=False):
         if not group["label_civic_curated_positive"].any():
             continue
         pos = group[group["label_civic_curated_positive"]]
-        best_rank = float(pos["rank"].min())
-        mrrs.append(1.0 / best_rank)
-    return float(np.mean(mrrs)) if mrrs else 0.0
+        mrrs[str(pmid)] = 1.0 / float(pos["rank"].min())
+    return pd.Series(mrrs, name="mrr")
+
+
+def compute_mrr(df: pd.DataFrame, seed: int = SAMPLING_SEED) -> float:
+    vals = per_abstract_mrr(df, seed=seed)
+    return float(vals.mean()) if len(vals) else 0.0
 
 
 def compute_recall_at_k(df: pd.DataFrame, k: int, seed: int = SAMPLING_SEED) -> float:

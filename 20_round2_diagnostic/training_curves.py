@@ -1,23 +1,21 @@
-"""Step 1: validation and benchmark curves from training_log.json (read-only)."""
+"""Step 1: validation curves from folder-10 training logs (read-only)."""
 
 from __future__ import annotations
-
-import json
 
 import numpy as np
 import pandas as pd
 
-from .config import MATRIX_CKPT_DIR, MODELS, TRAIN_SEEDS
+from .config import MODELS, TRAIN_SEEDS
+from .matrix_io import load_training_meta
 
 
 def load_epoch_curves() -> pd.DataFrame:
     rows: list[dict] = []
     for spec in MODELS:
         for seed in TRAIN_SEEDS:
-            log_path = MATRIX_CKPT_DIR / spec.model_id / f"seed_{seed}" / "training_log.json"
-            if not log_path.exists():
+            meta = load_training_meta(spec.model_id, seed)
+            if not meta:
                 continue
-            meta = json.loads(log_path.read_text(encoding="utf-8"))
             for ep in meta.get("epoch_curve") or []:
                 rows.append(
                     {
@@ -97,7 +95,7 @@ def describe_curve_shape(summary: pd.DataFrame) -> str:
     med_peak = float(summary["median_peak_val_f1_epoch"].median())
     mean_plateau = float(summary["mean_plateau_width_epochs"].mean())
     lines = [
-        "Per-epoch checkpoints and benchmark F1 are available from step-2 training logs.",
+        "Per-epoch validation metrics are available from folder-10 step-2 training logs.",
         f"Across encoders, the median seed's val_f1 peak occurs around epoch {med_peak:.1f} "
         f"(mean plateau width near peak val_f1 about {mean_plateau:.1f} epochs).",
     ]

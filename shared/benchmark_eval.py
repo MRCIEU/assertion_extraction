@@ -19,37 +19,12 @@ from importlib import import_module
 _en = import_module("01_corpus_relevance.entity_normalization")
 
 from .constants import INFER_BATCH_SIZE, LEAKED_PMIDS, MAX_SEQ_LENGTH, NEGATIVES_PER_POSITIVE, SAMPLING_SEED, TRAIN_PAIR_TYPES
+from .marker_insert import bigbio_doc_text, format_marked_pair
 from .train_core import RelationDataset, require_gpu
 
 
-def _doc_text(doc: dict[str, Any]) -> str:
-    parts: list[str] = []
-    for passage in doc.get("passages") or []:
-        text = passage.get("text")
-        if isinstance(text, list):
-            parts.extend(str(t) for t in text if t)
-        elif text:
-            parts.append(str(text))
-    return " ".join(parts).strip()
-
-
-def _entity_surface(entity: dict[str, Any]) -> str:
-    text = entity.get("text") or [""]
-    if isinstance(text, list):
-        return str(text[0]) if text else ""
-    return str(text)
-
-
-def _format_input(text: str, head: str, tail: str) -> str:
-    if head and head in text and tail and tail in text:
-        marked = text.replace(head, f"[E1]{head}[/E1]", 1)
-        marked = marked.replace(tail, f"[E2]{tail}[/E2]", 1)
-        return marked
-    return f"[E1]{head}[/E1] {text} [E2]{tail}[/E2]"
-
-
 def _examples_from_doc(doc: dict[str, Any], rng: random.Random) -> list[dict[str, Any]]:
-    text = _doc_text(doc)
+    text = bigbio_doc_text(doc)
     if not text:
         return []
 
@@ -75,11 +50,8 @@ def _examples_from_doc(doc: dict[str, Any], rng: random.Random) -> list[dict[str
         if key in asserted:
             continue
         asserted.add(key)
-        head = _entity_surface(head_ent)
-        tail = _entity_surface(tail_ent)
-        positives.append(
-            {"text": _format_input(text, head, tail), "label": 1, "pair_type": pt}
-        )
+        marked, _method, _meta = format_marked_pair(text, head_ent, tail_ent)
+        positives.append({"text": marked, "label": 1, "pair_type": pt})
 
     by_type: dict[str, list] = {}
     for ent in entities.values():
@@ -108,9 +80,8 @@ def _examples_from_doc(doc: dict[str, Any], rng: random.Random) -> list[dict[str
             if key in asserted:
                 continue
             asserted.add(key)
-            head = _entity_surface(head_ent)
-            tail = _entity_surface(tail_ent)
-            negatives.append({"text": _format_input(text, head, tail), "label": 0})
+            marked, _method, _meta = format_marked_pair(text, head_ent, tail_ent)
+            negatives.append({"text": marked, "label": 0})
             added += 1
 
     return positives + negatives
