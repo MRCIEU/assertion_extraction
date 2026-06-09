@@ -1,0 +1,39 @@
+=== Step 2: full-matrix training ===
+Host: nid011187
+SLURM_JOB_ID=5104028
+SLURM_JOB_NAME=step2_train
+Start: Tue  9 Jun 13:31:38 UTC 2026
+REPO=/home/b5ac/freddieyu.b5ac/project_1
+OUTPUT_ROOT=/home/b5ac/freddieyu.b5ac/project_1/../projects/project_1
+STEP_ARGS=--models biomedbert_base
+Log: /home/b5ac/freddieyu.b5ac/project_1/../projects/project_1/runs/10_recipe_sweep_and_training/train_5104028.out
+Ensure CHOSEN_RECIPE is set in config.py (not None) before submitting.
+TMPDIR=/home/b5ac/freddieyu.b5ac/project_1/../projects/project_1/runs/10_recipe_sweep_and_training/tmp_5104028
+=== Recipe sweep and training 2026-06-09T13:31:41.615585 ===
+[run] mode=train-only (step 2)
+[run] model filter: ['biomedbert_base']
+
+=== Step-2 matrix training ===
+Recipe: lr=5e-06, warmup=none (checkpoint criterion=val_f1)
+Encoders (1): ['biomedbert_base']
+Seeds (8): [42, 43, 44, 45, 46, 47, 48, 49]
+Planned runs this job: 8
+
+
+=== Estimated checkpoint footprint (rough) ===
+  Runs: 1 encoders x 8 seeds = 8
+  Assumed ~7 epochs/run; epoch ckpt ~220 MiB (fp16); best ckpt ~440 MiB (fp32)
+  Per run ~1980 MiB; total ~15.5 GiB
+  MAX_EPOCH_CHECKPOINTS_TO_KEEP=None (None = keep all epoch checkpoints)
+
+[benchmark] building BioRED test examples...
+[benchmark] built 14395 test examples (leaked PMIDs excluded)
+  RUN START BioMedBERT-base (biomedbert_base) seed=42 [1/8 in this job]
+[train] start biomedbert_base seed=42 lr=5e-06 warmup=none train=24000 val=25311 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biomedbert_base/seed_42
+[train] device=cuda batch_size=16 max_epochs=10
+Some weights of BertForSequenceClassification were not initialized from the model checkpoint at microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract and are newly initialized: ['classifier.bias', 'classifier.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[train] epoch 1/10 train_loss=0.5527 val_loss=0.5104 val_f1=0.7718 patience=0/3
+[train] new best val_f1=0.7718 at epoch 1 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biomedbert_base/seed_42/best
+[train] epoch 2/10 train_loss=0.3813 val_loss=0.5864 val_f1=0.7169 patience=0/3
+[train] epoch 3/10 train_loss=0.3102 val_loss=0.6634 val_f1=0.7400 patience=1/3

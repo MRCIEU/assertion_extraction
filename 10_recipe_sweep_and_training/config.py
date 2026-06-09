@@ -47,6 +47,11 @@ MATRIX_CKPT_DIR = MATRIX_DATA / "checkpoints"
 MATRIX_RESULTS_DIR = MATRIX_DATA / "results"
 MATRIX_COMPLETE = "matrix_complete.json"
 
+# Step 2 report / summary CSVs and figures
+MATRIX_OUTPUT_DIR = OUTPUT_DIR / "matrix"
+MATRIX_FIGURE_DIR = FIGURE_DIR / "matrix"
+MATRIX_REPORT_PATH = REPORT_DIR / "matrix_report.md"
+
 TRAIN_CACHE_DIR = DATA_DIR / "cache"
 
 # =============================================================================
@@ -55,7 +60,7 @@ TRAIN_CACHE_DIR = DATA_DIR / "cache"
 #   CHOSEN_RECIPE = RecipeConfig(lr=1e-5, warmup_ratio=0.0, warmup_label="none")
 # Leave as None until then; step 2 will abort if still unset.
 # =============================================================================
-CHOSEN_RECIPE: RecipeConfig | None = RecipeConfig(lr=3e-5, warmup_ratio=0.0, warmup_label="none")
+CHOSEN_RECIPE: RecipeConfig | None = RecipeConfig(lr=5e-6, warmup_ratio=0.0, warmup_label="none")
 
 # Step-2 checkpoint storage (per-epoch dirs are fp16; best/ stays fp32 for folder 11)
 SAVE_EPOCH_CHECKPOINTS_FP16 = True

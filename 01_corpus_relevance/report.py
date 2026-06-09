@@ -46,12 +46,12 @@ def generate_report() -> None:
 
     inv_lines = []
     for _key, entry in inventories["corpora"].items():
-        splits = ", ".join(f"{s}={n}" for s, n in entry["split_sizes"].items())
+        split_docs = ", ".join(f"{s}={n} documents" for s, n in entry["split_sizes"].items())
         rel_top = sorted(entry["relation_type_counts"].items(), key=lambda x: -x[1])[:5]
         rel_str = "; ".join(f"{l} ({c})" for l, c in rel_top)
         inv_lines.append(
-            f"**{entry['display_name']}** — {entry['total_relations']} relations | splits: {splits} | "
-            f"top labels: {rel_str}"
+            f"**{entry['display_name']}** — {entry['total_relations']} relations corpus-wide | "
+            f"split sizes ({split_docs}) | top relation labels: {rel_str}"
         )
 
     share_by_type = dict(zip(matrix["civic_pair_type"], matrix["civic_eval_share"]))
@@ -72,9 +72,15 @@ def generate_report() -> None:
         for r in coverage.itertuples()
     )
 
+    def _vol_note(rec: str) -> str:
+        rec = str(rec)
+        if "descriptive-only" in rec:
+            return "descriptive-only; thin volume"
+        return "suitable for future full-corpus vs oncology-subset comparison"
+
     vol_lines = "\n".join(
         f"| {r.civic_pair_type} | {100 * share_by_type.get(r.civic_pair_type, r.civic_eval_share):.1f}% | {int(r.biored_train_relations)} | "
-        f"{int(r.drugprot_train_relations)} | {int(r.combined_train_relations)} | {r.rq3_recommendation} |"
+        f"{int(r.drugprot_train_relations)} | {int(r.combined_train_relations)} | {_vol_note(r.rq3_recommendation)} |"
         for r in assessment.itertuples()
     )
 
@@ -154,7 +160,7 @@ BioRED disease entities carry MeSH normalisation; MeSH IDs in the NCIt Neoplasm 
 
 ### Criterion 2 — Gene in CIViC gene set
 
-Gene symbol matched against CIViC `GENE` features from step 00. CIViC is the natural CC0 cancer-gene reference for this study; COSMIC Cancer Gene Census was excluded due to licence and redistribution restrictions.
+Gene symbol matched against CIViC `GENE` features from step 00. CIViC is the natural CC0 cancer-gene reference for this study; COSMIC Cancer Gene Census was excluded at preparation time due to licence and redistribution restrictions. COSMIC Cancer Gene Census access is now available and could strengthen the oncology-subset gene criterion if the registered full-corpus vs oncology-subset comparison is run in future work (annotation use only, no redistribution).
 
 ### Criterion 3 — Literature indexed under MeSH Neoplasms
 
@@ -313,7 +319,7 @@ Detailed per-split tables: `data/corpus_inventory_long.csv`, `data/corpus_invent
 
 ---
 
-## C. Label granularity ladder (RQ1)
+## C. Label granularity ladder (label incommensurability)
 
 | Corpus | Label | Level | Count |
 | --- | --- | --- | ---: |
@@ -321,23 +327,23 @@ Detailed per-split tables: `data/corpus_inventory_long.csv`, `data/corpus_invent
 
 {gran_summary.iloc[0]['question']}: {gran_summary.iloc[0]['answer']}
 
-**RQ1 implication.** {gran_summary.iloc[0]['rq1_implication']}
+**Implication for task design.** Do not collapse CIViC clinical labels onto BioRED or DrugProt types. The evaluation-validity question is whether benchmark rank predicts CIViC downstream performance under a **presence-only** relation target, not whether native label taxonomies align.
 
 See `outputs/granularity_ladder.csv`, figure `figures/granularity_ladder.png`.
 
 ---
 
-## D. Trainable volume by CIViC pair (RQ3)
+## D. Trainable volume by CIViC pair (data-composition preparation)
 
-| CIViC pair | Eval share | BioRED train+val | DrugProt train+val | Combined | RQ3 recommendation |
+| CIViC pair | Eval share | BioRED train+val | DrugProt train+val | Combined | Data-composition note |
 | --- | ---: | ---: | ---: | ---: | --- |
 {vol_lines}
 
-**RQ3 implication.** Run configuration experiments on **gene–drug** and **gene–disease**. Treat **variant–drug** as descriptive-only (BioRED-only and thin).
+**Implication.** Gene–drug and gene–disease pairs carry enough train+validation volume to support a registered future **full-corpus vs oncology-subset** comparison (the data-composition dimension of the evaluation-validity diagnostic). Variant–drug remains descriptive-only (BioRED-only and thin).
 {diag_section}
 ---
 
-## E. DrugProt → CIViC projectability (RQ1/RQ3)
+## E. DrugProt → CIViC projectability (label incommensurability)
 
 Deterministic projection possible: **no**.
 
@@ -355,8 +361,8 @@ Deterministic projection possible: **no**.
 | --- | --- |
 | Training corpora | BioRED (primary) + DrugProt (gene–drug supplement) |
 | Training splits | train + validation (test held out) |
-| RQ1 | Compare label tiers descriptively; no cross-corpus label collapse |
-| RQ3 configs | Focus on gene–drug / gene–disease; variant–drug descriptive-only |
+| Label incommensurability | Presence-only task; no cross-corpus label collapse |
+| Data-composition prep | Registered future full-corpus vs oncology-subset comparison on gene–drug / gene–disease |
 | BC5CDR | Reference only — not used for training |
 {design_extra}"""
 

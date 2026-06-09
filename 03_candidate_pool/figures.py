@@ -3,9 +3,78 @@
 from __future__ import annotations
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 
 from .config import FIGURE_DIR, OUTPUT_DIR
+
+
+def _apply_ieee_style() -> None:
+    plt.rcParams.update(
+        {
+            "font.size": 11,
+            "axes.labelsize": 12,
+            "axes.titlesize": 13,
+            "figure.dpi": 300,
+            "savefig.dpi": 300,
+            "savefig.facecolor": "white",
+        }
+    )
+
+
+def plot_pubtator_recall_gap(summary: dict) -> None:
+    """Gap composition and miss rate by phrase length (read-only diagnostic)."""
+    _apply_ieee_style()
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4.5))
+
+    labels = ["Matched", "Entity absent", "Present but\nunmatched"]
+    counts = [
+        summary["n_matched"],
+        summary["n_miss_entity_absent"],
+        summary["n_miss_present_but_unmatched"],
+    ]
+    colors = ["#0072B2", "#E69F00", "#009E73"]
+    y_pos = np.arange(len(labels))
+    axes[0].barh(y_pos, counts, color=colors, height=0.55)
+    axes[0].set_yticks(y_pos)
+    axes[0].set_yticklabels(labels, fontsize=11)
+    axes[0].set_xlabel("CIViC primary relations (n)", fontsize=12)
+    axes[0].set_title("Gap composition", fontsize=13)
+    n_total = summary["n_total"]
+    for i, c in enumerate(counts):
+        axes[0].text(c + 8, i, f"{c} ({c/n_total:.1%})", va="center", fontsize=10)
+    axes[0].spines["top"].set_visible(False)
+    axes[0].spines["right"].set_visible(False)
+
+    cats = ["All single-word\nentities", "Any multi-word\nentity"]
+    miss_rates = [
+        summary["relation_miss_rate_single_word"] * 100,
+        summary["relation_miss_rate_any_multiword"] * 100,
+    ]
+    match_rates = [100 - mr for mr in miss_rates]
+    x = np.arange(len(cats))
+    width = 0.55
+    axes[1].bar(x, match_rates, width, label="Matched in pool", color="#0072B2")
+    axes[1].bar(x, miss_rates, width, bottom=match_rates, label="No pool positive", color="#E69F00")
+    axes[1].set_xticks(x)
+    axes[1].set_xticklabels(cats, fontsize=11)
+    axes[1].set_ylabel("Fraction of relations (%)", fontsize=12)
+    axes[1].set_ylim(0, 100)
+    axes[1].set_title("Miss rate vs phrase length", fontsize=13)
+    axes[1].legend(loc="upper right", fontsize=9, frameon=False)
+    for i, mr in enumerate(miss_rates):
+        if mr >= 5:
+            axes[1].text(
+                i, match_rates[i] + mr / 2, f"{mr:.0f}% miss",
+                ha="center", va="center", fontsize=10, color="white",
+            )
+    axes[1].spines["top"].set_visible(False)
+    axes[1].spines["right"].set_visible(False)
+
+    fig.tight_layout(w_pad=2.0)
+    out = FIGURE_DIR / "03_candidate_pool_pubtator_recall_gap.png"
+    fig.savefig(out, dpi=300, bbox_inches="tight", facecolor="white", edgecolor="none", pad_inches=0.08)
+    plt.close(fig)
 
 
 def plot_coverage(type_summary: pd.DataFrame) -> None:

@@ -43,6 +43,11 @@ def main() -> None:
         action="store_true",
         help="Post-training acceptance gate (DeBERTa hard gate)",
     )
+    parser.add_argument(
+        "--matrix-report",
+        action="store_true",
+        help="Final matrix summary report, CSVs, figure, and acceptance verdict",
+    )
     parser.add_argument("--force", action="store_true", help="Re-run even if markers exist")
     parser.add_argument("--models", nargs="+", default=None, help="Limit to model IDs")
     parser.add_argument("--seeds", nargs="+", type=int, default=None, help="Limit to seeds")
@@ -57,17 +62,22 @@ def main() -> None:
             args.preflight_sweep,
             args.preflight_train,
             args.accept_matrix,
+            args.matrix_report,
         ]
     )
     if n != 1:
         raise SystemExit(
             "Specify exactly one of --sweep-only, --sweep-advisory-only, --decide-recipe, "
-            "--train-only, --preflight-sweep, --preflight-train, --accept-matrix"
+            "--train-only, --preflight-sweep, --preflight-train, --accept-matrix, --matrix-report"
         )
 
     print(f"=== Recipe sweep and training {__import__('datetime').datetime.now().isoformat()} ===", flush=True)
 
-    if args.preflight_train:
+    if args.matrix_report:
+        print("[run] mode=matrix-report", flush=True)
+        code = import_module("10_recipe_sweep_and_training.step2_report").run_matrix_report()
+        raise SystemExit(code)
+    elif args.preflight_train:
         print("[run] mode=preflight-train", flush=True)
         ok = import_module("10_recipe_sweep_and_training.step2_preflight").run_step2_preflight()
         if not ok:

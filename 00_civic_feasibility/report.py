@@ -140,13 +140,13 @@ All data were retrieved live from the CIViC GraphQL API and cached under `projec
 
 ---
 
-## D. Native-label heterogeneity (RQ1 context)
+## D. Native-label heterogeneity (label incommensurability)
 
 | Evidence type | Clinical significance | Direction | Count |
 | --- | --- | --- | ---: |
 {label_lines}
 
-**Interpretation.** CIViC native labels (`evidenceType`, `significance`, `evidenceDirection`) span heterogeneous semantic levels. Training-corpus labels (association, mechanism, clinical significance) are not directly commensurable with CIViC clinical assertions — a finding developed further in step 01.
+**Interpretation.** CIViC native labels (`evidenceType`, `significance`, `evidenceDirection`) span heterogeneous semantic levels. Training-corpus labels (association, mechanism, clinical significance) are not directly commensurable with CIViC clinical assertions. This is why the downstream task uses relation **presence only**, not fine-grained label alignment. Step 01 develops the corpus-side evidence.
 
 ---
 

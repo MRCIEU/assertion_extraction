@@ -47,7 +47,7 @@ def _check(name: str, ok: bool, detail: str = "") -> bool:
 
 
 def _grep_step2_for_stale_lr() -> list[str]:
-    """Flag hardcoded non-sweep RecipeConfig defaults in step-2 modules."""
+    """Flag hardcoded non-chosen RecipeConfig defaults in step-2 modules."""
     step_dir = Path(__file__).resolve().parent
     hits: list[str] = []
     for path in [step_dir / "config.py", step_dir / "step2_train.py"]:
@@ -55,9 +55,10 @@ def _grep_step2_for_stale_lr() -> list[str]:
             stripped = line.strip()
             if stripped.startswith("#"):
                 continue
-            if "RecipeConfig" in line and ("1e-5" in line or "2e-5" in line or "1e-05" in line or "2e-05" in line):
-                if "CHOSEN_RECIPE" in line and "3e-5" not in line and "3e-05" not in line:
-                    hits.append(f"{path.name}:{i}: {stripped}")
+            if "RecipeConfig" in line and "CHOSEN_RECIPE" in line:
+                if any(x in line for x in ("3e-5", "3e-05", "1e-5", "1e-05", "2e-5", "2e-05")):
+                    if "5e-6" not in line and "5e-06" not in line:
+                        hits.append(f"{path.name}:{i}: {stripped}")
     return hits
 
 
@@ -122,21 +123,21 @@ def run_step2_preflight() -> bool:
     try:
         recipe = require_chosen_recipe()
         ok = (
-            abs(recipe.lr - 3e-5) < 1e-12
+            abs(recipe.lr - 5e-6) < 1e-12
             and recipe.warmup_label == "none"
             and recipe.warmup_ratio == 0.0
             and CHECKPOINT_CRITERION == "val_f1"
         )
         all_ok &= _check(
-            "Recipe 3e-5/none/val_f1",
+            "Recipe 5e-6/none/val_f1",
             ok,
             f"lr={recipe.lr}, warmup={recipe.warmup_label}, criterion={CHECKPOINT_CRITERION}, "
             f"strategy={recipe.strategy_tag()}",
         )
         stale = _grep_step2_for_stale_lr()
-        all_ok &= _check("No stale 1e-5/2e-5 defaults in step-2 path", not stale, "; ".join(stale) or "none found")
+        all_ok &= _check("No stale 3e-5/1e-5/2e-5 defaults in step-2 path", not stale, "; ".join(stale) or "none found")
     except SystemExit as exc:
-        all_ok &= _check("Recipe 3e-5/none/val_f1", False, str(exc))
+        all_ok &= _check("Recipe 5e-6/none/val_f1", False, str(exc))
 
     # 2. Clean cache
     try:
@@ -281,22 +282,28 @@ def run_step2_preflight() -> bool:
     if old["n_markers"] == 0 and old["n_best_ckpt_dirs"] == 0:
         plan = (
             "Clean slate: no matrix/ outputs on disk. New run writes to "
-            "data/10_recipe_sweep_and_training/matrix/ at 3e-5/none on offset-marked data. "
-            "Prior 1e-5 buggy-data matrix (from Jun 5 jobs) is absent; nothing to mix."
+            "data/10_recipe_sweep_and_training/matrix/ at 5e-6/none on offset-marked data."
         )
         old_ok = True
-    elif old["n_markers"] > 0 and old["recipe_lrs"] != [3e-5]:
+    elif old["n_markers"] > 0 and old["recipe_lrs"] == [3e-5]:
+        plan = (
+            f"INVALID 3e-5 matrix present ({old['n_markers']}/72 markers, "
+            f"{old['n_best_ckpt_dirs']} best/ dirs). Before submit: archive then force-overwrite. "
+            f"Example: mv {MATRIX_DATA} {MATRIX_DATA}_invalid_3e5_$(date +%Y%m%d) "
+            f"&& submit with STEP_ARGS='--force' (or archive + empty matrix/ + --force). "
+            "Without archive/--force, resubmit would SKIP all 72 stale 3e-5 runs."
+        )
+        old_ok = False
+    elif old["n_markers"] > 0 and old["recipe_lrs"] != [5e-6]:
         plan = (
             f"WARNING: {old['n_markers']} stale matrix_complete.json markers exist with "
-            f"recipe_lr={old['recipe_lrs']}. Without --force, step 2 will SKIP completed runs "
-            "and folder 11 could read old 1e-5 checkpoints. Before submit, either archive "
-            f"matrix/ (e.g. mv {MATRIX_DATA} {MATRIX_DATA}_prior_1e5_string_match) "
-            "or submit with STEP_ARGS='--force' to overwrite all 72 runs."
+            f"recipe_lr={old['recipe_lrs']}. Archive matrix/ or submit with STEP_ARGS='--force' "
+            "before folder 11 could read wrong checkpoints."
         )
         old_ok = False
     else:
-        plan = "Partial or matching matrix present; resubmit skips finished runs unless --force."
-        old_ok = old["n_markers"] == 0 or old["recipe_lrs"] == [3e-5]
+        plan = "Partial or matching 5e-6 matrix present; resubmit skips finished runs unless --force."
+        old_ok = old["n_markers"] == 0 or old["recipe_lrs"] == [5e-6]
     all_ok &= _check("Old output handling plan", old_ok, plan)
 
     _log("\n=== Pre-flight summary ===")

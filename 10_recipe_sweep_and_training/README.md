@@ -36,6 +36,15 @@ python run.py --train-only
 
 Cluster: `sbatch step2_train.sbatch`
 
+After training completes:
+
+```bash
+python run.py --matrix-report    # CSVs, heatmap, matrix_report.md, acceptance verdict
+python run.py --accept-matrix    # acceptance gate only (stdout)
+```
+
+Outputs: `outputs/.../matrix/matrix_per_run.csv`, `matrix_encoder_summary.csv`; figure `figures/.../matrix/matrix_benchmark_f1_heatmap.png`; report `reports/.../matrix_report.md`.
+
 ## Checkpoint layout
 
 ```

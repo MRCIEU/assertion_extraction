@@ -19,6 +19,7 @@ from .config import (
     MIN_PRIMARY_BOTH_ENTITY_COVERAGE,
     OUTPUT_DIR,
     PRIMARY_PAIR_TYPES,
+    RANKING_BASELINES_CSV,
     REPORT_DIR,
     SAMPLING_SEED,
 )
@@ -256,19 +257,20 @@ Generated: {datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")}
 
 ---
 
-## A. Positive coverage by PubTator3
+## A. Ranking coverage in the frozen pool
 
-For each CIViC-curated positive in the frozen evaluation set (step 02, from step 00 abstract-grounded inventory), can PubTator3 identify **both** entities in that abstract?
+For each primary CIViC relation in the frozen evaluation set (step 02), does the pool contain at least one positive candidate under the frozen matching rules?
 
 | Metric | Value |
 | --- | ---: |
-| Total positives | {stats['n_positives_total']} |
-| Both entities found (evaluable) | {stats['n_positives_evaluable']} ({stats['positive_coverage_rate']:.1%}) |
-| Lost (unevaluable) | {stats['n_positives_unevaluable']} |
-| Gene–drug / gene–disease evaluable | {stats['n_primary_evaluable']} / {stats['n_primary_total']} ({stats['primary_coverage_rate']:.1%}) |
-| Gene–drug / gene–disease unevaluable | {stats['n_primary_unevaluable']} |
+| Total primary relations | {stats['n_primary_total']} |
+| With pool positive (ranking evaluable) | {stats['n_primary_evaluable']} ({stats['primary_coverage_rate']:.1%}) |
+| Without pool positive | {stats['n_primary_unevaluable']} ({1 - stats['primary_coverage_rate']:.1%}) |
+| PubTator slot both-found (NER-level) | {stats.get('n_primary_both_found', stats['n_primary_evaluable'])} ({stats.get('primary_both_found_rate', stats['primary_coverage_rate']):.1%}) |
 
-### Coverage by entity type
+Slot-level both-found counts PubTator annotations matching both CIViC entity strings before pool enumeration; pool-positive counts relations with at least one marked positive candidate. The counts differ by one relation where pool matching succeeds without both slots matched individually.
+
+### Coverage by entity type (PubTator slot found)
 
 | Entity type | Found | Total slots | Coverage |
 | --- | ---: | ---: | ---: |
@@ -341,7 +343,7 @@ Comparison of **evaluable** vs **unevaluable** primary positives ({d2['n_primary
 | --- | --- |
 | Variant 0.0% genuine (D1) | {'Yes' if verdict.get('variant_genuine_zero') else 'No — fix matching'} |
 | Systematic loss bias (D2) | {'Yes' if verdict.get('systematic_loss_bias') else 'No strong skew'} |
-| PubTator3-recall ceiling | {stats['n_positives_unevaluable']} unevaluable positives ({stats['n_primary_unevaluable']} primary) |
+| PubTator3-recall ceiling | {stats['n_primary_unevaluable']} relations without pool positive |
 
 Frozen artifact: `outputs/frozen_pool.json`
 """
@@ -478,6 +480,156 @@ def build_candidate_pool(force_fetch: bool = False) -> dict[str, Any]:
         baseline_summary=baseline_summary,
     )
     return protocol
+
+
+def refresh_recall_diagnostic() -> None:
+    """Read-only PubTator recall diagnostic; patch report section in place."""
+    from .pubtator_recall import recall_report_section, run_pubtator_recall_diagnostic
+
+    summary = run_pubtator_recall_diagnostic()
+    section = recall_report_section(summary)
+
+    report_path = REPORT_DIR / "report.md"
+    if not report_path.exists():
+        report_path.write_text(section.strip() + "\n", encoding="utf-8")
+        print(f"\nReport written to {report_path}")
+        return
+
+    existing = report_path.read_text(encoding="utf-8")
+    marker = "## PubTator recall and entity-span limitation"
+    if marker in existing:
+        before = existing.split(marker)[0].rstrip()
+        while before.endswith("---"):
+            before = before[:-3].rstrip()
+        after_parts = existing.split(marker, 1)[1]
+        for end_marker in ("\n---\n\n## Ranking-feasibility", "\n## Ranking-feasibility"):
+            if end_marker in after_parts:
+                after = after_parts.split(end_marker, 1)[1]
+                existing = before + "\n\n---\n\n" + section.strip() + "\n\n" + "## Ranking-feasibility" + after
+                break
+        else:
+            existing = before + "\n\n" + section.strip() + "\n"
+    else:
+        insert_before = "## Ranking-feasibility verdict"
+        if insert_before in existing:
+            existing = existing.replace(
+                insert_before,
+                "---\n\n" + section.strip() + "\n\n" + insert_before,
+            )
+        else:
+            existing = existing.rstrip() + "\n\n" + section.strip() + "\n"
+
+    report_path.write_text(existing, encoding="utf-8")
+    print(f"\nReport updated: {report_path}")
+
+
+def _pool_stats_from_candidates() -> pd.DataFrame:
+    """Recompute pool size summary from frozen pool_candidates.csv."""
+    pool = pd.read_csv(FROZEN_POOL_CSV)
+    primary = pool[pool["scope"] == "primary"]
+    rows: list[dict[str, Any]] = []
+    for pt in PRIMARY_PAIR_TYPES:
+        sub = primary[primary["pair_type"] == pt]
+        sizes = sub.groupby("pmid").size()
+        if sizes.empty:
+            continue
+        rows.append(
+            {
+                "pair_type": pt,
+                "count": int(len(sizes)),
+                "mean": float(sizes.mean()),
+                "median": float(sizes.median()),
+                "min": int(sizes.min()),
+                "max": int(sizes.max()),
+            }
+        )
+    df = pd.DataFrame(rows)
+    df.to_csv(OUTPUT_DIR / "03_candidate_pool_size_distribution.csv", index=False)
+    return df
+
+
+def _augment_protocol_pool_stats(protocol: dict[str, Any]) -> tuple[dict[str, Any], pd.DataFrame, pd.DataFrame]:
+    """Overlay pool-positive coverage from classification CSV (read-only on frozen pool)."""
+    cls_path = OUTPUT_DIR / "03_candidate_pool_pubtator_recall_classification.csv"
+    cov_path = OUTPUT_DIR / "03_candidate_pool_positive_coverage.csv"
+    if not cls_path.exists() or not cov_path.exists():
+        raise FileNotFoundError("Missing recall classification or positive coverage CSV for report refresh")
+    cls = pd.read_csv(cls_path)
+    coverage_df = pd.read_csv(cov_path)
+    primary_cov = coverage_df[coverage_df["scope"] == "primary"]
+    n_matched = int(cls["matched_in_pool"].sum())
+    n_miss = int(len(cls) - n_matched)
+    n_both = int(primary_cov["both_found"].sum())
+    stats = protocol["statistics"]
+    stats["n_primary_evaluable"] = n_matched
+    stats["n_primary_unevaluable"] = n_miss
+    stats["primary_coverage_rate"] = round(n_matched / max(len(cls), 1), 4)
+    stats["n_primary_both_found"] = n_both
+    stats["primary_both_found_rate"] = round(n_both / max(len(primary_cov), 1), 4)
+    stats["n_positives_evaluable"] = n_matched
+    stats["n_positives_unevaluable"] = n_miss
+    stats["positive_coverage_rate"] = stats["primary_coverage_rate"]
+    protocol["statistics"] = stats
+    return protocol, cls, coverage_df
+
+
+def refresh_full_report() -> None:
+    """CPU-only: regenerate step-03 report from frozen artifacts; preserve recall section."""
+    import json
+
+    from .diagnostics import analyze_systematic_loss
+    from .ranking_baselines import compute_ranking_baselines
+
+    protocol = json.loads(FROZEN_POOL_JSON.read_text(encoding="utf-8"))
+    protocol, cls, coverage_df = _augment_protocol_pool_stats(protocol)
+
+    positives = load_frozen_positives()
+    _, loss_comparison, gene_comparison, loss_d2 = analyze_systematic_loss(
+        positives, coverage_df, pool_classification=cls
+    )
+    protocol["diagnostics"]["systematic_loss"] = loss_d2
+
+    pool_rate = protocol["statistics"]["primary_coverage_rate"]
+    verdict = protocol["ranking_feasibility_verdict"]
+    bias_note = (
+        " Some representativeness skew in losses (D2)."
+        if loss_d2.get("systematic_bias_detected")
+        else " Losses appear largely idiosyncratic (D2)."
+    )
+    verdict["reason"] = (
+        f"Primary pool-positive coverage {pool_rate:.1%}, mean pool size "
+        f"{verdict.get('mean_pool_size_primary', 0):.1f}, mean positive fraction "
+        f"{verdict.get('mean_positive_fraction', 0):.1%}; variant 0.0% confirmed genuine (D1)."
+        + bias_note
+    )
+
+    baseline_summary = None
+    if RANKING_BASELINES_CSV.exists():
+        baseline_summary = compute_ranking_baselines()
+
+    type_summary = pd.read_csv(OUTPUT_DIR / "03_candidate_pool_coverage_by_entity_type.csv")
+    pool_stats = _pool_stats_from_candidates()
+    composition_df = pd.read_csv(OUTPUT_DIR / "03_candidate_pool_composition.csv")
+    variant_breakdown = pd.read_csv(OUTPUT_DIR / "03_candidate_pool_variant_breakdown.csv")
+    variant_inspect = pd.read_csv(OUTPUT_DIR / "03_candidate_pool_variant_inspect_sample.csv")
+    variant_d1 = protocol["diagnostics"]["variant_root_cause"]
+
+    write_report(
+        protocol,
+        type_summary,
+        pool_stats,
+        composition_df,
+        verdict,
+        variant_d1,
+        variant_breakdown,
+        variant_inspect,
+        loss_d2,
+        loss_comparison,
+        gene_comparison,
+        baseline_summary=baseline_summary,
+    )
+    plot_systematic_loss(loss_comparison, gene_comparison)
+    refresh_recall_diagnostic()
 
 
 def refresh_baselines_and_report() -> None:

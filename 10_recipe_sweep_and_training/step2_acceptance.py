@@ -217,15 +217,17 @@ def run_acceptance_gate() -> int:
     if gate_pass:
         _log(
             "\nDeBERTa stable across all 8 seeds (no collapse, no systematic suppression) "
-            "-> recipe 3e-5/none confirmed, cleared to proceed to folder 11"
+            "-> 5e-6/none confirmed, cleared to proceed to folder 11"
         )
         _log("(You decide whether to proceed; this gate does not auto-start folder 11.)")
         return 0
 
     _log(
-        "\nDeBERTa shows collapse or systematic suppression on one or more seeds "
-        "-> 3e-5/none is a seed-42 artefact, DO NOT proceed to folder 11; "
-        "fall back to 5e-6/none or 1e-5/warmup and rerun step 2 with the fallback recipe."
+        "\nDeBERTa collapses/suppressed on one or more seeds -> 5e-6/none also unstable; "
+        "DO NOT proceed; stop and report, because if even the lowest learning rate cannot "
+        "stabilise DeBERTa across seeds, the issue is DeBERTa's cross-seed fragility on this "
+        "task, which we must handle deliberately (e.g. treat DeBERTa's seed fragility as a "
+        "finding, or handle it separately) rather than by trying another recipe."
     )
     if not all_complete:
         _log(f"  Also: matrix incomplete ({n_done}/{expected}) or recipe mismatch.")

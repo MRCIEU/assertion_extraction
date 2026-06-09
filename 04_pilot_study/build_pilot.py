@@ -262,7 +262,7 @@ The best trained model (PubMedBERT MRR={verdict['best_model_mrr']:.3f}) does **n
 
 Higher correlation suggests scores track entity proximity; lower correlation with weak overall MRR suggests other signal may exist but is under-exploited at pilot training scale.
 
-Figure: `figures/04_distance_score_correlation.png` · Table: `outputs/04_distance_score_correlation.csv`
+Figure: `figures/04_pilot_study/04_distance_score_correlation.png` · Table: `outputs/04_pilot_study/04_distance_score_correlation.csv`
 
 #### Diagnostic 2 — Easy vs hard subset ranking (key)
 
@@ -270,7 +270,7 @@ Pool split by sentence distance: **easy** = both entities in the same sentence; 
 
 {subset_lines}
 
-Figure: `figures/04_distance_hard_subset_mrr.png` · Table: `outputs/04_distance_subset_ranking.csv`
+Figure: `figures/04_pilot_study/04_distance_hard_subset_mrr.png` · Table: `outputs/04_pilot_study/04_distance_subset_ranking.csv`
 
 #### Diagnostic 3 — Distance distribution of CIViC-curated positives
 
@@ -280,7 +280,7 @@ Figure: `figures/04_distance_hard_subset_mrr.png` · Table: `outputs/04_distance
 
 **{dv['fraction_positives_co_sentence']:.1%}** of CIViC-curated positives with known offsets are co-sentence.
 
-Figure: `figures/04_positive_distance_distribution.png` · Tables: `outputs/04_positive_distance_distribution.csv`, `outputs/04_positive_distance_summary.csv`
+Figure: `figures/04_pilot_study/04_positive_distance_distribution.png` · Tables: `outputs/04_pilot_study/04_positive_distance_distribution.csv`, `outputs/04_pilot_study/04_positive_distance_summary.csv`
 
 #### Verdict (descriptive)
 
@@ -294,6 +294,8 @@ Figure: `figures/04_positive_distance_distribution.png` · Tables: `outputs/04_p
     report = f"""# Step 04: Divergence Pilot Report (minimal training)
 
 Generated: {datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")}
+
+**Pre-fix pipeline note.** This pilot predates the step-05 marker-offset repair and the clean-data recipe selection in step 10. Training used first-occurrence string-match entity markers and an exploratory learning rate (2e-5). The specific magnitudes here come from that pre-fix pipeline and must not be compared to post-fix full-matrix results. The pilot stands only as evidence that ranking, benchmark–KB decoupling, and calibration signals can exist at minimal training scale, not as effect-size estimates for the main study.
 
 ## Pilot study overview
 
@@ -568,3 +570,54 @@ def run_pilot(
         distance_confound=distance_confound,
     )
     return summary
+
+
+def refresh_report_from_artifacts() -> None:
+    """Regenerate pilot report from existing score/metric CSVs (no training or rescoring)."""
+    from .config import MODEL_BY_ID, OUTPUT_DIR as PILOT_OUT
+    from .distance_confound import run_distance_confound_diagnostic
+
+    template = load_primary_candidates()[
+        ["candidate_id", "pmid", "pair_type", "label_civic_curated_positive"]
+    ].copy()
+    ranking_verify = _load_step03_verification()
+    scores_df = load_all_scores()
+    ranking_models = pd.read_csv(PILOT_OUT / "04_pilot_study_ranking_metrics.csv")
+    ranking_baselines = _load_step03_baselines()
+    calibration_df = pd.read_csv(PILOT_OUT / "04_pilot_study_calibration_ece.csv")
+    calibration_baselines = pd.read_csv(PILOT_OUT / "04_pilot_study_calibration_baselines.csv")
+    score_dist = pd.read_csv(PILOT_OUT / "04_pilot_study_score_distribution.csv")
+    bench_kb = pd.read_csv(PILOT_OUT / "04_pilot_study_benchmark_vs_kb.csv")
+    flips = pd.read_csv(PILOT_OUT / "04_pilot_study_rank_flips.csv")
+
+    distance_confound = run_distance_confound_diagnostic(scores_df)
+    decouple = decoupling_summary(bench_kb)
+    cal_decouple = calibration_decoupling(bench_kb, calibration_df)
+    cal_summary = {
+        "ece_spread": float(calibration_df["ece"].max() - calibration_df["ece"].min()),
+        "ece_min": float(calibration_df["ece"].min()),
+        "ece_max": float(calibration_df["ece"].max()),
+    }
+    verdict = _preliminary_assessment(
+        ranking_models,
+        ranking_baselines,
+        decouple,
+        cal_summary,
+        cal_decouple,
+        score_dist,
+        ranking_verify,
+    )
+    write_report(
+        verdict,
+        ranking_verify,
+        ranking_models,
+        ranking_baselines,
+        calibration_df,
+        calibration_baselines,
+        bench_kb,
+        flips,
+        decouple,
+        cal_decouple,
+        score_dist,
+        distance_confound=distance_confound,
+    )

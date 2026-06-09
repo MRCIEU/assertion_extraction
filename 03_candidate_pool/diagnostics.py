@@ -190,15 +190,24 @@ def _build_pmid_metadata() -> pd.DataFrame:
 def analyze_systematic_loss(
     positives: pd.DataFrame,
     coverage_df: pd.DataFrame,
+    pool_classification: pd.DataFrame | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame, dict[str, Any]]:
     """
-    D2: Compare primary positives PubTator3 covers vs misses on interpretable features.
+    D2: Compare primary positives with vs without pool coverage on interpretable features.
+    When pool_classification is supplied, evaluable = matched_in_pool (ranking coverage).
     """
     primary = coverage_df[coverage_df["scope"] == "primary"].copy()
+    primary["pmid"] = primary["pmid"].astype(str)
+    if pool_classification is not None:
+        primary = primary.merge(
+            pool_classification[["target_id", "matched_in_pool", "head_status", "tail_status"]],
+            on="target_id",
+            how="left",
+        )
+        primary["matched_in_pool"] = primary["matched_in_pool"].fillna(False).astype(bool)
     pmid_meta = _build_pmid_metadata()
     primary = primary.merge(pmid_meta, on="pmid", how="left")
 
-    # Corpus frequency of gene heads (primary positives only)
     gene_freq = (
         primary[primary["head_type"] == "gene"]["head_entity"]
         .value_counts()
@@ -207,24 +216,49 @@ def analyze_systematic_loss(
 
     slot_rows: list[dict[str, Any]] = []
     for _, r in primary.iterrows():
-        if r["both_found"]:
+        if pool_classification is not None:
+            evaluable = bool(r["matched_in_pool"])
+            if evaluable:
+                loss_side = "none"
+                missed_entity = None
+                missed_type = None
+            elif r.get("head_status") == "absent":
+                loss_side = "head"
+                missed_entity = r["head_entity"]
+                missed_type = r["head_type"]
+            elif r.get("tail_status") == "absent":
+                loss_side = "tail"
+                missed_entity = r["tail_entity"]
+                missed_type = r["tail_type"]
+            else:
+                loss_side = "head"
+                missed_entity = r["head_entity"]
+                missed_type = r["head_type"]
+        elif r["both_found"]:
             loss_side = "none"
             missed_entity = None
             missed_type = None
+            evaluable = True
         elif not r["head_found"]:
             loss_side = "head"
             missed_entity = r["head_entity"]
             missed_type = r["head_type"]
+            evaluable = False
         elif not r["tail_found"]:
             loss_side = "tail"
             missed_entity = r["tail_entity"]
             missed_type = r["tail_type"]
+            evaluable = False
         else:
             loss_side = "both"
             missed_entity = r["head_entity"]
             missed_type = r["head_type"]
+            evaluable = False
 
-        evaluable = r["both_found"]
+        if pool_classification is None and r["both_found"]:
+            evaluable = True
+        elif pool_classification is None:
+            evaluable = bool(r["both_found"])
         gene_head = str(r["head_entity"]) if r["head_type"] == "gene" else None
 
         slot_rows.append(

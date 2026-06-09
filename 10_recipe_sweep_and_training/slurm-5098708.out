@@ -1,0 +1,269 @@
+=== Step 2: full-matrix training ===
+Host: nid010664
+SLURM_JOB_ID=5098708
+SLURM_JOB_NAME=step2_biobert_base
+Start: Tue  9 Jun 09:33:22 UTC 2026
+REPO=/home/b5ac/freddieyu.b5ac/project_1
+OUTPUT_ROOT=/home/b5ac/freddieyu.b5ac/project_1/../projects/project_1
+STEP_ARGS=--models biobert_base
+Log: /home/b5ac/freddieyu.b5ac/project_1/../projects/project_1/runs/10_recipe_sweep_and_training/train_5098708.out
+Ensure CHOSEN_RECIPE is set in config.py (not None) before submitting.
+TMPDIR=/home/b5ac/freddieyu.b5ac/project_1/../projects/project_1/runs/10_recipe_sweep_and_training/tmp_5098708
+=== Recipe sweep and training 2026-06-09T09:33:25.108518 ===
+[run] mode=train-only (step 2)
+[run] model filter: ['biobert_base']
+
+=== Step-2 matrix training ===
+Recipe: lr=3e-05, warmup=none (checkpoint criterion=val_f1)
+Encoders (1): ['biobert_base']
+Seeds (8): [42, 43, 44, 45, 46, 47, 48, 49]
+Planned runs this job: 8
+
+
+=== Estimated checkpoint footprint (rough) ===
+  Runs: 1 encoders x 8 seeds = 8
+  Assumed ~7 epochs/run; epoch ckpt ~220 MiB (fp16); best ckpt ~440 MiB (fp32)
+  Per run ~1980 MiB; total ~15.5 GiB
+  MAX_EPOCH_CHECKPOINTS_TO_KEEP=None (None = keep all epoch checkpoints)
+
+[benchmark] building BioRED test examples...
+[benchmark] built 14395 test examples (leaked PMIDs excluded)
+  RUN START BioBERT-base (biobert_base) seed=42 [1/8 in this job]
+[train] start biobert_base seed=42 lr=3e-05 warmup=none train=24000 val=25311 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_42
+[train] device=cuda batch_size=16 max_epochs=10
+Some weights of BertForSequenceClassification were not initialized from the model checkpoint at dmis-lab/biobert-base-cased-v1.2 and are newly initialized: ['classifier.bias', 'classifier.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[train] epoch 1/10 train_loss=0.6640 val_loss=0.6826 val_f1=0.5094 patience=0/3
+[train] new best val_f1=0.5094 at epoch 1 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_42/best
+[train] epoch 2/10 train_loss=0.6342 val_loss=0.7183 val_f1=0.3162 patience=0/3
+[train] epoch 3/10 train_loss=0.6087 val_loss=0.6464 val_f1=0.4417 patience=1/3
+[train] epoch 4/10 train_loss=0.5507 val_loss=0.6150 val_f1=0.6549 patience=2/3
+[train] new best val_f1=0.6549 at epoch 4 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_42/best
+[train] epoch 5/10 train_loss=0.4827 val_loss=0.6648 val_f1=0.4520 patience=0/3
+[train] epoch 6/10 train_loss=0.4477 val_loss=0.7581 val_f1=0.5696 patience=1/3
+[train] epoch 7/10 train_loss=0.4220 val_loss=0.7681 val_f1=0.6416 patience=2/3
+[train] early stop at epoch 7 (no val_f1 improvement for 3 epochs)
+[train] done biobert_base seed=42 best_val_f1=0.6549 best_epoch=4 epochs_run=7
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_42/best on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.6774 precision=0.6943 recall=0.6614 n_positives=8875
+  COMPLETE BioBERT-base (biobert_base) seed=42: benchmark_f1=0.677 best_epoch=4 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/results/biobert_base/seed_42/matrix_complete.json
+  RUN START BioBERT-base (biobert_base) seed=43 [2/8 in this job]
+[train] start biobert_base seed=43 lr=3e-05 warmup=none train=24000 val=25311 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_43
+[train] device=cuda batch_size=16 max_epochs=10
+Some weights of BertForSequenceClassification were not initialized from the model checkpoint at dmis-lab/biobert-base-cased-v1.2 and are newly initialized: ['classifier.bias', 'classifier.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[train] epoch 1/10 train_loss=0.6641 val_loss=0.6641 val_f1=0.5866 patience=0/3
+[train] new best val_f1=0.5866 at epoch 1 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_43/best
+[train] epoch 2/10 train_loss=0.6558 val_loss=0.6954 val_f1=0.0000 patience=0/3
+[train] epoch 3/10 train_loss=0.6987 val_loss=0.6994 val_f1=0.0000 patience=1/3
+[train] epoch 4/10 train_loss=0.6976 val_loss=0.6936 val_f1=0.0000 patience=2/3
+[train] early stop at epoch 4 (no val_f1 improvement for 3 epochs)
+[train] done biobert_base seed=43 best_val_f1=0.5866 best_epoch=1 epochs_run=4
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_43/best on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.6838 precision=0.6455 recall=0.7270 n_positives=8875
+  COMPLETE BioBERT-base (biobert_base) seed=43: benchmark_f1=0.684 best_epoch=1 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/results/biobert_base/seed_43/matrix_complete.json
+  RUN START BioBERT-base (biobert_base) seed=44 [3/8 in this job]
+[train] start biobert_base seed=44 lr=3e-05 warmup=none train=24000 val=25311 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_44
+[train] device=cuda batch_size=16 max_epochs=10
+Some weights of BertForSequenceClassification were not initialized from the model checkpoint at dmis-lab/biobert-base-cased-v1.2 and are newly initialized: ['classifier.bias', 'classifier.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[train] epoch 1/10 train_loss=0.6518 val_loss=0.6636 val_f1=0.5170 patience=0/3
+[train] new best val_f1=0.5170 at epoch 1 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_44/best
+[train] epoch 2/10 train_loss=0.6016 val_loss=0.6458 val_f1=0.6194 patience=0/3
+[train] new best val_f1=0.6194 at epoch 2 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_44/best
+[train] epoch 3/10 train_loss=0.4802 val_loss=0.5842 val_f1=0.7134 patience=0/3
+[train] new best val_f1=0.7134 at epoch 3 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_44/best
+[train] epoch 4/10 train_loss=0.4130 val_loss=0.7219 val_f1=0.6381 patience=0/3
+[train] epoch 5/10 train_loss=0.3735 val_loss=0.6908 val_f1=0.6865 patience=1/3
+[train] epoch 6/10 train_loss=0.3422 val_loss=0.6850 val_f1=0.7505 patience=2/3
+[train] new best val_f1=0.7505 at epoch 6 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_44/best
+[train] epoch 7/10 train_loss=0.3207 val_loss=0.7097 val_f1=0.6401 patience=0/3
+[train] epoch 8/10 train_loss=0.3027 val_loss=0.8696 val_f1=0.6662 patience=1/3
+[train] epoch 9/10 train_loss=0.2875 val_loss=0.8986 val_f1=0.6930 patience=2/3
+[train] early stop at epoch 9 (no val_f1 improvement for 3 epochs)
+[train] done biobert_base seed=44 best_val_f1=0.7505 best_epoch=6 epochs_run=9
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_44/best on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7304 precision=0.6733 recall=0.7981 n_positives=8875
+  COMPLETE BioBERT-base (biobert_base) seed=44: benchmark_f1=0.730 best_epoch=6 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/results/biobert_base/seed_44/matrix_complete.json
+  RUN START BioBERT-base (biobert_base) seed=45 [4/8 in this job]
+[train] start biobert_base seed=45 lr=3e-05 warmup=none train=24000 val=25311 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_45
+[train] device=cuda batch_size=16 max_epochs=10
+Some weights of BertForSequenceClassification were not initialized from the model checkpoint at dmis-lab/biobert-base-cased-v1.2 and are newly initialized: ['classifier.bias', 'classifier.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[train] epoch 1/10 train_loss=0.6543 val_loss=0.6650 val_f1=0.5220 patience=0/3
+[train] new best val_f1=0.5220 at epoch 1 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_45/best
+[train] epoch 2/10 train_loss=0.6239 val_loss=0.6852 val_f1=0.5124 patience=0/3
+[train] epoch 3/10 train_loss=0.5940 val_loss=0.6545 val_f1=0.6846 patience=1/3
+[train] new best val_f1=0.6846 at epoch 3 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_45/best
+[train] epoch 4/10 train_loss=0.5285 val_loss=0.6567 val_f1=0.5645 patience=0/3
+[train] epoch 5/10 train_loss=0.4587 val_loss=0.6493 val_f1=0.6587 patience=1/3
+[train] epoch 6/10 train_loss=0.4057 val_loss=0.6719 val_f1=0.6596 patience=2/3
+[train] early stop at epoch 6 (no val_f1 improvement for 3 epochs)
+[train] done biobert_base seed=45 best_val_f1=0.6846 best_epoch=3 epochs_run=6
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_45/best on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7012 precision=0.6541 recall=0.7556 n_positives=8875
+  COMPLETE BioBERT-base (biobert_base) seed=45: benchmark_f1=0.701 best_epoch=3 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/results/biobert_base/seed_45/matrix_complete.json
+  RUN START BioBERT-base (biobert_base) seed=46 [5/8 in this job]
+[train] start biobert_base seed=46 lr=3e-05 warmup=none train=24000 val=25311 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_46
+[train] device=cuda batch_size=16 max_epochs=10
+Some weights of BertForSequenceClassification were not initialized from the model checkpoint at dmis-lab/biobert-base-cased-v1.2 and are newly initialized: ['classifier.bias', 'classifier.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[train] epoch 1/10 train_loss=0.6517 val_loss=0.6354 val_f1=0.6192 patience=0/3
+[train] new best val_f1=0.6192 at epoch 1 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_46/best
+[train] epoch 2/10 train_loss=0.5467 val_loss=0.5937 val_f1=0.6200 patience=0/3
+[train] new best val_f1=0.6200 at epoch 2 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_46/best
+[train] epoch 3/10 train_loss=0.4526 val_loss=0.5981 val_f1=0.7308 patience=0/3
+[train] new best val_f1=0.7308 at epoch 3 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_46/best
+[train] epoch 4/10 train_loss=0.4097 val_loss=0.6386 val_f1=0.6639 patience=0/3
+[train] epoch 5/10 train_loss=0.3680 val_loss=0.7045 val_f1=0.6986 patience=1/3
+[train] epoch 6/10 train_loss=0.3409 val_loss=0.7351 val_f1=0.5838 patience=2/3
+[train] early stop at epoch 6 (no val_f1 improvement for 3 epochs)
+[train] done biobert_base seed=46 best_val_f1=0.7308 best_epoch=3 epochs_run=6
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_46/best on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7096 precision=0.6957 recall=0.7241 n_positives=8875
+  COMPLETE BioBERT-base (biobert_base) seed=46: benchmark_f1=0.710 best_epoch=3 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/results/biobert_base/seed_46/matrix_complete.json
+  RUN START BioBERT-base (biobert_base) seed=47 [6/8 in this job]
+[train] start biobert_base seed=47 lr=3e-05 warmup=none train=24000 val=25311 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_47
+[train] device=cuda batch_size=16 max_epochs=10
+Some weights of BertForSequenceClassification were not initialized from the model checkpoint at dmis-lab/biobert-base-cased-v1.2 and are newly initialized: ['classifier.bias', 'classifier.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[train] epoch 1/10 train_loss=0.6610 val_loss=0.6621 val_f1=0.5839 patience=0/3
+[train] new best val_f1=0.5839 at epoch 1 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_47/best
+[train] epoch 2/10 train_loss=0.6697 val_loss=0.6960 val_f1=0.0000 patience=0/3
+[train] epoch 3/10 train_loss=0.6869 val_loss=0.6837 val_f1=0.4109 patience=1/3
+[train] epoch 4/10 train_loss=0.6311 val_loss=0.6812 val_f1=0.5759 patience=2/3
+[train] early stop at epoch 4 (no val_f1 improvement for 3 epochs)
+[train] done biobert_base seed=47 best_val_f1=0.5839 best_epoch=1 epochs_run=4
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_47/best on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.6762 precision=0.6442 recall=0.7114 n_positives=8875
+  COMPLETE BioBERT-base (biobert_base) seed=47: benchmark_f1=0.676 best_epoch=1 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/results/biobert_base/seed_47/matrix_complete.json
+  RUN START BioBERT-base (biobert_base) seed=48 [7/8 in this job]
+[train] start biobert_base seed=48 lr=3e-05 warmup=none train=24000 val=25311 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_48
+[train] device=cuda batch_size=16 max_epochs=10
+Some weights of BertForSequenceClassification were not initialized from the model checkpoint at dmis-lab/biobert-base-cased-v1.2 and are newly initialized: ['classifier.bias', 'classifier.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[train] epoch 1/10 train_loss=0.6549 val_loss=0.6527 val_f1=0.4866 patience=0/3
+[train] new best val_f1=0.4866 at epoch 1 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_48/best
+[train] epoch 2/10 train_loss=0.5593 val_loss=0.5953 val_f1=0.6479 patience=0/3
+[train] new best val_f1=0.6479 at epoch 2 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_48/best
+[train] epoch 3/10 train_loss=0.4495 val_loss=0.5838 val_f1=0.6319 patience=0/3
+[train] epoch 4/10 train_loss=0.3997 val_loss=0.6623 val_f1=0.6295 patience=1/3
+[train] epoch 5/10 train_loss=0.3664 val_loss=0.7491 val_f1=0.7334 patience=2/3
+[train] new best val_f1=0.7334 at epoch 5 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_48/best
+[train] epoch 6/10 train_loss=0.3411 val_loss=0.6929 val_f1=0.5908 patience=0/3
+[train] epoch 7/10 train_loss=0.3218 val_loss=0.7340 val_f1=0.7088 patience=1/3
+[train] epoch 8/10 train_loss=0.3061 val_loss=0.7972 val_f1=0.7076 patience=2/3
+[train] early stop at epoch 8 (no val_f1 improvement for 3 epochs)
+[train] done biobert_base seed=48 best_val_f1=0.7334 best_epoch=5 epochs_run=8
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_48/best on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7097 precision=0.6701 recall=0.7543 n_positives=8875
+  COMPLETE BioBERT-base (biobert_base) seed=48: benchmark_f1=0.710 best_epoch=5 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/results/biobert_base/seed_48/matrix_complete.json
+  RUN START BioBERT-base (biobert_base) seed=49 [8/8 in this job]
+[train] start biobert_base seed=49 lr=3e-05 warmup=none train=24000 val=25311 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_49
+[train] device=cuda batch_size=16 max_epochs=10
+Some weights of BertForSequenceClassification were not initialized from the model checkpoint at dmis-lab/biobert-base-cased-v1.2 and are newly initialized: ['classifier.bias', 'classifier.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[train] epoch 1/10 train_loss=0.6578 val_loss=0.6501 val_f1=0.6250 patience=0/3
+[train] new best val_f1=0.6250 at epoch 1 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_49/best
+[train] epoch 2/10 train_loss=0.6296 val_loss=0.7046 val_f1=0.4942 patience=0/3
+[train] epoch 3/10 train_loss=0.6086 val_loss=0.6739 val_f1=0.4722 patience=1/3
+[train] epoch 4/10 train_loss=0.5187 val_loss=0.6062 val_f1=0.6180 patience=2/3
+[train] early stop at epoch 4 (no val_f1 improvement for 3 epochs)
+[train] done biobert_base seed=49 best_val_f1=0.6250 best_epoch=1 epochs_run=4
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_49/best on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.6940 precision=0.6255 recall=0.7793 n_positives=8875
+  COMPLETE BioBERT-base (biobert_base) seed=49: benchmark_f1=0.694 best_epoch=1 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/results/biobert_base/seed_49/matrix_complete.json
+
+=== Step-2 matrix training complete (this job) ===
+  Trained: 8, skipped (already done): 0, planned: 8
+
+=== Done ===
+End: Tue  9 Jun 12:01:47 UTC 2026
