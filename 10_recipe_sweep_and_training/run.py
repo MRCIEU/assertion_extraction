@@ -28,20 +28,58 @@ def main() -> None:
         help="Step 1: recipe decision aid from sweep CSVs (CPU; non-binding)",
     )
     parser.add_argument("--train-only", action="store_true", help="Step 2: full matrix training")
+    parser.add_argument(
+        "--preflight-sweep",
+        action="store_true",
+        help="Verify clean offset-marked train cache before sweep",
+    )
+    parser.add_argument(
+        "--preflight-train",
+        action="store_true",
+        help="Verify step-2 preconditions before full-matrix training",
+    )
+    parser.add_argument(
+        "--accept-matrix",
+        action="store_true",
+        help="Post-training acceptance gate (DeBERTa hard gate)",
+    )
     parser.add_argument("--force", action="store_true", help="Re-run even if markers exist")
     parser.add_argument("--models", nargs="+", default=None, help="Limit to model IDs")
     parser.add_argument("--seeds", nargs="+", type=int, default=None, help="Limit to seeds")
     args = parser.parse_args()
 
-    n = sum([args.sweep_only, args.sweep_advisory_only, args.decide_recipe, args.train_only])
+    n = sum(
+        [
+            args.sweep_only,
+            args.sweep_advisory_only,
+            args.decide_recipe,
+            args.train_only,
+            args.preflight_sweep,
+            args.preflight_train,
+            args.accept_matrix,
+        ]
+    )
     if n != 1:
         raise SystemExit(
-            "Specify exactly one of --sweep-only, --sweep-advisory-only, --decide-recipe, --train-only"
+            "Specify exactly one of --sweep-only, --sweep-advisory-only, --decide-recipe, "
+            "--train-only, --preflight-sweep, --preflight-train, --accept-matrix"
         )
 
     print(f"=== Recipe sweep and training {__import__('datetime').datetime.now().isoformat()} ===", flush=True)
 
-    if args.sweep_only:
+    if args.preflight_train:
+        print("[run] mode=preflight-train", flush=True)
+        ok = import_module("10_recipe_sweep_and_training.step2_preflight").run_step2_preflight()
+        if not ok:
+            raise SystemExit(1)
+    elif args.accept_matrix:
+        print("[run] mode=accept-matrix", flush=True)
+        code = import_module("10_recipe_sweep_and_training.step2_acceptance").run_acceptance_gate()
+        raise SystemExit(code)
+    elif args.preflight_sweep:
+        print("[run] mode=preflight-sweep", flush=True)
+        import_module("10_recipe_sweep_and_training.step1_preflight").verify_clean_train_cache()
+    elif args.sweep_only:
         print("[run] mode=sweep-only", flush=True)
         import_module("10_recipe_sweep_and_training.step1_sweep").run_sweep(
             force=args.force, model_ids=args.models

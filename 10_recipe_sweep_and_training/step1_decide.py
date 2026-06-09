@@ -31,6 +31,8 @@ PALETTE = {
 }
 DPI = 300
 
+PRIOR_DECISION_SNAPSHOT = SWEEP_OUTPUT_DIR / "recipe_decision_table_prior_string_match.csv"
+
 # Manual offsets (points) for eight recipe labels on the scatter plot.
 _RECIPE_LABEL_OFFSETS: dict[str, tuple[float, float]] = {
     "5e-06|none": (8, 10),
@@ -198,15 +200,39 @@ def build_decision_table(
     return out.sort_values(["benchmark_f1_spread", "benchmark_f1_mean"], ascending=[True, False])
 
 
+def _deberta_collapsed(deberta_f1: float) -> bool:
+    return float(deberta_f1) <= 0.0
+
+
 def _exclusion_reasons(row: pd.Series) -> list[str]:
     reasons: list[str] = []
     if not bool(row["all_encoders_stable_seed42"]):
         reasons.append("not all encoders stable at seed 42 (collapse on at least one encoder)")
     if row["spread_quality"] == "INFLATED":
         reasons.append(f"benchmark spread is inflated: {row['spread_quality_note']}")
-    if row["deberta_health"] == "SUPPRESSED":
+    if row["deberta_health"] == "SUPPRESSED" and not _deberta_collapsed(float(row["deberta_f1"])):
         reasons.append(row["deberta_health_note"])
     return reasons
+
+
+def _guard_recovery_note(row: pd.Series) -> str | None:
+    guard = str(row.get("guard_summary", ""))
+    if guard == "no guard re-runs":
+        return None
+    return (
+        f"Guard re-runs for {row['recipe']} recovered partially ({guard}), "
+        "so seed-42 fairness is broken for this recipe."
+    )
+
+
+def _inflated_spread_note(row: pd.Series) -> str | None:
+    if row["spread_quality"] != "INFLATED":
+        return None
+    return (
+        f"{row['recipe']} posts spread {float(row['benchmark_f1_spread']):.3f} "
+        f"with max driven by {row['spread_max_driver']} and min by {row['spread_min_driver']}; "
+        f"the headline spread is not a genuine capability gradient ({row['spread_quality_note']})."
+    )
 
 
 def _build_advisory_sections(table: pd.DataFrame) -> tuple[list[str], list[str], list[str], str, str]:
@@ -221,37 +247,87 @@ def _build_advisory_sections(table: pd.DataFrame) -> tuple[list[str], list[str],
             clean.append(label)
 
     contrasts: list[str] = []
-    r15 = table[table["recipe"] == "1e-5/none"]
-    r25 = table[table["recipe"] == "2e-5/none"]
-    if not r15.empty and not r25.empty:
-        a, b = r15.iloc[0], r25.iloc[0]
+
+    unstable = table[~table["all_encoders_stable_seed42"].astype(bool)]
+    for _, row in unstable.iterrows():
+        deb_f1 = float(row["deberta_f1"])
+        if _deberta_collapsed(deb_f1):
+            note = (
+                f"{row['recipe']} is excluded on stability: DeBERTa collapsed to benchmark F1 "
+                f"{deb_f1:.3f} at seed 42"
+            )
+            guard_note = _guard_recovery_note(row)
+            if guard_note:
+                note += f"; {guard_note}"
+            else:
+                note += "."
+            contrasts.append(note)
+
+    suppressed = table[
+        (table["deberta_health"] == "SUPPRESSED")
+        & table["all_encoders_stable_seed42"].astype(bool)
+    ]
+    for _, row in suppressed.iterrows():
         contrasts.append(
-            f"{a['recipe']} and {b['recipe']} show similar spread "
-            f"({float(a['benchmark_f1_spread']):.3f} vs {float(b['benchmark_f1_spread']):.3f}) "
-            f"and mean benchmark F1 ({float(a['benchmark_f1_mean']):.3f} vs {float(b['benchmark_f1_mean']):.3f}), "
-            f"but {b['recipe']} leaves DeBERTa at {float(b['deberta_f1']):.3f} while "
-            f"{a['recipe']} keeps DeBERTa at {float(a['deberta_f1']):.3f} near the sweep-best "
-            f"{float(a['deberta_sweep_best']):.3f}. The extra spread at {b['recipe']} aligns with "
-            f"an epoch-1 PubMedBERT maximum ({b['spread_max_driver']}), not a uniform capability gain."
+            f"{row['recipe']} is excluded on DeBERTa suppression: "
+            f"DeBERTa F1 {float(row['deberta_f1']):.3f} is "
+            f"{float(row['deberta_gap_from_best']):.3f} below sweep-best "
+            f"{float(row['deberta_sweep_best']):.3f}"
+            + (
+                f", and spread is inflated ({row['spread_quality_note']})"
+                if row["spread_quality"] == "INFLATED"
+                else "."
+            )
         )
 
-    r35w = table[table["recipe"] == "3e-5/warmup"]
-    if not r35w.empty:
-        rw = r35w.iloc[0]
+    inflated_stable = table[
+        (table["spread_quality"] == "INFLATED")
+        & table["all_encoders_stable_seed42"].astype(bool)
+        & (table["deberta_health"] != "SUPPRESSED")
+    ]
+    for _, row in inflated_stable.iterrows():
+        note = _inflated_spread_note(row)
+        if note:
+            contrasts.append(note)
+
+    wide_unstable = unstable.sort_values("benchmark_f1_spread", ascending=False)
+    if not wide_unstable.empty:
+        top = wide_unstable.iloc[0]
         contrasts.append(
-            f"{rw['recipe']} posts the widest spread ({float(rw['benchmark_f1_spread']):.3f}) "
-            f"with max driven by {rw['spread_max_driver']} and min by {rw['spread_min_driver']}; "
-            "the high spread rests on an early PubMedBERT checkpoint."
+            "The widest-spread recipes reflect DeBERTa collapse at seed 42, not a uniform "
+            f"capability gain across encoders (for example {top['recipe']} spread "
+            f"{float(top['benchmark_f1_spread']):.3f} with DeBERTa at "
+            f"{float(top['deberta_f1']):.3f})."
         )
 
-    r35n = table[table["recipe"] == "3e-5/none"]
-    if not r35n.empty:
-        rn = r35n.iloc[0]
+    narrow_alts = table[table["recipe"].isin(clean)].sort_values("benchmark_f1_spread")
+    if len(narrow_alts) >= 2:
+        names = ", ".join(narrow_alts["recipe"].head(3).tolist())
         contrasts.append(
-            f"{rn['recipe']} is excluded on stability: DeBERTa collapsed to benchmark F1 "
-            f"{float(rn['deberta_f1']):.3f} at seed 42; guard re-runs recovered partially "
-            f"({rn['guard_summary']}), so seed-42 fairness is broken for this recipe."
+            f"Among clean recipes, {names} offer narrower genuine spread "
+            f"({float(narrow_alts.iloc[0]['benchmark_f1_spread']):.3f} to "
+            f"{float(narrow_alts.iloc[min(2, len(narrow_alts) - 1)]['benchmark_f1_spread']):.3f}) "
+            "with healthy DeBERTa scores, at the cost of a smaller encoder gradient."
         )
+
+    if PRIOR_DECISION_SNAPSHOT.exists():
+        prior = pd.read_csv(PRIOR_DECISION_SNAPSHOT)
+        p15 = prior[prior["recipe"] == "1e-5/none"]
+        n15 = table[table["recipe"] == "1e-5/none"]
+        p35 = prior[prior["recipe"] == "3e-5/none"]
+        n35 = table[table["recipe"] == "3e-5/none"]
+        if not p15.empty and not n15.empty and not p35.empty and not n35.empty:
+            contrasts.append(
+                "Compared with the prior string-match sweep, the picture changes on clean data: "
+                f"1e-5/none had DeBERTa {float(p15.iloc[0]['deberta_f1']):.3f} "
+                f"({p15.iloc[0]['deberta_health']}) there but "
+                f"{float(n15.iloc[0]['deberta_f1']):.3f} ({n15.iloc[0]['deberta_health']}) here; "
+                f"3e-5/none had DeBERTa {float(p35.iloc[0]['deberta_f1']):.3f} "
+                f"({p35.iloc[0]['deberta_health']}, stable={bool(p35.iloc[0]['all_encoders_stable_seed42'])}) "
+                f"there but {float(n35.iloc[0]['deberta_f1']):.3f} "
+                f"({n35.iloc[0]['deberta_health']}, stable={bool(n35.iloc[0]['all_encoders_stable_seed42'])}) "
+                "here. The clean-data advisory supersedes the old one."
+            )
 
     # Pick among clean recipes using stated priorities (not a weighted score).
     candidates = table[table["recipe"].isin(clean)].copy()
@@ -267,7 +343,7 @@ def _build_advisory_sections(table: pd.DataFrame) -> tuple[list[str], list[str],
         rec = pick["recipe"]
         rec_reason = (
             f"{rec} keeps all four encoders stable at seed 42, shows genuine spread "
-            f"({pick['spread_quality_note']}), holds DeBERTa near the sweep best "
+            f"({pick['spread_quality_note']}), holds DeBERTa at the sweep best "
             f"({float(pick['deberta_f1']):.3f} vs {float(pick['deberta_sweep_best']):.3f}), "
             f"and peaks encoders at a comparable depth (epoch std {float(pick['best_epoch_std']):.2f}). "
             f"Mean benchmark F1 is {float(pick['benchmark_f1_mean']):.3f} with spread "
@@ -278,7 +354,13 @@ def _build_advisory_sections(table: pd.DataFrame) -> tuple[list[str], list[str],
         "This advisory does not set the training recipe. After reading the table, figure, "
         "and guard notes, assign the recipe yourself in the project configuration before step 2."
     )
-    return excluded, clean, contrasts, rec, rec_reason + " " + closing
+    seed_caveat = (
+        "This sweep is single-seed (seed 42). Stability at 3e-5/none is a seed-42 result and "
+        "should be confirmed across the eight training seeds in step 2, watching DeBERTa "
+        "specifically. If 3e-5 proves unstable across seeds, 5e-6/none or 1e-5/warmup are "
+        "more conservative fallbacks with narrower genuine spread."
+    )
+    return excluded, clean, contrasts, rec, rec_reason + " " + seed_caveat + " " + closing
 
 
 def _apply_figure_style() -> None:
@@ -345,32 +427,50 @@ def plot_stability_vs_spread(table: pd.DataFrame) -> Path:
 
 
 def _prose_paragraphs(excluded: list[str], contrasts: list[str], rec: str, rec_reason: str) -> list[str]:
-    paras: list[str] = []
-    paras.append(
-        "The step 1 sweep held seed 42 fixed and compared four encoders across learning rate "
-        "and warmup. The enriched decision table names the encoder and best epoch behind each "
-        "recipe's minimum and maximum benchmark F1, and flags spread that rests on an epoch-one "
-        "checkpoint, a degenerate run, or a suppressed DeBERTa score."
-    )
+    paras: list[str] = [
+        (
+            "The step 1 sweep held seed 42 fixed and compared four encoders across learning rate "
+            "and warmup. The enriched decision table names the encoder and best epoch behind each "
+            "recipe's minimum and maximum benchmark F1, and flags spread that rests on an epoch-one "
+            "checkpoint, a degenerate run, or a suppressed DeBERTa score."
+        )
+    ]
     if excluded:
         paras.append(
             "The following recipes are poor step 2 candidates on transparency grounds: "
-            + " ".join(excluded)
+            + "; ".join(excluded)
+            + "."
         )
-    if contrasts:
-        paras.append(" ".join(contrasts))
+
+    stability = [c for c in contrasts if "excluded on stability" in c]
+    suppression = [c for c in contrasts if "excluded on DeBERTa suppression" in c]
+    widest = next((c for c in contrasts if c.startswith("The widest-spread")), None)
+    narrow = next((c for c in contrasts if c.startswith("Among clean")), None)
+    prior = next((c for c in contrasts if c.startswith("Compared with")), None)
+
+    detail_parts = stability + suppression
+    if detail_parts:
+        paras.append(" ".join(detail_parts))
+    if widest:
+        paras.append(widest)
+    if narrow:
+        paras.append(narrow)
+    if prior:
+        paras.append(prior)
+
     paras.append(f"The advisory recommendation is {rec}. {rec_reason}")
     return paras
 
 
 def write_sweep_report(table: pd.DataFrame, figure_path: Path, prose: list[str]) -> Path:
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
-    existing = SWEEP_REPORT_PATH.read_text(encoding="utf-8") if SWEEP_REPORT_PATH.exists() else ""
-    if "## Recipe decision" in existing:
-        existing = existing.split("## Recipe decision")[0].rstrip()
-
     lines = [
-        existing,
+        "# Step 1 recipe sweep report",
+        "",
+        "This report documents the recipe sweep on clean offset-marked training data "
+        "(native entity offsets; marker_method=offset). "
+        "It supersedes an earlier sweep run on string-match markers; conclusions below "
+        "stand on the current pipeline only.",
         "",
         "## Recipe decision",
         "",
@@ -384,8 +484,59 @@ def write_sweep_report(table: pd.DataFrame, figure_path: Path, prose: list[str])
             "",
         ]
     )
-    SWEEP_REPORT_PATH.write_text("\n".join(l for l in lines if l is not None).strip() + "\n", encoding="utf-8")
+    SWEEP_REPORT_PATH.write_text("\n".join(lines).strip() + "\n", encoding="utf-8")
     return SWEEP_REPORT_PATH
+
+
+def print_prior_sweep_comparison(table: pd.DataFrame, rec: str) -> None:
+    """High-level factual contrast with the pre-marker-fix sweep snapshot."""
+    if not PRIOR_DECISION_SNAPSHOT.exists():
+        _log("\n=== Comparison to prior string-match sweep ===")
+        _log("  No prior snapshot (recipe_decision_table_prior_string_match.csv); skipped.")
+        return
+
+    prior = pd.read_csv(PRIOR_DECISION_SNAPSHOT)
+    _, _, _, prior_rec, _ = _build_advisory_sections(prior)
+
+    _log("\n=== Comparison to prior string-match sweep ===")
+    _log(f"  Prior advisory (string-match data): {prior_rec}")
+    _log(f"  Clean-data advisory: {rec}")
+    if prior_rec != rec:
+        _log("  Recipe recommendation changed on clean data.")
+    else:
+        _log("  Same recipe label recommended; compare metrics below (conclusion follows clean numbers).")
+
+    prior_genuine = set(prior.loc[prior["spread_quality"] == "GENUINE", "recipe"])
+    new_genuine = set(table.loc[table["spread_quality"] == "GENUINE", "recipe"])
+    added = sorted(new_genuine - prior_genuine)
+    removed = sorted(prior_genuine - new_genuine)
+    _log(f"  GENUINE-spread recipes: prior {sorted(prior_genuine)} -> clean {sorted(new_genuine)}")
+    if added:
+        _log(f"    newly GENUINE on clean data: {added}")
+    if removed:
+        _log(f"    no longer GENUINE on clean data: {removed}")
+
+    for recipe in ("1e-5/none", "2e-5/none", "3e-5/none"):
+        p = prior[prior["recipe"] == recipe]
+        n = table[table["recipe"] == recipe]
+        if p.empty or n.empty:
+            continue
+        pr, nr = p.iloc[0], n.iloc[0]
+        _log(
+            f"  {recipe}: mean F1 {float(pr['benchmark_f1_mean']):.3f}->{float(nr['benchmark_f1_mean']):.3f}, "
+            f"spread {float(pr['benchmark_f1_spread']):.3f}->{float(nr['benchmark_f1_spread']):.3f}, "
+            f"DeBERTa {float(pr['deberta_f1']):.3f}->{float(nr['deberta_f1']):.3f} "
+            f"({pr['deberta_health']}->{nr['deberta_health']}), "
+            f"stable {bool(pr['all_encoders_stable_seed42'])}->{bool(nr['all_encoders_stable_seed42'])}"
+        )
+
+    deb_prior = prior.sort_values("lr").groupby("warmup_label")["deberta_f1"].apply(list)
+    deb_new = table.sort_values("lr").groupby("warmup_label")["deberta_f1"].apply(list)
+    _log("  DeBERTa F1 across lr (none warmup): prior vs clean")
+    if "none" in deb_prior.index and "none" in deb_new.index:
+        prior_vals = [f"{x:.3f}" for x in deb_prior["none"]]
+        new_vals = [f"{x:.3f}" for x in deb_new["none"]]
+        _log(f"    none: [{', '.join(prior_vals)}] -> [{', '.join(new_vals)}]")
 
 
 def print_decision_output(
@@ -445,6 +596,7 @@ def run_decide_recipe() -> pd.DataFrame:
     prose = _prose_paragraphs(excluded, contrasts, rec, rec_reason)
     write_sweep_report(table, figure_path, prose)
     print_decision_output(table, excluded, clean, contrasts, rec, rec_reason)
+    print_prior_sweep_comparison(table, rec)
 
     _log(f"\nWrote {out_csv}")
     _log(f"Wrote {figure_path}")

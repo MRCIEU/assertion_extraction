@@ -39,6 +39,8 @@ export HF_HOME="${HF_HOME:-${HOME}/.cache/huggingface}"
 export TOKENIZERS_PARALLELISM=false
 
 cd "${SWEEP_DIR}"
-python run.py --sweep-only ${STEP_ARGS:-}
+python run.py --preflight-sweep
+python run.py --sweep-only --force ${STEP_ARGS:-}
 python run.py --sweep-advisory-only
+python run.py --decide-recipe
 echo "End: $(date -u)"

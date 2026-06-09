@@ -55,7 +55,7 @@ TRAIN_CACHE_DIR = DATA_DIR / "cache"
 #   CHOSEN_RECIPE = RecipeConfig(lr=1e-5, warmup_ratio=0.0, warmup_label="none")
 # Leave as None until then; step 2 will abort if still unset.
 # =============================================================================
-CHOSEN_RECIPE: RecipeConfig | None = RecipeConfig(lr=1e-5, warmup_ratio=0.0, warmup_label="none")
+CHOSEN_RECIPE: RecipeConfig | None = RecipeConfig(lr=3e-5, warmup_ratio=0.0, warmup_label="none")
 
 # Step-2 checkpoint storage (per-epoch dirs are fp16; best/ stays fp32 for folder 11)
 SAVE_EPOCH_CHECKPOINTS_FP16 = True

@@ -23,6 +23,8 @@ RUNS="${OUTPUT_ROOT}/runs/${STEP}"
 mkdir -p "${RUNS}"
 
 JOB_TAG="${SLURM_JOB_ID:-local}"
+JOB_TMP="${RUNS}/tmp_${JOB_TAG}"
+mkdir -p "${JOB_TMP}"
 exec > >(tee "${RUNS}/train_${JOB_TAG}.out") 2> >(tee "${RUNS}/train_${JOB_TAG}.err" >&2)
 
 echo "=== Step 2: full-matrix training ==="
@@ -41,8 +43,14 @@ conda activate hf-hpc
 
 export OUTPUT_ROOT
 export PYTHONUNBUFFERED=1
+export PYTHONNOUSERSITE=1
+export TMPDIR="${JOB_TMP}"
+export TEMP="${JOB_TMP}"
+export TMP="${JOB_TMP}"
 export HF_HOME="${HF_HOME:-${HOME}/.cache/huggingface}"
 export TOKENIZERS_PARALLELISM=false
+
+echo "TMPDIR=${TMPDIR}"
 
 cd "${SWEEP_DIR}"
 python run.py --train-only ${STEP_ARGS:-}

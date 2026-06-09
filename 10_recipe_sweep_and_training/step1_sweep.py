@@ -116,7 +116,10 @@ def run_sweep(
     model_ids: list[str] | None = None,
 ) -> None:
     """Run the full sweep grid at seed 42; bad-seed guard on collapse."""
-    _log("[sweep] loading train/val examples...")
+    from .step1_preflight import verify_clean_train_cache
+
+    verify_clean_train_cache(TRAIN_CACHE_DIR)
+    _log("[sweep] loading train/val examples from clean offset-marked cache...")
     train_examples, val_examples = build_train_val_examples(TRAIN_CACHE_DIR)
     _log("[sweep] loading BioRED test examples for benchmark...")
     test_examples = build_biored_test_examples()
