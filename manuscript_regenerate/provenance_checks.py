@@ -151,6 +151,34 @@ def verify_step10() -> list[ClaimCheck]:
     return notes
 
 
+def verify_step11() -> list[ClaimCheck]:
+    out = _out("11")
+    var = pd.read_csv(out / "11_variance_components.csv")
+    abs_kb = pd.read_csv(out / "11_absolute_kb_levels.csv")
+    bench = var[var["metric"] == "benchmark_f1"].iloc[0]
+    gd = var[var["metric"] == "kb_mrr_gene_drug"].iloc[0]
+    gdis = var[var["metric"] == "kb_mrr_gene_disease"].iloc[0]
+    ft = abs_kb[abs_kb["reference"] == "finetuned_encoders_mean"].iloc[0]
+    spread = pd.read_csv(out / "11_benchmark_f1_range.csv")["spread"].iloc[0]
+    notes = [
+        ClaimCheck("11", f"benchmark spread {spread:.3f}", "11_benchmark_f1_range.csv",
+                   "OK" if abs(spread - 0.025) < 0.002 else "CORRECTED"),
+        ClaimCheck("11", f"variance shares 36/64 bench",
+                   "11_variance_components.csv",
+                   "OK" if abs(float(bench["encoder_variance_share"]) - 0.361) < 0.01 else "CORRECTED"),
+        ClaimCheck("11", f"variance shares 23/77 gene-drug",
+                   "11_variance_components.csv",
+                   "OK" if abs(float(gd["encoder_variance_share"]) - 0.226) < 0.01 else "CORRECTED"),
+        ClaimCheck("11", f"variance shares 13/87 gene-disease",
+                   "11_variance_components.csv",
+                   "OK" if abs(float(gdis["encoder_variance_share"]) - 0.129) < 0.01 else "CORRECTED"),
+        ClaimCheck("11", f"KB means gd={float(ft['mrr_gene_drug']):.3f} gdis={float(ft['mrr_gene_disease']):.3f}",
+                   "11_absolute_kb_levels.csv", "OK"),
+    ]
+    print_verification(notes)
+    return notes
+
+
 def verify_step20() -> list[ClaimCheck]:
     out = _out("20")
     inv = pd.read_csv(out / "20_checkpoint_inventory.csv")
@@ -183,5 +211,6 @@ VERIFY = {
     "04": verify_step04,
     "05": verify_step05,
     "10": verify_step10,
+    "11": verify_step11,
     "20": verify_step20,
 }

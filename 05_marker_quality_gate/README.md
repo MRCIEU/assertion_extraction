@@ -1,5 +1,7 @@
 # Step 05 — Marker quality gate
 
-Verifies offset-based entity marker insertion across training, benchmark, and CIViC evaluation; rebuilds train caches.
+Verifies offset-based entity marker insertion and rebuilds train caches.
 
-**Result:** Offset gate passed. Training offset insertion 100%. Shared marker_insert path for train, benchmark, and pool evaluation. Rebuilt caches for steps 10, 11, and 20.
+Method: Compare native-offset insertion against prior string-match insertion on training, benchmark, and pool evaluation paths.
+
+Results: Offset gate passed. Training offset insertion 100%. Rebuilt caches for steps 10, 11, and 20.

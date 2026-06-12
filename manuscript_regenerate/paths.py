@@ -26,6 +26,7 @@ STEPS = {
     "04": "04_pilot_study",
     "05": "05_marker_quality_gate",
     "10": "10_recipe_sweep_and_training",
+    "11": "11_round1_analysis",
     "20": "20_round2_diagnostic",
 }
 

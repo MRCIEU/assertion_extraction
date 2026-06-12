@@ -35,6 +35,15 @@ REQUIRED_ARTIFACTS: dict[str, list[str]] = {
         "matrix/matrix_encoder_summary.csv",
         "matrix/matrix_per_run.csv",
     ],
+    "11": [
+        "11_encoder_summary.csv",
+        "11_variance_components.csv",
+        "11_variance_components_bootstrap.csv",
+        "11_easy_hard_ranking.csv",
+        "11_untrained_floor_lift.csv",
+        "11_benchmark_kb_seed_association.csv",
+        "11_absolute_kb_levels.csv",
+    ],
     "20": [
         "20_checkpoint_inventory.csv",
         "20_within_seed_paired_changes.csv",
@@ -56,7 +65,8 @@ def check_style_module() -> bool:
         apply_style()
         print(f"  Palette: Okabe-Ito ({len(OKABE_ITO)} colours)")
         print(f"  Semantic roles: benchmark={COLORS['benchmark']}, kb={COLORS['kb']}, "
-              f"gene-drug={COLORS['gene_drug']}, gene-disease={COLORS['gene_disease']}")
+              f"gene-drug={COLORS['gene_drug']}, gene-disease={COLORS['gene_disease']}, "
+              f"baseline={COLORS['baseline']}, deberta={COLORS['deberta']}")
         print(f"  DPI={DPI}, sans-serif, no top/right spines, light gridlines")
     return ok
 

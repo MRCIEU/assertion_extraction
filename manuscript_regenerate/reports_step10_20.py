@@ -120,19 +120,19 @@ Generated: {ru.utc_now()}
 
 ## Plain-language summary
 
-When a model learns to detect relations in biomedical abstracts, we can ask whether improvement on {_BENCH} also improves {_KB} on clinically curated gene-drug and gene-disease links. A negative association across encoders could mean training erodes out-of-distribution ranking, or that the two tasks measure different things because curation criteria and the step-03 candidate pool differ from training. Step 20 follows each encoder across training epochs at the step-10 confirmed recipe (**5e-6**, no warmup) and compares both axes seed by seed, separating gene-drug from gene-disease because non-drug PubTator Chemical tags inflate the gene-drug pool only.
+When a model learns to detect relations in biomedical abstracts, we can ask whether improvement on {_BENCH} also improves {_KB} on clinically curated gene-drug and gene-disease links. Step 20 follows each encoder across training epochs at the step-10 confirmed recipe and compares both axes seed by seed. Gene-disease ranking is the informative control because non-drug chemical-tag inflation touches only gene-drug pools.
 
-## The evaluation-validity question
+## Purpose
 
-Round 1 found weak or absent correlation between {_BENCH} and {_KB} across encoders. Two explanations compete. Explanation 1 is mechanistic: as training progresses, the model overfits the training distribution and loses generalisation to CIViC ranking. Explanation 2 is static: benchmark and knowledge-base scores reflect different inclusion criteria and fixed pool composition, so a competent model may score confidently on distractors that CIViC would not curate. Gene-disease ranking is the informative control because chemical-tag inflation touches only gene-drug pools.
+Round 1 compared encoders at a single checkpoint and found a negative benchmark–knowledge-base association on clean data. Step 20 tests whether that pattern has a within-model training-dynamics component. Two explanations compete. Mechanistic erosion means training improves {_BENCH} while eroding {_KB}. Static mismatch means benchmark and knowledge-base scores reflect different curation criteria and fixed pool composition, so a competent model may rank confidently on distractors CIViC would not curate. The frozen step-03 pool has **1590** matched positives and **222** misses; those limits are common-mode across encoders.
 
 ## What was measured
 
-Every recoverable per-epoch checkpoint from the confirmed step-10 matrix was scored without retraining. Coverage totals **{n_checkpoints}** epoch checkpoints across nine encoders and eight seeds where training completed. At each checkpoint the same weights were evaluated on {_BENCH} and {_KB} on the frozen primary pool, split into gene-drug, gene-disease, easy co-sentence, and hard cross-sentence subsets. Pair-type by subset metrics were recomputed from saved checkpoints where needed.
+Every recoverable per-epoch checkpoint from the confirmed step-10 matrix was scored without retraining. Coverage totals **{n_checkpoints}** epoch checkpoints across nine encoders and eight seeds. At each checkpoint the same weights were evaluated on {_BENCH} and {_KB} on the frozen primary pool, split into gene-drug, gene-disease, easy, and hard subsets.
 
 ## Pooled within-model result
 
-From epoch 1 to the best validation-F1 checkpoint, **{n_pairable}** seed trajectories are pairable. Averaged across pair types and subsets on the hard axis, mean paired change in knowledge-base MRR is **{pooled_hard:+.4f}**. That pooled reading near zero supports the static Explanation 2 on the hard-subset average. However, the pooled design hides pair-type asymmetry documented in 20_pair_type_breakdown.csv.
+From epoch 1 to the best validation-F1 checkpoint, **{n_pairable}** seed trajectories are pairable. Averaged across pair types and subsets on the hard axis, mean paired change in knowledge-base MRR is **{pooled_hard:+.4f}**. That pooled reading near zero supports static mismatch on the hard-subset average. The pooled design hides pair-type asymmetry shown below.
 
 ## Pair-type asymmetry
 
@@ -141,38 +141,36 @@ From epoch 1 to the best validation-F1 checkpoint, **{n_pairable}** seed traject
 | gene-drug | {gdrug_delta:+.4f} | — |
 | gene-disease | {gdis_delta:+.4f} | {gdis_falls} / {gdis_n} |
 
-Gene-drug {_KB} ranking changes by **{gdrug_delta:+.4f}** on average from epoch 1 to best validation F1 across **{gdrug_n}** pairable seeds. Gene-disease ranking changes by **{gdis_delta:+.4f}**, with ranking falling in **{gdis_falls}** of **{gdis_n}** seeds. Rising gene-drug and falling gene-disease components cancel in the pooled hard-subset average, which is why the correct reading is pair-type-specific, not pooled.
+Gene-drug {_KB} changes by **{gdrug_delta:+.4f}** on average across **{gdrug_n}** pairable seeds. Gene-disease ranking changes by **{gdis_delta:+.4f}**, with ranking falling in **{gdis_falls}** of **{gdis_n}** seeds. Rising gene-drug and falling gene-disease components cancel in the pooled hard-subset average, so the correct reading is pair-type-specific.
 
-Hard-subset gene-disease decline exceeds easy-subset decline modestly but both subsets fall; the gap is not sharp enough to claim erosion confined to cross-sentence pairs alone. Gene-drug behaviour stays flat or positive in the pooled average and remains consistent with static pool and criterion differences on the between-model axis. Robustness across three well-trained checkpoint definitions (best validation F1, last epoch, fixed epoch 5) keeps overall gene-disease decline stable while hard-subset erosion fractions vary. Encoder-level splits show biomedical-domain encoders with larger gene-disease declines and general-purpose encoders flat or rising on hard subsets.
+Hard-subset gene-disease decline exceeds easy-subset decline modestly but both subsets fall; the gap is not sharp enough to claim erosion confined to cross-sentence pairs alone. Gene-drug behaviour stays flat or positive in the pooled average. Robustness across three well-trained checkpoint definitions keeps overall gene-disease decline stable while hard-subset erosion fractions vary. Encoder-level splits show biomedical-domain encoders with larger gene-disease declines and general-purpose encoders flat or rising on hard subsets.
 
-## Trajectory figures
-
-Figure fig2_within_seed_paired_change.png shows mean paired benchmark and {_KB} changes from epoch 1 to best validation F1 for each encoder. Most encoders move benchmark F1 up while {_KB} hard MRR stays near zero or mixed, illustrating encoder heterogeneity. Figure fig3_hard_easy_pair_type.png contrasts mean {_KB} change by pair type at the best checkpoint: gene-drug stays flat or positive while gene-disease falls. Figure fig6_pair_type_subset_contrast.png breaks gene-disease decline across easy, hard, and pooled subsets. Earlier trajectory panels were dropped from the figure budget because pair-type bars carry the same message more directly.
+Figure fig1_within_seed_paired_change.png shows mean paired benchmark and {_KB} changes by encoder from epoch 1 to best validation F1. Most encoders move benchmark F1 up while {_KB} hard MRR stays near zero or mixed. Figure fig2_pair_type_asymmetry.png contrasts mean {_KB} change by pair type using the shared gene-drug and gene-disease colours from step 00. Figure fig3_gene_disease_subset_contrast.png breaks gene-disease decline across easy, hard, and pooled subsets.
 
 ## Verdict
 
-Adjudication label: **mixed_gene_disease_signal**. Overall gene-disease ranking falls reliably within models from early to well-trained checkpoints: the decline is stable across checkpoint definitions, spans most seeds, and cannot be explained by non-drug chemical pool inflation alone. The effect does not meet the full mechanistic erosion standard because hard-versus-easy concentration is modest and encoder families split. Gene-drug ranking remains flat or positive in the pooled average. The between-model negative association from round 1 remains best explained by static criterion and pool-composition differences, compounded by encoder-family heterogeneity on gene-disease. Round 1 noted that most gene-drug variance was within-encoder seed noise; within-seed paired changes are the appropriate design for detecting training-dynamics effects.
+Adjudication label: **mixed_gene_disease_signal**. Overall gene-disease ranking falls reliably within models from early to well-trained checkpoints. The decline is stable across checkpoint definitions, spans most seeds, and cannot be explained by non-drug chemical pool inflation alone. The effect does not meet the full mechanistic erosion standard because hard-versus-easy concentration is modest and encoder families split. Gene-drug ranking remains flat or positive in the pooled average. The between-model negative association from round 1 remains best explained by static criterion and pool-composition differences, compounded by encoder-family heterogeneity on gene-disease.
 
-This round does not modify the frozen step-03 pool, matching rules, or type mappings.
+This round does not modify the frozen pool, matching rules, or type mappings.
 
 ## Pending: mundane explanations for gene-disease decline
 
 **Status: analysis in progress; numbers not yet final.**
 
-This subsection will test whether the gene-disease decline is an artifact of checkpoint choice or pool size rather than a training-dynamics signal. Planned checks include timing of the minimum {_KB} score relative to the validation-best checkpoint (does ranking fall only after benchmark peaks, or does it begin earlier?), and whether per-abstract candidate-pool size or positive rate predicts the magnitude of decline within gene-disease seeds. If decline tracks pool size alone, the pattern would support static pool-composition mismatch. If decline persists after adjusting for pool size and peaks before or at the validation-best epoch, mechanistic erosion remains plausible. Output slots: peak-timing table and pool-size confound table (CSV paths to be inserted).
+This subsection will test whether the gene-disease decline is an artifact of checkpoint choice or pool size. Planned checks include timing of the minimum {_KB} score relative to the validation-best checkpoint, and whether per-abstract candidate-pool size predicts decline magnitude within gene-disease seeds.
 
 ## Pending: qualitative error analysis
 
 **Status: analysis in progress; numbers not yet final.**
 
-This subsection will separate genuine model ranking errors from cases where the abstract text cannot support the CIViC-curated gene-disease link under the frozen matching rules. Planned review will sample hard-subset gene-disease relations where {_KB} falls from epoch 1 to best validation F1 while {_BENCH} rises, and classify each as model error (entities present, relation plausible, wrong rank), pool or annotation limit (missing PubTator tag, offset failure, entity-type mismatch), or abstract insufficient (co-occurrence without support). The classification rates will determine whether within-model decline reflects learnable mistakes or evaluation limits common to all encoders. Output slots: qualitative error counts by class (CSV paths to be inserted).
+This subsection will separate genuine model ranking errors from cases where the abstract cannot support the curated gene-disease link under frozen matching rules. Planned review will classify hard-subset gene-disease relations where {_KB} falls while {_BENCH} rises.
 
 ## Linkage
 
-Step 00 through step 02 defined **1812** frozen targets. Step 03 built **18911** primary candidates with **1590** matched recall. Step 04 piloted under the pre-fix pipeline (PubMedBERT MRR **0.469**, reference benchmark **0.893**). Step 05 passed the offset gate. Step 10 confirmed **5e-6/none** and produced the checkpoint inventory scored here. A parallel step 06 probe explored OncoKB on a limited abstract-grounded subset without replacing CIViC as the primary {_KB}.
+Steps 00 through 02 froze **1812** targets. Step 03 built **18911** primary candidates with **1590** matched and **222** missed recall. Step 04 piloted under the pre-fix pipeline (PubMedBERT MRR **0.469**). Step 05 passed the offset gate. Step 10 confirmed **5e-6/none**. Step 11 compared encoders at a single checkpoint with benchmark spread **0.025** and variance shares **36/64**, **23/77**, **13/87** on benchmark, gene-drug, and gene-disease axes. A second knowledge base was explored for external validity; its usable abstract-grounded subset was limited (recorded as future work).
 
 ## Outputs
 
-Checkpoint inventory, paired-change tables, pair-type breakdowns, and robustness CSVs live under `outputs/20_round2_diagnostic/`, including 20_checkpoint_inventory.csv, 20_within_seed_paired_changes.csv, and 20_pair_type_breakdown.csv.
+Checkpoint inventory, paired-change tables, pair-type breakdowns, and robustness tables are in the step-20 outputs directory, including 20_checkpoint_inventory.csv, 20_within_seed_paired_changes.csv, and 20_pair_type_breakdown.csv.
 """
     return ru.write_md(paths["reports"] / "report.md", body)

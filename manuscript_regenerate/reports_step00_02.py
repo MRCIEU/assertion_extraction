@@ -37,9 +37,11 @@ def write_report_00(paths: dict[str, Path] | None = None) -> Path:
     pair_table = "\n".join(pair_rows)
 
     label_rows = []
-    for row in label_cross.head(8).itertuples():
-        label_rows.append(f"{row.evidence_type} / {row.clinical_significance} / {row.evidence_direction}: {int(row.count)}")
-    label_prose = "; ".join(label_rows[:6]) + "."
+    for row in label_cross.head(4).itertuples():
+        label_rows.append(
+            f"| {row.evidence_type} | {row.clinical_significance} | {row.evidence_direction} | {int(row.count)} |"
+        )
+    label_table = "\n".join(label_rows)
 
     body = f"""# CIViC feasibility (step 00)
 
@@ -78,7 +80,13 @@ Step 02 freezes **1812** gene-drug and gene-disease targets drawn from this univ
 
 ## Label heterogeneity
 
-CIViC native labels span heterogeneous semantic levels. Training-corpus labels from BioRED and DrugProt are not directly commensurable with CIViC clinical significance categories. On the evaluable set, top cross-tabs include {label_prose} This heterogeneity motivates the {_QUESTION}: we evaluate relation presence only and ask whether {_BENCH} predicts {_KB}, not whether fine-grained label taxonomies align across sources. Step 01 develops the corpus-side evidence for that question. Full counts are in label_cross_tab.csv.
+CIViC native labels span heterogeneous semantic levels. Training-corpus labels from BioRED and DrugProt are not directly commensurable with CIViC clinical significance categories. The table shows the four largest cross-tabs on the evaluable set; full counts are in label_cross_tab.csv.
+
+| Evidence type | Clinical significance | Direction | Count |
+| --- | --- | --- | ---: |
+{label_table}
+
+This heterogeneity motivates the {_QUESTION}: we evaluate relation presence only and ask whether {_BENCH} predicts {_KB}, not whether fine-grained label taxonomies align across sources. Step 01 develops the corpus-side evidence for that question.
 
 ## Assertion versus evidence layer
 
@@ -86,7 +94,7 @@ CIViC assertions aggregate multiple evidence items across PMIDs. For abstract-le
 
 ## Second knowledge base
 
-A parallel probe in step 06 explored OncoKB as a second knowledge base on a limited abstract-grounded subset; coverage is smaller and multi-PMID curation records do not map cleanly to single-abstract ranking targets, so CIViC remains the primary {_KB} axis for this study.
+A parallel probe explored OncoKB as a second knowledge base; its usable abstract-grounded subset was limited, so CIViC remains the primary {_KB} axis (recorded as future work).
 
 ## Design implications
 

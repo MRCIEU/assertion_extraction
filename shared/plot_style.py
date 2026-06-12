@@ -7,7 +7,7 @@ from pathlib import Path
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 
-# Okabe-Ito colour-blind-safe palette with fixed semantic roles across the study.
+# Okabe-Ito colour-blind-safe palette.
 OKABE_ITO = {
     "orange": "#E69F00",
     "sky": "#56B4E9",
@@ -19,27 +19,29 @@ OKABE_ITO = {
     "black": "#000000",
 }
 
-# Semantic role mapping (constant across all figures).
+# Fixed semantic role mapping — identical in every figure across steps 00–20.
 COLORS = {
     "benchmark": OKABE_ITO["blue"],
     "kb": OKABE_ITO["vermillion"],
     "gene_drug": OKABE_ITO["green"],
     "gene_disease": OKABE_ITO["purple"],
+    "baseline": "#999999",
+    "neutral": OKABE_ITO["black"],
+    "neutral_light": "#BBBBBB",
+    "deberta": OKABE_ITO["orange"],
     "positive": OKABE_ITO["green"],
     "negative": OKABE_ITO["orange"],
-    "neutral": OKABE_ITO["black"],
-    "neutral_light": "#999999",
-    "accent": OKABE_ITO["vermillion"],
     "secondary": OKABE_ITO["sky"],
     "highlight": OKABE_ITO["orange"],
     "grid": "#E6E6E6",
 }
 
-DPI = 800
+DPI = 300
 FIG_SINGLE = (6.5, 4.5)
 FIG_WIDE = (9.0, 5.0)
 FIG_TALL = (6.5, 7.0)
-FIG_HEATMAP = (9.0, 5.5)
+FIG_HEATMAP = (7.0, 4.0)
+FIG_PANEL = (10.0, 4.5)
 
 FONT = {
     "family": "sans-serif",
@@ -47,12 +49,12 @@ FONT = {
     "title": 11,
     "label": 10,
     "tick": 9,
-    "legend": 9,
+    "legend": 8,
 }
 
 
 def apply_style() -> None:
-    """Apply the shared matplotlib rcParams."""
+    """Apply shared matplotlib rcParams."""
     mpl.rcParams.update(
         {
             "font.family": FONT["family"],
@@ -76,13 +78,13 @@ def apply_style() -> None:
 
 
 def save_figure(fig: plt.Figure, path: Path) -> Path:
-    """Save figure at 800 dpi with no outer frame."""
+    """Save figure at 300 dpi with generous margins."""
     path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(
         path,
         dpi=DPI,
         bbox_inches="tight",
-        pad_inches=0.12,
+        pad_inches=0.18,
         facecolor="white",
         edgecolor="none",
     )
@@ -94,3 +96,8 @@ def add_light_grid(ax: plt.Axes, axis: str = "y") -> None:
     """Add thin unobtrusive gridlines."""
     ax.grid(True, axis=axis, color=COLORS["grid"], linewidth=0.6, alpha=0.8)
     ax.set_axisbelow(True)
+
+
+def encoder_point_color(model_id: str) -> str:
+    """Single-encoder highlight colour (DeBERTa) vs neutral for all others."""
+    return COLORS["deberta"] if model_id == "deberta_base" else COLORS["benchmark"]
