@@ -99,11 +99,11 @@ On the easy co-sentence subset the distance ranker reaches mean reciprocal rank 
 
 Absolute levels matter alongside relative comparisons. On the frozen pool, random ranking achieves MRR **{random_mrr:.3f}** and the distance ranker **{dist_mrr:.3f}**. Fine-tuned encoder means average **{ft_gd:.3f}** on gene-drug and **{ft_gdis:.3f}** on gene-disease, with hard-subset mean **{ft_hard:.3f}** versus distance **{dist_hard:.3f}**. Models sit well above random but only modestly above the distance ranker, so {_KB} adequacy is limited in absolute terms even when hard-subset ranking beats proximity.
 
-Figure fig3_easy_hard_ranking_validity.png plots encoder means against the distance baseline on easy and hard subsets. Points above the dashed line on the hard panel indicate relation signal beyond entity proximity.
+Figure fig3_easy_hard_ranking_validity.png plots encoder means against the distance-ranker baseline on easy and hard subsets, using the same encoder colours as fig1. The dashed vertical line marks the proximity-only ranker; its MRR values are noted below the panels.
 
 ## Benchmark discriminative power
 
-Among encoder means, {_BENCH} ranges from **{bench_min:.3f}** to **{bench_max:.3f}** (spread **{spread:.3f}**), comparable to within-encoder seed standard deviation near **{bench_std:.3f}**. Figure fig1_benchmark_kb_scatter.png shows encoder means with seed uncertainty bars on both axes for gene-drug and gene-disease panels; letter codes identify encoders without overlapping labels.
+Among encoder means, {_BENCH} ranges from **{bench_min:.3f}** to **{bench_max:.3f}** (spread **{spread:.3f}**), comparable to within-encoder seed standard deviation near **{bench_std:.3f}**. Figure fig1_benchmark_kb_scatter.png shows encoder means with seed uncertainty bars on both pair-type panels; each encoder has a fixed colour in the shared palette (legend below the panels).
 
 The variance-components method applied to benchmark F1 and to {_KB} MRR separates between-encoder from within-encoder seed variance. For benchmark F1, **{100 * float(bench_enc['encoder_variance_share']):.0f}%** of variance lies between encoders and **{100 * float(bench_enc['seed_variance_share']):.0f}%** within encoders (encoder-share interval **{100 * float(bench_boot['encoder_share_ci_lo']):.0f}%** to **{100 * float(bench_boot['encoder_share_ci_hi']):.0f}%**). For gene-drug {_KB}, between-encoder share is **{100 * float(gd_var['encoder_variance_share']):.0f}%** and within-encoder **{100 * float(gd_var['seed_variance_share']):.0f}%**. For gene-disease {_KB}, between-encoder share is **{100 * float(gdis_var['encoder_variance_share']):.0f}%** and within-encoder **{100 * float(gdis_var['seed_variance_share']):.0f}%**.
 

@@ -36,6 +36,19 @@ COLORS = {
     "grid": "#E6E6E6",
 }
 
+# Fixed per-encoder colours (Okabe-Ito / Tol bright extension) — same mapping in every multi-encoder figure.
+ENCODER_COLORS: dict[str, str] = {
+    "pubmedbert_base": OKABE_ITO["blue"],
+    "biomedbert_base": OKABE_ITO["vermillion"],
+    "biolinkbert_base": OKABE_ITO["green"],
+    "biobert_base": OKABE_ITO["purple"],
+    "scibert_base": OKABE_ITO["orange"],
+    "roberta_base": OKABE_ITO["sky"],
+    "bert_base": "#666666",
+    "distilbert_base": "#CC6677",
+    "deberta_base": "#882255",
+}
+
 DPI = 300
 FIG_SINGLE = (6.5, 4.5)
 FIG_WIDE = (9.0, 5.0)
@@ -99,5 +112,19 @@ def add_light_grid(ax: plt.Axes, axis: str = "y") -> None:
 
 
 def encoder_point_color(model_id: str) -> str:
-    """Single-encoder highlight colour (DeBERTa) vs neutral for all others."""
-    return COLORS["deberta"] if model_id == "deberta_base" else COLORS["benchmark"]
+    """Per-encoder colour from the fixed study palette."""
+    return ENCODER_COLORS.get(model_id, COLORS["neutral"])
+
+
+def encoder_legend_handles(model_ids: list[str]):
+    """Coloured marker handles for a compact encoder legend."""
+    from matplotlib.lines import Line2D
+
+    return [
+        Line2D(
+            [0], [0], marker="o", color="w", markerfacecolor=encoder_point_color(mid),
+            markeredgecolor=COLORS["neutral"], markeredgewidth=0.4, markersize=6,
+            label=mid,
+        )
+        for mid in model_ids
+    ]

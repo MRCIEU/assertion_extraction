@@ -11,6 +11,7 @@ import pandas as pd
 from shared.models import MODELS, MODEL_BY_ID
 from shared.plot_style import (
     COLORS,
+    ENCODER_COLORS,
     FIG_HEATMAP,
     FIG_PANEL,
     FIG_SINGLE,
@@ -292,7 +293,7 @@ def regenerate_step10() -> list[str]:
     return kept
 
 
-def _plot_scatter_panel(ax, encoder_df, ymean, ylo, yhi, title, codes: dict[str, str]) -> None:
+def _plot_scatter_panel(ax, encoder_df, ymean, ylo, yhi, title) -> None:
     mids = encoder_df["model_id"].tolist()
     x = encoder_df["benchmark_f1_mean"].astype(float).values
     y = encoder_df[ymean].astype(float).values
@@ -304,17 +305,39 @@ def _plot_scatter_panel(ax, encoder_df, ymean, ylo, yhi, title, codes: dict[str,
         y - encoder_df[ylo].astype(float).values,
         encoder_df[yhi].astype(float).values - y,
     ])
-    ax.errorbar(
-        x, y, xerr=xerr, yerr=yerr, fmt="none",
-        ecolor=COLORS["neutral_light"], elinewidth=0.6, capsize=1.5, alpha=0.9, zorder=1,
-    )
-    for xi, yi, mid in zip(x, y, mids):
+    for i, mid in enumerate(mids):
         c = encoder_point_color(mid)
-        ax.plot(xi, yi, "o", color=c, markersize=7, zorder=3)
-        ax.text(xi, yi, codes[mid], fontsize=8, ha="center", va="center", color="white", fontweight="bold", zorder=4)
+        ax.errorbar(
+            x[i], y[i], xerr=xerr[:, i : i + 1], yerr=yerr[:, i : i + 1],
+            fmt="o", color=c, ecolor=c, elinewidth=0.7, capsize=2,
+            markersize=7, alpha=0.92, zorder=3,
+        )
     ax.set_xlabel("In-distribution benchmark F1")
     ax.set_ylabel("Out-of-distribution KB MRR")
     ax.set_title(title)
+
+
+def _encoder_legend(fig, model_ids: list[str], y_anchor: float = 0.02) -> None:
+    from matplotlib.lines import Line2D
+
+    handles = [
+        Line2D(
+            [0], [0], marker="o", color="w", markerfacecolor=encoder_point_color(mid),
+            markeredgecolor=COLORS["neutral"], markeredgewidth=0.35, markersize=5.5,
+            label=_short_name(MODEL_BY_ID[mid].short_name if mid in MODEL_BY_ID else mid),
+        )
+        for mid in model_ids
+    ]
+    fig.legend(
+        handles=handles,
+        loc="upper center",
+        bbox_to_anchor=(0.5, y_anchor),
+        ncol=5,
+        frameon=False,
+        fontsize=7,
+        columnspacing=0.8,
+        handletextpad=0.3,
+    )
 
 
 def regenerate_step11() -> list[str]:
@@ -325,35 +348,30 @@ def regenerate_step11() -> list[str]:
 
     enc = pd.read_csv(out / "11_encoder_summary.csv")
     enc = enc.sort_values("benchmark_f1_mean", ascending=False).reset_index(drop=True)
-    letters = "ABCDEFGHI"
-    codes = {row.model_id: letters[i] for i, row in enumerate(enc.itertuples())}
+    model_ids = enc["model_id"].tolist()
 
-    xlo = float(enc["benchmark_f1_mean"].min()) - 0.015
-    xhi = float(enc["benchmark_f1_mean"].max()) + 0.015
+    xlo = float(enc["benchmark_f1_mean"].min()) - 0.018
+    xhi = float(enc["benchmark_f1_mean"].max()) + 0.018
 
-    fig, axes = plt.subplots(1, 2, figsize=FIG_PANEL, sharex=True)
+    fig, axes = plt.subplots(1, 2, figsize=(9.2, 4.2), sharex=True)
     _plot_scatter_panel(
         axes[0], enc, "kb_mrr_gene_drug_mean",
-        "kb_mrr_gene_drug_ci_lo", "kb_mrr_gene_drug_ci_hi", "Gene-drug", codes,
+        "kb_mrr_gene_drug_ci_lo", "kb_mrr_gene_drug_ci_hi", "Gene-drug",
     )
     _plot_scatter_panel(
         axes[1], enc, "kb_mrr_gene_disease_mean",
-        "kb_mrr_gene_disease_ci_lo", "kb_mrr_gene_disease_ci_hi", "Gene-disease", codes,
+        "kb_mrr_gene_disease_ci_lo", "kb_mrr_gene_disease_ci_hi", "Gene-disease",
     )
     for ax in axes:
         ax.set_xlim(xlo, xhi)
         add_light_grid(ax, "y")
 
-    legend_lines = [
-        f"{codes[row.model_id]} = {_short_name(row.short_name)}"
-        for row in enc.itertuples()
-    ]
-    fig.legend(
-        legend_lines, loc="center left", bbox_to_anchor=(1.01, 0.5),
-        frameon=False, fontsize=7, handlelength=0, handletextpad=0,
+    fig.suptitle(
+        "Benchmark vs knowledge-base ranking by pair type\n(encoder means; seed uncertainty bars)",
+        y=0.98, fontsize=11,
     )
-    fig.suptitle("Benchmark vs knowledge-base ranking by pair type (encoder means; seed bars)", y=1.02, fontsize=11)
-    fig.subplots_adjust(wspace=0.32, right=0.78)
+    fig.subplots_adjust(wspace=0.22, bottom=0.22, top=0.82)
+    _encoder_legend(fig, model_ids, y_anchor=0.02)
     n1 = "fig1_benchmark_kb_scatter.png"
     save_figure(fig, fig_dir / n1)
     kept.append(n1)
@@ -394,36 +412,51 @@ def regenerate_step11() -> list[str]:
     kept.append(n2)
 
     easy_hard = pd.read_csv(out / "11_easy_hard_ranking.csv")
-    encoder_order = enc["model_id"].tolist()
-    fig, axes = plt.subplots(1, 2, figsize=FIG_PANEL)
-    for ax, (subset_key, title) in zip(
-        axes,
-        [("easy_co_sentence", "Co-sentence (easy)"), ("hard_cross_sentence", "Cross-sentence (hard)")],
-    ):
+    encoder_order = model_ids
+    subsets = [("easy_co_sentence", "Co-sentence (easy)"), ("hard_cross_sentence", "Cross-sentence (hard)")]
+    dr_by_subset: dict[str, float] = {}
+    fig, axes = plt.subplots(1, 2, figsize=(9.2, 4.8))
+    for ax, (subset_key, title) in zip(axes, subsets):
         sub = easy_hard[easy_hard["subset"] == subset_key]
         dr = float(sub[sub["model_id"] == "distance_ranker"]["mrr"].iloc[0])
+        dr_by_subset[subset_key] = dr
         rows = []
         for mid in encoder_order:
-            runs = sub[(sub["model_id"] == mid) & (sub["model_id"] != "distance_ranker")]
+            runs = sub[sub["model_id"] == mid]
             if runs.empty:
                 continue
-            rows.append({"model_id": mid, "mrr": float(runs["mrr"].mean()), "sd": float(runs["mrr"].std(ddof=1)) if len(runs) > 1 else 0.0})
+            rows.append({
+                "model_id": mid,
+                "mrr": float(runs["mrr"].mean()),
+                "sd": float(runs["mrr"].std(ddof=1)) if len(runs) > 1 else 0.0,
+            })
         edf = pd.DataFrame(rows)
         y = np.arange(len(edf))
-        ax.errorbar(edf["mrr"], y, xerr=edf["sd"], fmt="none", ecolor=COLORS["neutral_light"], elinewidth=0.6, capsize=1.5)
-        for xi, yi, mid in zip(edf["mrr"], y, edf["model_id"]):
-            ax.plot(xi, yi, "o", color=encoder_point_color(mid), markersize=7)
-        ax.axvline(dr, color=COLORS["baseline"], linestyle="--", linewidth=1.5, label=f"Distance ranker ({dr:.3f})")
+        for xi, yi, sd, mid in zip(edf["mrr"], y, edf["sd"], edf["model_id"]):
+            c = encoder_point_color(mid)
+            ax.errorbar(xi, yi, xerr=sd, fmt="o", color=c, ecolor=c, elinewidth=0.7,
+                        capsize=2, markersize=7, zorder=3)
+        ax.axvline(dr, color=COLORS["baseline"], linestyle="--", linewidth=1.4, zorder=1)
         ax.set_yticks(y)
         ax.set_yticklabels([_short_name(MODEL_BY_ID[m].short_name) for m in edf["model_id"]], fontsize=8)
         mrr_vals = edf["mrr"].tolist() + [dr]
-        ax.set_xlim(max(0.0, min(mrr_vals) - 0.04), min(1.0, max(mrr_vals) + 0.06))
+        xmin = max(0.0, min(mrr_vals) - 0.05)
+        xmax = min(1.0, max(mrr_vals) + 0.08)
+        ax.set_xlim(xmin, xmax)
         ax.set_xlabel("Mean reciprocal rank")
         ax.set_title(title)
-        ax.legend(loc="lower right", frameon=False, fontsize=7)
         add_light_grid(ax, "x")
-    fig.suptitle("Ranking validity vs proximity-only baseline", y=1.02, fontsize=11)
-    fig.subplots_adjust(wspace=0.38, left=0.22)
+
+    dr_easy = dr_by_subset["easy_co_sentence"]
+    dr_hard = dr_by_subset["hard_cross_sentence"]
+    fig.suptitle("Ranking validity vs proximity-only baseline", y=0.98, fontsize=11)
+    fig.text(
+        0.5, 0.13,
+        f"Dashed line: distance ranker (easy {dr_easy:.3f}, hard {dr_hard:.3f})",
+        ha="center", va="center", fontsize=8, color=COLORS["baseline"],
+    )
+    fig.subplots_adjust(wspace=0.32, left=0.20, bottom=0.24, top=0.88)
+    _encoder_legend(fig, encoder_order, y_anchor=0.02)
     n3 = "fig3_easy_hard_ranking_validity.png"
     save_figure(fig, fig_dir / n3)
     kept.append(n3)
