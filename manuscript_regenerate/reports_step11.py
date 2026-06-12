@@ -32,6 +32,9 @@ def write_report_11(paths: dict[str, Path] | None = None) -> Path:
     pool_rob = ru.read_csv(out / "11_pool_size_robustness.csv")
 
     spread = float(bench_range["spread"].iloc[0])
+    bench_min = float(bench_range["min_f1"].iloc[0])
+    bench_max = float(bench_range["max_f1"].iloc[0])
+    bench_std = float(bench_range["std_f1"].iloc[0])
     bench_enc = var[var["metric"] == "benchmark_f1"].iloc[0]
     gd_var = var[var["metric"] == "kb_mrr_gene_drug"].iloc[0]
     gdis_var = var[var["metric"] == "kb_mrr_gene_disease"].iloc[0]
@@ -100,7 +103,7 @@ Figure fig3_easy_hard_ranking_validity.png plots encoder means against the dista
 
 ## Benchmark discriminative power
 
-Among encoder means, {_BENCH} ranges from **{float(bench_range['min_f1']):.3f}** to **{float(bench_range['max_f1']):.3f}** (spread **{spread:.3f}**), comparable to within-encoder seed standard deviation near **{float(bench_range['std_f1']):.3f}**. Figure fig1_benchmark_kb_scatter.png shows encoder means with seed uncertainty bars on both axes for gene-drug and gene-disease panels; letter codes identify encoders without overlapping labels.
+Among encoder means, {_BENCH} ranges from **{bench_min:.3f}** to **{bench_max:.3f}** (spread **{spread:.3f}**), comparable to within-encoder seed standard deviation near **{bench_std:.3f}**. Figure fig1_benchmark_kb_scatter.png shows encoder means with seed uncertainty bars on both axes for gene-drug and gene-disease panels; letter codes identify encoders without overlapping labels.
 
 The variance-components method applied to benchmark F1 and to {_KB} MRR separates between-encoder from within-encoder seed variance. For benchmark F1, **{100 * float(bench_enc['encoder_variance_share']):.0f}%** of variance lies between encoders and **{100 * float(bench_enc['seed_variance_share']):.0f}%** within encoders (encoder-share interval **{100 * float(bench_boot['encoder_share_ci_lo']):.0f}%** to **{100 * float(bench_boot['encoder_share_ci_hi']):.0f}%**). For gene-drug {_KB}, between-encoder share is **{100 * float(gd_var['encoder_variance_share']):.0f}%** and within-encoder **{100 * float(gd_var['seed_variance_share']):.0f}%**. For gene-disease {_KB}, between-encoder share is **{100 * float(gdis_var['encoder_variance_share']):.0f}%** and within-encoder **{100 * float(gdis_var['seed_variance_share']):.0f}%**.
 
