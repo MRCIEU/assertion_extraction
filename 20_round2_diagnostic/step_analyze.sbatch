@@ -39,6 +39,5 @@ export OUTPUT_ROOT
 export PYTHONUNBUFFERED=1
 
 cd "${STEP_DIR}"
-python run.py --analyze-only ${STEP_ARGS:-} || echo "WARNING: analyze-only failed (continuing to three-point timing)"
-python run.py --three-point-timing
+python run.py --analyze-only ${STEP_ARGS:-}
 echo "End: $(date -u)"

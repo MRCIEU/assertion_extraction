@@ -1,0 +1,956 @@
+=== Round 2 epoch scoring (GPU) ===
+
+=== Per-epoch scoring (5e-6/none matrix) ===
+Encoders: ['distilbert_base']
+Seeds: [42, 43, 44, 45, 46, 47, 48, 49]
+Expected epoch checkpoints: 67
+Already scored: 0
+
+  Loaded enriched pool cache (enriched_primary_pool.parquet)
+[benchmark] building BioRED test examples...
+[benchmark] built 14395 test examples (leaked PMIDs excluded)
+  SCORE DistilBERT-base seed=42 epoch=1
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_42/epochs/epoch_01 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7243 precision=0.6296 recall=0.8527 n_positives=8875
+  SCORE DistilBERT-base seed=42 epoch=2
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_42/epochs/epoch_02 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7220 precision=0.6379 recall=0.8315 n_positives=8875
+  SCORE DistilBERT-base seed=42 epoch=3
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_42/epochs/epoch_03 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.6971 precision=0.6508 recall=0.7504 n_positives=8875
+  SCORE DistilBERT-base seed=42 epoch=4
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_42/epochs/epoch_04 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7014 precision=0.6684 recall=0.7379 n_positives=8875
+  SCORE DistilBERT-base seed=42 epoch=5
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_42/epochs/epoch_05 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7166 precision=0.6649 recall=0.7770 n_positives=8875
+  SCORE DistilBERT-base seed=42 epoch=6
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_42/epochs/epoch_06 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.6925 precision=0.6996 recall=0.6855 n_positives=8875
+  SCORE DistilBERT-base seed=42 epoch=7
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_42/epochs/epoch_07 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7319 precision=0.6785 recall=0.7944 n_positives=8875
+  SCORE DistilBERT-base seed=42 epoch=8
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_42/epochs/epoch_08 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.6808 precision=0.7031 recall=0.6598 n_positives=8875
+  SCORE DistilBERT-base seed=42 epoch=9
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_42/epochs/epoch_09 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.6747 precision=0.7268 recall=0.6296 n_positives=8875
+  SCORE DistilBERT-base seed=42 epoch=10
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_42/epochs/epoch_10 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7148 precision=0.7124 recall=0.7172 n_positives=8875
+  SCORE DistilBERT-base seed=43 epoch=1
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_43/epochs/epoch_01 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7132 precision=0.6437 recall=0.7994 n_positives=8875
+  SCORE DistilBERT-base seed=43 epoch=2
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_43/epochs/epoch_02 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.6700 precision=0.6857 recall=0.6551 n_positives=8875
+  SCORE DistilBERT-base seed=43 epoch=3
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_43/epochs/epoch_03 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7198 precision=0.6705 recall=0.7769 n_positives=8875
+  SCORE DistilBERT-base seed=43 epoch=4
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_43/epochs/epoch_04 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7060 precision=0.6758 recall=0.7389 n_positives=8875
+  SCORE DistilBERT-base seed=43 epoch=5
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_43/epochs/epoch_05 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7097 precision=0.7023 recall=0.7173 n_positives=8875
+  SCORE DistilBERT-base seed=43 epoch=6
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_43/epochs/epoch_06 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.6951 precision=0.6916 recall=0.6987 n_positives=8875
+  SCORE DistilBERT-base seed=43 epoch=7
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_43/epochs/epoch_07 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.6979 precision=0.7054 recall=0.6906 n_positives=8875
+  SCORE DistilBERT-base seed=43 epoch=8
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_43/epochs/epoch_08 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7075 precision=0.7021 recall=0.7130 n_positives=8875
+  SCORE DistilBERT-base seed=44 epoch=1
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_44/epochs/epoch_01 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.6811 precision=0.6390 recall=0.7292 n_positives=8875
+  SCORE DistilBERT-base seed=44 epoch=2
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_44/epochs/epoch_02 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.6699 precision=0.6979 recall=0.6442 n_positives=8875
+  SCORE DistilBERT-base seed=44 epoch=3
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_44/epochs/epoch_03 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7125 precision=0.6695 recall=0.7614 n_positives=8875
+  SCORE DistilBERT-base seed=44 epoch=4
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_44/epochs/epoch_04 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7009 precision=0.7058 recall=0.6960 n_positives=8875
+  SCORE DistilBERT-base seed=44 epoch=5
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_44/epochs/epoch_05 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7106 precision=0.6961 recall=0.7257 n_positives=8875
+  SCORE DistilBERT-base seed=44 epoch=6
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_44/epochs/epoch_06 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7144 precision=0.6933 recall=0.7368 n_positives=8875
+  SCORE DistilBERT-base seed=44 epoch=7
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_44/epochs/epoch_07 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7013 precision=0.6989 recall=0.7038 n_positives=8875
+  SCORE DistilBERT-base seed=44 epoch=8
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_44/epochs/epoch_08 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7303 precision=0.6978 recall=0.7659 n_positives=8875
+  SCORE DistilBERT-base seed=44 epoch=9
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_44/epochs/epoch_09 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.6832 precision=0.7044 recall=0.6633 n_positives=8875
+  SCORE DistilBERT-base seed=44 epoch=10
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_44/epochs/epoch_10 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7072 precision=0.7055 recall=0.7088 n_positives=8875
+  SCORE DistilBERT-base seed=45 epoch=1
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_45/epochs/epoch_01 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7082 precision=0.6426 recall=0.7887 n_positives=8875
+  SCORE DistilBERT-base seed=45 epoch=2
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_45/epochs/epoch_02 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7331 precision=0.6466 recall=0.8462 n_positives=8875
+  SCORE DistilBERT-base seed=45 epoch=3
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_45/epochs/epoch_03 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.6814 precision=0.7159 recall=0.6500 n_positives=8875
+  SCORE DistilBERT-base seed=45 epoch=4
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_45/epochs/epoch_04 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7057 precision=0.7087 recall=0.7026 n_positives=8875
+  SCORE DistilBERT-base seed=45 epoch=5
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_45/epochs/epoch_05 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7202 precision=0.6865 recall=0.7574 n_positives=8875
+  SCORE DistilBERT-base seed=45 epoch=6
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_45/epochs/epoch_06 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7291 precision=0.6730 recall=0.7954 n_positives=8875
+  SCORE DistilBERT-base seed=45 epoch=7
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_45/epochs/epoch_07 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7018 precision=0.7156 recall=0.6885 n_positives=8875
+  SCORE DistilBERT-base seed=45 epoch=8
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_45/epochs/epoch_08 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7328 precision=0.6932 recall=0.7774 n_positives=8875
+  SCORE DistilBERT-base seed=45 epoch=9
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_45/epochs/epoch_09 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7285 precision=0.7132 recall=0.7445 n_positives=8875
+  SCORE DistilBERT-base seed=46 epoch=1
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_46/epochs/epoch_01 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.6887 precision=0.6418 recall=0.7431 n_positives=8875
+  SCORE DistilBERT-base seed=46 epoch=2
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_46/epochs/epoch_02 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.6787 precision=0.6762 recall=0.6812 n_positives=8875
+  SCORE DistilBERT-base seed=46 epoch=3
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_46/epochs/epoch_03 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7284 precision=0.6869 recall=0.7753 n_positives=8875
+  SCORE DistilBERT-base seed=46 epoch=4
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_46/epochs/epoch_04 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.6933 precision=0.7108 recall=0.6767 n_positives=8875
+  SCORE DistilBERT-base seed=46 epoch=5
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_46/epochs/epoch_05 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7121 precision=0.7073 recall=0.7170 n_positives=8875
+  SCORE DistilBERT-base seed=46 epoch=6
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_46/epochs/epoch_06 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.6861 precision=0.7187 recall=0.6563 n_positives=8875
+  SCORE DistilBERT-base seed=47 epoch=1
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_47/epochs/epoch_01 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.6633 precision=0.6473 recall=0.6800 n_positives=8875
+  SCORE DistilBERT-base seed=47 epoch=2
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_47/epochs/epoch_02 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7051 precision=0.6377 recall=0.7884 n_positives=8875
+  SCORE DistilBERT-base seed=47 epoch=3
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_47/epochs/epoch_03 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.6853 precision=0.7049 recall=0.6668 n_positives=8875
+  SCORE DistilBERT-base seed=47 epoch=4
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_47/epochs/epoch_04 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7002 precision=0.7031 recall=0.6974 n_positives=8875
+  SCORE DistilBERT-base seed=47 epoch=5
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_47/epochs/epoch_05 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7019 precision=0.7012 recall=0.7025 n_positives=8875
+  SCORE DistilBERT-base seed=47 epoch=6
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_47/epochs/epoch_06 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7106 precision=0.6936 recall=0.7285 n_positives=8875
+  SCORE DistilBERT-base seed=47 epoch=7
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_47/epochs/epoch_07 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7178 precision=0.7053 recall=0.7307 n_positives=8875
+  SCORE DistilBERT-base seed=47 epoch=8
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_47/epochs/epoch_08 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.6993 precision=0.7207 recall=0.6792 n_positives=8875
+  SCORE DistilBERT-base seed=47 epoch=9
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_47/epochs/epoch_09 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7212 precision=0.7142 recall=0.7283 n_positives=8875
+  SCORE DistilBERT-base seed=47 epoch=10
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_47/epochs/epoch_10 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7051 precision=0.7172 recall=0.6933 n_positives=8875
+  SCORE DistilBERT-base seed=48 epoch=1
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_48/epochs/epoch_01 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.6725 precision=0.6642 recall=0.6810 n_positives=8875
+  SCORE DistilBERT-base seed=48 epoch=2
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_48/epochs/epoch_02 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.6804 precision=0.6584 recall=0.7040 n_positives=8875
+  SCORE DistilBERT-base seed=48 epoch=3
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_48/epochs/epoch_03 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7282 precision=0.6762 recall=0.7888 n_positives=8875
+  SCORE DistilBERT-base seed=48 epoch=4
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_48/epochs/epoch_04 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7297 precision=0.6789 recall=0.7887 n_positives=8875
+  SCORE DistilBERT-base seed=48 epoch=5
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_48/epochs/epoch_05 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7106 precision=0.6968 recall=0.7250 n_positives=8875
+  SCORE DistilBERT-base seed=48 epoch=6
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_48/epochs/epoch_06 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7087 precision=0.7054 recall=0.7120 n_positives=8875
+  SCORE DistilBERT-base seed=48 epoch=7
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_48/epochs/epoch_07 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7059 precision=0.7093 recall=0.7026 n_positives=8875
+  SCORE DistilBERT-base seed=48 epoch=8
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_48/epochs/epoch_08 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.6989 precision=0.7227 recall=0.6767 n_positives=8875
+  SCORE DistilBERT-base seed=49 epoch=1
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_49/epochs/epoch_01 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.6789 precision=0.6360 recall=0.7281 n_positives=8875
+  SCORE DistilBERT-base seed=49 epoch=2
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_49/epochs/epoch_02 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.6444 precision=0.6846 recall=0.6087 n_positives=8875
+  SCORE DistilBERT-base seed=49 epoch=3
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_49/epochs/epoch_03 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7010 precision=0.6473 recall=0.7644 n_positives=8875
+  SCORE DistilBERT-base seed=49 epoch=4
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_49/epochs/epoch_04 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.6921 precision=0.6829 recall=0.7015 n_positives=8875
+  SCORE DistilBERT-base seed=49 epoch=5
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_49/epochs/epoch_05 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.6989 precision=0.6947 recall=0.7032 n_positives=8875
+  SCORE DistilBERT-base seed=49 epoch=6
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_49/epochs/epoch_06 on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.6594 precision=0.7221 recall=0.6068 n_positives=8875
+
+=== Epoch scoring batch done ===
+  Newly scored: 67, skipped: 0, on disk: 67/67
+
+End: Wed 10 Jun 00:08:13 UTC 2026
+{'expected_epoch_checkpoints': 67, 'scored_epochs': 67, 'complete': True, 'completed_at': '2026-06-10T00:08:12.344835+00:00', 'encoders': ['distilbert_base']}
+Epoch score files: 0

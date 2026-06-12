@@ -1,0 +1,37 @@
+=== Round 1 KB scoring (stage 1, GPU) ===
+Host: nid010423
+SLURM_JOB_ID=5116369
+Start: Tue  9 Jun 21:23:48 UTC 2026
+REPO=/home/b5ac/freddieyu.b5ac/project_1
+OUTPUT_ROOT=/home/b5ac/freddieyu.b5ac/project_1/../projects/project_1
+STEP_ARGS=--model-id distilbert_base
+
+=== Round 1 KB scoring ===
+Encoders: ['distilbert_base']
+Seeds: [42, 43, 44, 45, 46, 47, 48, 49]
+Planned runs this job: 8
+Already scored: 0
+
+Frozen pool: 18911 candidates, 1047 abstracts
+  SCORE START distilbert_base seed=42 checkpoint=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_42/best
+  SCORE DONE distilbert_base seed=42: bench=0.732 KB gd=0.685 gdis=0.563 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/11_round1_analysis/scores/distilbert_base/seed_42/scoring_complete.json
+  SCORE START distilbert_base seed=43 checkpoint=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_43/best
+  SCORE DONE distilbert_base seed=43: bench=0.710 KB gd=0.682 gdis=0.616 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/11_round1_analysis/scores/distilbert_base/seed_43/scoring_complete.json
+  SCORE START distilbert_base seed=44 checkpoint=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_44/best
+  SCORE DONE distilbert_base seed=44: bench=0.730 KB gd=0.652 gdis=0.591 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/11_round1_analysis/scores/distilbert_base/seed_44/scoring_complete.json
+  SCORE START distilbert_base seed=45 checkpoint=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_45/best
+  SCORE DONE distilbert_base seed=45: bench=0.729 KB gd=0.675 gdis=0.610 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/11_round1_analysis/scores/distilbert_base/seed_45/scoring_complete.json
+  SCORE START distilbert_base seed=46 checkpoint=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_46/best
+  SCORE DONE distilbert_base seed=46: bench=0.728 KB gd=0.695 gdis=0.673 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/11_round1_analysis/scores/distilbert_base/seed_46/scoring_complete.json
+  SCORE START distilbert_base seed=47 checkpoint=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_47/best
+  SCORE DONE distilbert_base seed=47: bench=0.721 KB gd=0.640 gdis=0.562 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/11_round1_analysis/scores/distilbert_base/seed_47/scoring_complete.json
+  SCORE START distilbert_base seed=48 checkpoint=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_48/best
+  SCORE DONE distilbert_base seed=48: bench=0.711 KB gd=0.687 gdis=0.657 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/11_round1_analysis/scores/distilbert_base/seed_48/scoring_complete.json
+  SCORE START distilbert_base seed=49 checkpoint=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/distilbert_base/seed_49/best
+  SCORE DONE distilbert_base seed=49: bench=0.701 KB gd=0.722 gdis=0.700 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/11_round1_analysis/scores/distilbert_base/seed_49/scoring_complete.json
+
+=== KB scoring complete (this job) ===
+  Newly scored: 8, skipped (already done): 0, total markers on disk: 51/72
+
+End: Tue  9 Jun 21:29:31 UTC 2026
+Scoring markers: 52/72

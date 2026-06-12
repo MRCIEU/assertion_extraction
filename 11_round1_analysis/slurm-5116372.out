@@ -1,0 +1,60 @@
+=== Round 1 analysis (stage 2, CPU) ===
+Host: nid010900
+SLURM_JOB_ID=5116372
+Start: Tue  9 Jun 21:37:32 UTC 2026
+REPO=/home/b5ac/freddieyu.b5ac/project_1
+OUTPUT_ROOT=/home/b5ac/freddieyu.b5ac/project_1/../projects/project_1
+Per-run summary: 72 scored runs (72/72 markers)
+Untrained-floor baselines: 9/9 encoders
+
+=== DeBERTa per-seed KB MRR (stored results, all 8 seeds) ===
+  seed 42 [PRIMARY]  benchmark_f1=0.7343  kb_gene_drug=0.7186  kb_gene_disease=0.7685  ece=0.5186
+  seed 43 [PRIMARY]  benchmark_f1=0.7349  kb_gene_drug=0.7091  kb_gene_disease=0.7056  ece=0.5315
+  seed 44 [PRIMARY]  benchmark_f1=0.7524  kb_gene_drug=0.6710  kb_gene_disease=0.4656  ece=0.3711
+  seed 45 [PRIMARY]  benchmark_f1=0.7601  kb_gene_drug=0.6727  kb_gene_disease=0.5201  ece=0.5561
+  seed 46 [PRIMARY]  benchmark_f1=0.7438  kb_gene_drug=0.7024  kb_gene_disease=0.7341  ece=0.3333
+  seed 47 [PRIMARY]  benchmark_f1=0.7539  kb_gene_drug=0.6943  kb_gene_disease=0.6850  ece=0.4386
+  seed 48 [PRIMARY]  benchmark_f1=0.7382  kb_gene_drug=0.6528  kb_gene_disease=0.5996  ece=0.3100
+  seed 49 [PRIMARY]  benchmark_f1=0.7480  kb_gene_drug=0.6816  kb_gene_disease=0.6047  ece=0.4675
+
+=== DeBERTa clean-seed means (dynamically filtered) ===
+  kb_gene_drug=0.6878  kb_gene_disease=0.6354  benchmark_f1=0.7457  ece=0.4408
+  benchmark_f1 if all seeds averaged (sensitivity)=0.7457
+Degenerate runs flagged: 0/72
+Benchmark F1 encoder-mean range: 0.720 to 0.746 (spread 0.025)
+
+=== Benchmark discriminative-power / saturation diagnostic ===
+  Benchmark F1 (in-distribution): between-encoder 36%, within-encoder (seed) 64% [encoder share 95% CI 10% to 52%]
+  KB MRR gene-drug (out-of-distribution): between-encoder 23%, within-encoder (seed) 77% [encoder share 95% CI 5% to 37%]
+  KB MRR gene-disease (out-of-distribution): between-encoder 13%, within-encoder (seed) 87% [encoder share 95% CI 3% to 24%]
+
+=== Fine-tuning lift (fine-tuned minus untrained floor) ===
+Encoder           Δ bench  Δ KB gd  Δ KB gdis  FT bench  UT bench
+DeBERTa-base        0.746    0.082      0.099     0.746     0.000
+DistilBERT-base     0.720    0.090      0.135     0.720     0.000
+BioMedBERT-base     0.586    0.110      0.134     0.740     0.154
+PubMedBERT-base     0.585    0.110      0.134     0.740     0.154
+BioLinkBERT-base    0.558    0.169      0.223     0.746     0.188
+BERT-base           0.252    0.124      0.242     0.723     0.472
+SciBERT             0.011    0.142      0.226     0.738     0.727
+BioBERT-base       -0.026    0.115      0.170     0.732     0.757
+RoBERTa-base       -0.028    0.149      0.191     0.735     0.763
+  Mean lift: benchmark 0.378, KB gene-drug 0.121, KB gene-disease 0.173
+
+=== Absolute KB levels (encoder means) ===
+  Random baseline MRR: 0.322
+  Distance ranker MRR: 0.489
+  Fine-tuned mean KB MRR gene-drug: 0.676
+  Fine-tuned mean KB MRR gene-disease: 0.625
+Seed-level benchmark–KB Spearman (gene-drug): -0.361 [-0.552, -0.172]
+Seed-level benchmark–KB Spearman (gene-disease): -0.458 [-0.656, -0.270]
+Easy/hard hard: distance MRR=0.369, encoders beating distance=8/9
+Easy/hard easy: distance MRR=0.692, encoders beating distance=9/9
+Pool-size vs MRR (gene-drug): mean Spearman across runs -0.398 (median -0.397)
+Pool-size vs MRR (gene-disease): mean Spearman across runs -0.467 (median -0.462)
+Figures -> /lus/lfs1aip2/projects/b5ac/project_1/figures/11_round1_analysis
+Report -> /lus/lfs1aip2/projects/b5ac/project_1/reports/11_round1_analysis/report.md
+README -> /lus/lfs1aip2/projects/b5ac/project_1/reports/11_round1_analysis/README.md
+
+=== Round 1 analysis complete ===
+End: Tue  9 Jun 21:53:49 UTC 2026

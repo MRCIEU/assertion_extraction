@@ -265,6 +265,157 @@ def variance_components_table(per_run: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame([variance_components_icc(per_run, m) for m in metrics if m in per_run.columns])
 
 
+def variance_components_bootstrap(
+    per_run: pd.DataFrame,
+    metric: str,
+    n_boot: int = BOOTSTRAP_N,
+    seed: int = 42,
+) -> dict[str, Any]:
+    """Cluster bootstrap CIs for encoder/seed variance shares (resample encoders)."""
+    rng = np.random.default_rng(seed)
+    encoders = per_run["model_id"].unique()
+    obs = variance_components_icc(per_run, metric)
+
+    enc_shares: list[float] = []
+    seed_shares: list[float] = []
+    for _ in range(n_boot):
+        chosen = rng.choice(encoders, size=len(encoders), replace=True)
+        parts = [per_run[per_run["model_id"] == e] for e in chosen]
+        bdf = pd.concat(parts, ignore_index=True)
+        if bdf["model_id"].nunique() < 2:
+            continue
+        vc = variance_components_icc(bdf, metric)
+        enc_shares.append(float(vc["encoder_variance_share"]))
+        seed_shares.append(float(vc["seed_variance_share"]))
+
+    out = {**obs}
+    if enc_shares:
+        lo, hi = np.percentile(enc_shares, [2.5, 97.5])
+        out["encoder_share_ci_lo"] = float(lo)
+        out["encoder_share_ci_hi"] = float(hi)
+        lo, hi = np.percentile(seed_shares, [2.5, 97.5])
+        out["seed_share_ci_lo"] = float(lo)
+        out["seed_share_ci_hi"] = float(hi)
+    else:
+        out["encoder_share_ci_lo"] = None
+        out["encoder_share_ci_hi"] = None
+        out["seed_share_ci_lo"] = None
+        out["seed_share_ci_hi"] = None
+    return out
+
+
+def variance_components_bootstrap_table(per_run: pd.DataFrame) -> pd.DataFrame:
+    metrics = ["benchmark_f1", "kb_mrr_gene_drug", "kb_mrr_gene_disease"]
+    return pd.DataFrame([variance_components_bootstrap(per_run, m) for m in metrics if m in per_run.columns])
+
+
+def finetuning_lift_table(encoder_df: pd.DataFrame, untrained_df: pd.DataFrame) -> pd.DataFrame:
+    """Per-encoder fine-tuned vs untrained-floor lift on benchmark and KB axes."""
+    rows: list[dict] = []
+    for _, enc in encoder_df.iterrows():
+        mid = enc["model_id"]
+        ut = untrained_df[untrained_df["base_model_id"] == mid]
+        if ut.empty:
+            continue
+        u = ut.iloc[0]
+        ft_bench = float(enc["benchmark_f1_mean"])
+        ut_bench = float(u["benchmark_f1"])
+        ft_gd = float(enc["kb_mrr_gene_drug_mean"])
+        ft_gdis = float(enc["kb_mrr_gene_disease_mean"])
+        ut_gd = float(u["kb_mrr_gene_drug"])
+        ut_gdis = float(u["kb_mrr_gene_disease"])
+        rows.append(
+            {
+                "model_id": mid,
+                "short_name": enc["short_name"],
+                "finetuned_benchmark_f1": ft_bench,
+                "untrained_benchmark_f1": ut_bench,
+                "lift_benchmark_f1": ft_bench - ut_bench,
+                "finetuned_kb_mrr_gene_drug": ft_gd,
+                "untrained_kb_mrr_gene_drug": ut_gd,
+                "lift_kb_mrr_gene_drug": ft_gd - ut_gd,
+                "finetuned_kb_mrr_gene_disease": ft_gdis,
+                "untrained_kb_mrr_gene_disease": ut_gdis,
+                "lift_kb_mrr_gene_disease": ft_gdis - ut_gdis,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def absolute_kb_levels(
+    encoder_df: pd.DataFrame,
+    easy_hard_df: pd.DataFrame,
+    *,
+    random_mrr_overall: float,
+    distance_mrr_overall: float,
+) -> pd.DataFrame:
+    """Absolute KB MRR for fine-tuned encoders vs trivial baselines."""
+    ft_gd = float(encoder_df["kb_mrr_gene_drug_mean"].mean())
+    ft_gdis = float(encoder_df["kb_mrr_gene_disease_mean"].mean())
+    ft_overall = float((ft_gd + ft_gdis) / 2)
+
+    hard = easy_hard_df[easy_hard_df["subset"] == "hard_cross_sentence"]
+    easy = easy_hard_df[easy_hard_df["subset"] == "easy_co_sentence"]
+    dr_hard = float(hard[hard["model_id"] == "distance_ranker"]["mrr"].iloc[0])
+    dr_easy = float(easy[easy["model_id"] == "distance_ranker"]["mrr"].iloc[0])
+
+    enc_hard = hard[hard["model_id"] != "distance_ranker"].groupby("model_id")["mrr"].mean()
+    enc_easy = easy[easy["model_id"] != "distance_ranker"].groupby("model_id")["mrr"].mean()
+
+    rows = [
+        {
+            "reference": "random_uniform",
+            "mrr_overall": random_mrr_overall,
+            "mrr_gene_drug": None,
+            "mrr_gene_disease": None,
+            "mrr_hard": None,
+            "mrr_easy": None,
+            "note": "Analytic expectation on frozen pool (step 03)",
+        },
+        {
+            "reference": "distance_ranker",
+            "mrr_overall": distance_mrr_overall,
+            "mrr_gene_drug": None,
+            "mrr_gene_disease": None,
+            "mrr_hard": dr_hard,
+            "mrr_easy": dr_easy,
+            "note": "Proximity-only ranker on frozen pool",
+        },
+        {
+            "reference": "finetuned_encoders_mean",
+            "mrr_overall": ft_overall,
+            "mrr_gene_drug": ft_gd,
+            "mrr_gene_disease": ft_gdis,
+            "mrr_hard": float(enc_hard.mean()) if len(enc_hard) else None,
+            "mrr_easy": float(enc_easy.mean()) if len(enc_easy) else None,
+            "note": "Mean of nine encoder seed-averaged means (clean runs)",
+        },
+        {
+            "reference": "finetuned_encoders_best",
+            "mrr_overall": None,
+            "mrr_gene_drug": float(encoder_df["kb_mrr_gene_drug_mean"].max()),
+            "mrr_gene_disease": float(encoder_df["kb_mrr_gene_disease_mean"].max()),
+            "mrr_hard": float(enc_hard.max()) if len(enc_hard) else None,
+            "mrr_easy": float(enc_easy.max()) if len(enc_easy) else None,
+            "note": "Best encoder mean per pair type / subset",
+        },
+    ]
+    return pd.DataFrame(rows)
+
+
+def load_pool_baselines() -> tuple[float, float]:
+    """Random and distance-ranker MRR from step-03 frozen pool baselines."""
+    from _paths import OUTPUT_ROOT
+
+    path = OUTPUT_ROOT / "outputs" / "03_candidate_pool" / "ranking_baselines.csv"
+    if not path.exists():
+        return float("nan"), float("nan")
+    df = pd.read_csv(path)
+    rand = float(df.loc[df["baseline"] == "random", "mrr"].iloc[0])
+    dist = float(df.loc[df["baseline"] == "distance_ranker", "mrr"].iloc[0])
+    return rand, dist
+
+
 def cluster_bootstrap_benchmark_kb(
     per_run: pd.DataFrame,
     kb_col: str,

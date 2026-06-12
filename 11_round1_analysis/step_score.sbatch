@@ -42,6 +42,6 @@ export HF_HOME="${HF_HOME:-${HOME}/.cache/huggingface}"
 export TOKENIZERS_PARALLELISM=false
 
 cd "${STEP_DIR}"
-python run.py --score-only ${STEP_ARGS:-}
+python run.py --score-only ${STEP_ARGS:-} ${FORCE_SCORE:+--force-score}
 echo "End: $(date -u)"
 echo "Scoring markers: $(find "${OUTPUT_ROOT}/data/11_round1_analysis/scores" -name scoring_complete.json 2>/dev/null | wc -l)/72"

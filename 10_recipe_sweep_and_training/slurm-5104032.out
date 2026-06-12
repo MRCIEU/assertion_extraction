@@ -38,3 +38,226 @@ You should probably TRAIN this model on a down-stream task to be able to use it 
 [train] epoch 2/10 train_loss=0.4325 val_loss=0.5659 val_f1=0.7497 patience=0/3
 [train] new best val_f1=0.7497 at epoch 2 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/roberta_base/seed_42/best
 [train] epoch 3/10 train_loss=0.3875 val_loss=0.6135 val_f1=0.7445 patience=0/3
+[train] epoch 4/10 train_loss=0.3523 val_loss=0.6671 val_f1=0.7265 patience=1/3
+[train] epoch 5/10 train_loss=0.3246 val_loss=0.7014 val_f1=0.7424 patience=2/3
+[train] early stop at epoch 5 (no val_f1 improvement for 3 epochs)
+[train] done roberta_base seed=42 best_val_f1=0.7497 best_epoch=2 epochs_run=5
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/roberta_base/seed_42/best on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7352 precision=0.6821 recall=0.7972 n_positives=8875
+  COMPLETE RoBERTa-base (roberta_base) seed=42: benchmark_f1=0.735 best_epoch=2 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/results/roberta_base/seed_42/matrix_complete.json
+  RUN START RoBERTa-base (roberta_base) seed=43 [2/8 in this job]
+[train] start roberta_base seed=43 lr=5e-06 warmup=none train=24000 val=25311 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/roberta_base/seed_43
+[train] device=cuda batch_size=16 max_epochs=10
+Some weights of RobertaForSequenceClassification were not initialized from the model checkpoint at roberta-base and are newly initialized: ['classifier.dense.bias', 'classifier.dense.weight', 'classifier.out_proj.bias', 'classifier.out_proj.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[train] epoch 1/10 train_loss=0.5851 val_loss=0.5623 val_f1=0.7267 patience=0/3
+[train] new best val_f1=0.7267 at epoch 1 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/roberta_base/seed_43/best
+[train] epoch 2/10 train_loss=0.4352 val_loss=0.6969 val_f1=0.6840 patience=0/3
+[train] epoch 3/10 train_loss=0.3834 val_loss=0.6404 val_f1=0.7579 patience=1/3
+[train] new best val_f1=0.7579 at epoch 3 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/roberta_base/seed_43/best
+[train] epoch 4/10 train_loss=0.3478 val_loss=0.6894 val_f1=0.7332 patience=0/3
+[train] epoch 5/10 train_loss=0.3207 val_loss=0.7252 val_f1=0.7475 patience=1/3
+[train] epoch 6/10 train_loss=0.2996 val_loss=0.7407 val_f1=0.7360 patience=2/3
+[train] early stop at epoch 6 (no val_f1 improvement for 3 epochs)
+[train] done roberta_base seed=43 best_val_f1=0.7579 best_epoch=3 epochs_run=6
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/roberta_base/seed_43/best on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7303 precision=0.6827 recall=0.7851 n_positives=8875
+  COMPLETE RoBERTa-base (roberta_base) seed=43: benchmark_f1=0.730 best_epoch=3 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/results/roberta_base/seed_43/matrix_complete.json
+  RUN START RoBERTa-base (roberta_base) seed=44 [3/8 in this job]
+[train] start roberta_base seed=44 lr=5e-06 warmup=none train=24000 val=25311 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/roberta_base/seed_44
+[train] device=cuda batch_size=16 max_epochs=10
+Some weights of RobertaForSequenceClassification were not initialized from the model checkpoint at roberta-base and are newly initialized: ['classifier.dense.bias', 'classifier.dense.weight', 'classifier.out_proj.bias', 'classifier.out_proj.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[train] epoch 1/10 train_loss=0.5987 val_loss=0.5784 val_f1=0.7135 patience=0/3
+[train] new best val_f1=0.7135 at epoch 1 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/roberta_base/seed_44/best
+[train] epoch 2/10 train_loss=0.4415 val_loss=0.5902 val_f1=0.7391 patience=0/3
+[train] new best val_f1=0.7391 at epoch 2 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/roberta_base/seed_44/best
+[train] epoch 3/10 train_loss=0.3880 val_loss=0.5860 val_f1=0.7353 patience=0/3
+[train] epoch 4/10 train_loss=0.3502 val_loss=0.7283 val_f1=0.7279 patience=1/3
+[train] epoch 5/10 train_loss=0.3247 val_loss=0.6995 val_f1=0.7351 patience=2/3
+[train] early stop at epoch 5 (no val_f1 improvement for 3 epochs)
+[train] done roberta_base seed=44 best_val_f1=0.7391 best_epoch=2 epochs_run=5
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/roberta_base/seed_44/best on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7239 precision=0.6978 recall=0.7521 n_positives=8875
+  COMPLETE RoBERTa-base (roberta_base) seed=44: benchmark_f1=0.724 best_epoch=2 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/results/roberta_base/seed_44/matrix_complete.json
+  RUN START RoBERTa-base (roberta_base) seed=45 [4/8 in this job]
+[train] start roberta_base seed=45 lr=5e-06 warmup=none train=24000 val=25311 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/roberta_base/seed_45
+[train] device=cuda batch_size=16 max_epochs=10
+Some weights of RobertaForSequenceClassification were not initialized from the model checkpoint at roberta-base and are newly initialized: ['classifier.dense.bias', 'classifier.dense.weight', 'classifier.out_proj.bias', 'classifier.out_proj.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[train] epoch 1/10 train_loss=0.6039 val_loss=0.5635 val_f1=0.7232 patience=0/3
+[train] new best val_f1=0.7232 at epoch 1 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/roberta_base/seed_45/best
+[train] epoch 2/10 train_loss=0.4334 val_loss=0.5795 val_f1=0.7491 patience=0/3
+[train] new best val_f1=0.7491 at epoch 2 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/roberta_base/seed_45/best
+[train] epoch 3/10 train_loss=0.3781 val_loss=0.6133 val_f1=0.7149 patience=0/3
+[train] epoch 4/10 train_loss=0.3463 val_loss=0.6962 val_f1=0.7027 patience=1/3
+[train] epoch 5/10 train_loss=0.3156 val_loss=0.7259 val_f1=0.7366 patience=2/3
+[train] early stop at epoch 5 (no val_f1 improvement for 3 epochs)
+[train] done roberta_base seed=45 best_val_f1=0.7491 best_epoch=2 epochs_run=5
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/roberta_base/seed_45/best on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7283 precision=0.6947 recall=0.7654 n_positives=8875
+  COMPLETE RoBERTa-base (roberta_base) seed=45: benchmark_f1=0.728 best_epoch=2 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/results/roberta_base/seed_45/matrix_complete.json
+  RUN START RoBERTa-base (roberta_base) seed=46 [5/8 in this job]
+[train] start roberta_base seed=46 lr=5e-06 warmup=none train=24000 val=25311 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/roberta_base/seed_46
+[train] device=cuda batch_size=16 max_epochs=10
+Some weights of RobertaForSequenceClassification were not initialized from the model checkpoint at roberta-base and are newly initialized: ['classifier.dense.bias', 'classifier.dense.weight', 'classifier.out_proj.bias', 'classifier.out_proj.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[train] epoch 1/10 train_loss=0.5838 val_loss=0.5745 val_f1=0.7568 patience=0/3
+[train] new best val_f1=0.7568 at epoch 1 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/roberta_base/seed_46/best
+[train] epoch 2/10 train_loss=0.4474 val_loss=0.6267 val_f1=0.7328 patience=0/3
+[train] epoch 3/10 train_loss=0.3898 val_loss=0.7080 val_f1=0.7162 patience=1/3
+[train] epoch 4/10 train_loss=0.3519 val_loss=0.6903 val_f1=0.7265 patience=2/3
+[train] early stop at epoch 4 (no val_f1 improvement for 3 epochs)
+[train] done roberta_base seed=46 best_val_f1=0.7568 best_epoch=1 epochs_run=4
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/roberta_base/seed_46/best on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7525 precision=0.6708 recall=0.8569 n_positives=8875
+  COMPLETE RoBERTa-base (roberta_base) seed=46: benchmark_f1=0.752 best_epoch=1 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/results/roberta_base/seed_46/matrix_complete.json
+  RUN START RoBERTa-base (roberta_base) seed=47 [6/8 in this job]
+[train] start roberta_base seed=47 lr=5e-06 warmup=none train=24000 val=25311 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/roberta_base/seed_47
+[train] device=cuda batch_size=16 max_epochs=10
+Some weights of RobertaForSequenceClassification were not initialized from the model checkpoint at roberta-base and are newly initialized: ['classifier.dense.bias', 'classifier.dense.weight', 'classifier.out_proj.bias', 'classifier.out_proj.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[train] epoch 1/10 train_loss=0.6088 val_loss=0.5684 val_f1=0.6899 patience=0/3
+[train] new best val_f1=0.6899 at epoch 1 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/roberta_base/seed_47/best
+[train] epoch 2/10 train_loss=0.4433 val_loss=0.5804 val_f1=0.7589 patience=0/3
+[train] new best val_f1=0.7589 at epoch 2 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/roberta_base/seed_47/best
+[train] epoch 3/10 train_loss=0.3906 val_loss=0.6641 val_f1=0.7254 patience=0/3
+[train] epoch 4/10 train_loss=0.3534 val_loss=0.7783 val_f1=0.7095 patience=1/3
+[train] epoch 5/10 train_loss=0.3274 val_loss=0.7107 val_f1=0.7195 patience=2/3
+[train] early stop at epoch 5 (no val_f1 improvement for 3 epochs)
+[train] done roberta_base seed=47 best_val_f1=0.7589 best_epoch=2 epochs_run=5
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/roberta_base/seed_47/best on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7352 precision=0.6795 recall=0.8009 n_positives=8875
+  COMPLETE RoBERTa-base (roberta_base) seed=47: benchmark_f1=0.735 best_epoch=2 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/results/roberta_base/seed_47/matrix_complete.json
+  RUN START RoBERTa-base (roberta_base) seed=48 [7/8 in this job]
+[train] start roberta_base seed=48 lr=5e-06 warmup=none train=24000 val=25311 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/roberta_base/seed_48
+[train] device=cuda batch_size=16 max_epochs=10
+Some weights of RobertaForSequenceClassification were not initialized from the model checkpoint at roberta-base and are newly initialized: ['classifier.dense.bias', 'classifier.dense.weight', 'classifier.out_proj.bias', 'classifier.out_proj.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[train] epoch 1/10 train_loss=0.5811 val_loss=0.5472 val_f1=0.7386 patience=0/3
+[train] new best val_f1=0.7386 at epoch 1 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/roberta_base/seed_48/best
+[train] epoch 2/10 train_loss=0.4380 val_loss=0.5848 val_f1=0.6921 patience=0/3
+[train] epoch 3/10 train_loss=0.3894 val_loss=0.6619 val_f1=0.7142 patience=1/3
+[train] epoch 4/10 train_loss=0.3546 val_loss=0.6882 val_f1=0.7494 patience=2/3
+[train] new best val_f1=0.7494 at epoch 4 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/roberta_base/seed_48/best
+[train] epoch 5/10 train_loss=0.3266 val_loss=0.7089 val_f1=0.7375 patience=0/3
+[train] epoch 6/10 train_loss=0.3044 val_loss=0.8390 val_f1=0.7058 patience=1/3
+[train] epoch 7/10 train_loss=0.2845 val_loss=0.8478 val_f1=0.7351 patience=2/3
+[train] early stop at epoch 7 (no val_f1 improvement for 3 epochs)
+[train] done roberta_base seed=48 best_val_f1=0.7494 best_epoch=4 epochs_run=7
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/roberta_base/seed_48/best on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7367 precision=0.7231 recall=0.7508 n_positives=8875
+  COMPLETE RoBERTa-base (roberta_base) seed=48: benchmark_f1=0.737 best_epoch=4 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/results/roberta_base/seed_48/matrix_complete.json
+  RUN START RoBERTa-base (roberta_base) seed=49 [8/8 in this job]
+[train] start roberta_base seed=49 lr=5e-06 warmup=none train=24000 val=25311 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/roberta_base/seed_49
+[train] device=cuda batch_size=16 max_epochs=10
+Some weights of RobertaForSequenceClassification were not initialized from the model checkpoint at roberta-base and are newly initialized: ['classifier.dense.bias', 'classifier.dense.weight', 'classifier.out_proj.bias', 'classifier.out_proj.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[train] epoch 1/10 train_loss=0.6071 val_loss=0.6261 val_f1=0.6860 patience=0/3
+[train] new best val_f1=0.6860 at epoch 1 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/roberta_base/seed_49/best
+[train] epoch 2/10 train_loss=0.4626 val_loss=0.6763 val_f1=0.7081 patience=0/3
+[train] new best val_f1=0.7081 at epoch 2 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/roberta_base/seed_49/best
+[train] epoch 3/10 train_loss=0.4062 val_loss=0.6051 val_f1=0.7562 patience=0/3
+[train] new best val_f1=0.7562 at epoch 3 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/roberta_base/seed_49/best
+[train] epoch 4/10 train_loss=0.3655 val_loss=0.7104 val_f1=0.7300 patience=0/3
+[train] epoch 5/10 train_loss=0.3328 val_loss=0.6850 val_f1=0.7302 patience=1/3
+[train] epoch 6/10 train_loss=0.3130 val_loss=0.7673 val_f1=0.7291 patience=2/3
+[train] early stop at epoch 6 (no val_f1 improvement for 3 epochs)
+[train] done roberta_base seed=49 best_val_f1=0.7562 best_epoch=3 epochs_run=6
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/roberta_base/seed_49/best on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7347 precision=0.6948 recall=0.7794 n_positives=8875
+  COMPLETE RoBERTa-base (roberta_base) seed=49: benchmark_f1=0.735 best_epoch=3 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/results/roberta_base/seed_49/matrix_complete.json
+
+=== Step-2 matrix training complete (this job) ===
+  Trained: 8, skipped (already done): 0, planned: 8
+
+=== Done ===
+End: Tue  9 Jun 15:42:21 UTC 2026

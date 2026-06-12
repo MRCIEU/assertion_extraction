@@ -37,3 +37,247 @@ You should probably TRAIN this model on a down-stream task to be able to use it 
 [train] new best val_f1=0.7718 at epoch 1 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/pubmedbert_base/seed_42/best
 [train] epoch 2/10 train_loss=0.3813 val_loss=0.5864 val_f1=0.7169 patience=0/3
 [train] epoch 3/10 train_loss=0.3102 val_loss=0.6634 val_f1=0.7400 patience=1/3
+[train] epoch 4/10 train_loss=0.2618 val_loss=0.6693 val_f1=0.7846 patience=2/3
+[train] new best val_f1=0.7846 at epoch 4 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/pubmedbert_base/seed_42/best
+[train] epoch 5/10 train_loss=0.2310 val_loss=0.6661 val_f1=0.7836 patience=0/3
+[train] epoch 6/10 train_loss=0.2074 val_loss=0.6808 val_f1=0.7873 patience=1/3
+[train] new best val_f1=0.7873 at epoch 6 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/pubmedbert_base/seed_42/best
+[train] epoch 7/10 train_loss=0.1898 val_loss=0.9283 val_f1=0.7643 patience=0/3
+[train] epoch 8/10 train_loss=0.1767 val_loss=0.7588 val_f1=0.7870 patience=1/3
+[train] epoch 9/10 train_loss=0.1662 val_loss=0.8833 val_f1=0.7725 patience=2/3
+[train] early stop at epoch 9 (no val_f1 improvement for 3 epochs)
+[train] done pubmedbert_base seed=42 best_val_f1=0.7873 best_epoch=6 epochs_run=9
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/pubmedbert_base/seed_42/best on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7386 precision=0.7118 recall=0.7674 n_positives=8875
+  COMPLETE PubMedBERT-base (pubmedbert_base) seed=42: benchmark_f1=0.739 best_epoch=6 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/results/pubmedbert_base/seed_42/matrix_complete.json
+  RUN START PubMedBERT-base (pubmedbert_base) seed=43 [2/8 in this job]
+[train] start pubmedbert_base seed=43 lr=5e-06 warmup=none train=24000 val=25311 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/pubmedbert_base/seed_43
+[train] device=cuda batch_size=16 max_epochs=10
+Some weights of BertForSequenceClassification were not initialized from the model checkpoint at microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract and are newly initialized: ['classifier.bias', 'classifier.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[train] epoch 1/10 train_loss=0.5386 val_loss=0.5078 val_f1=0.7682 patience=0/3
+[train] new best val_f1=0.7682 at epoch 1 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/pubmedbert_base/seed_43/best
+[train] epoch 2/10 train_loss=0.3820 val_loss=0.6236 val_f1=0.7326 patience=0/3
+[train] epoch 3/10 train_loss=0.3195 val_loss=0.6779 val_f1=0.7474 patience=1/3
+[train] epoch 4/10 train_loss=0.2725 val_loss=0.5850 val_f1=0.7839 patience=2/3
+[train] new best val_f1=0.7839 at epoch 4 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/pubmedbert_base/seed_43/best
+[train] epoch 5/10 train_loss=0.2365 val_loss=0.7393 val_f1=0.7566 patience=0/3
+[train] epoch 6/10 train_loss=0.2121 val_loss=0.7391 val_f1=0.7985 patience=1/3
+[train] new best val_f1=0.7985 at epoch 6 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/pubmedbert_base/seed_43/best
+[train] epoch 7/10 train_loss=0.1918 val_loss=0.8095 val_f1=0.7797 patience=0/3
+[train] epoch 8/10 train_loss=0.1817 val_loss=0.8422 val_f1=0.7828 patience=1/3
+[train] epoch 9/10 train_loss=0.1683 val_loss=0.8227 val_f1=0.7912 patience=2/3
+[train] early stop at epoch 9 (no val_f1 improvement for 3 epochs)
+[train] done pubmedbert_base seed=43 best_val_f1=0.7985 best_epoch=6 epochs_run=9
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/pubmedbert_base/seed_43/best on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7481 precision=0.7065 recall=0.7948 n_positives=8875
+  COMPLETE PubMedBERT-base (pubmedbert_base) seed=43: benchmark_f1=0.748 best_epoch=6 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/results/pubmedbert_base/seed_43/matrix_complete.json
+  RUN START PubMedBERT-base (pubmedbert_base) seed=44 [3/8 in this job]
+[train] start pubmedbert_base seed=44 lr=5e-06 warmup=none train=24000 val=25311 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/pubmedbert_base/seed_44
+[train] device=cuda batch_size=16 max_epochs=10
+Some weights of BertForSequenceClassification were not initialized from the model checkpoint at microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract and are newly initialized: ['classifier.bias', 'classifier.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[train] epoch 1/10 train_loss=0.5171 val_loss=0.5122 val_f1=0.7551 patience=0/3
+[train] new best val_f1=0.7551 at epoch 1 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/pubmedbert_base/seed_44/best
+[train] epoch 2/10 train_loss=0.3715 val_loss=0.5138 val_f1=0.7686 patience=0/3
+[train] new best val_f1=0.7686 at epoch 2 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/pubmedbert_base/seed_44/best
+[train] epoch 3/10 train_loss=0.3061 val_loss=0.5471 val_f1=0.7782 patience=0/3
+[train] new best val_f1=0.7782 at epoch 3 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/pubmedbert_base/seed_44/best
+[train] epoch 4/10 train_loss=0.2625 val_loss=0.7174 val_f1=0.7486 patience=0/3
+[train] epoch 5/10 train_loss=0.2284 val_loss=0.7045 val_f1=0.7607 patience=1/3
+[train] epoch 6/10 train_loss=0.2074 val_loss=0.6705 val_f1=0.7909 patience=2/3
+[train] new best val_f1=0.7909 at epoch 6 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/pubmedbert_base/seed_44/best
+[train] epoch 7/10 train_loss=0.1873 val_loss=0.8400 val_f1=0.7357 patience=0/3
+[train] epoch 8/10 train_loss=0.1753 val_loss=0.8545 val_f1=0.7627 patience=1/3
+[train] epoch 9/10 train_loss=0.1650 val_loss=0.8611 val_f1=0.7785 patience=2/3
+[train] early stop at epoch 9 (no val_f1 improvement for 3 epochs)
+[train] done pubmedbert_base seed=44 best_val_f1=0.7909 best_epoch=6 epochs_run=9
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/pubmedbert_base/seed_44/best on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7533 precision=0.7102 recall=0.8019 n_positives=8875
+  COMPLETE PubMedBERT-base (pubmedbert_base) seed=44: benchmark_f1=0.753 best_epoch=6 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/results/pubmedbert_base/seed_44/matrix_complete.json
+  RUN START PubMedBERT-base (pubmedbert_base) seed=45 [4/8 in this job]
+[train] start pubmedbert_base seed=45 lr=5e-06 warmup=none train=24000 val=25311 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/pubmedbert_base/seed_45
+[train] device=cuda batch_size=16 max_epochs=10
+Some weights of BertForSequenceClassification were not initialized from the model checkpoint at microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract and are newly initialized: ['classifier.bias', 'classifier.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[train] epoch 1/10 train_loss=0.5334 val_loss=0.5357 val_f1=0.7140 patience=0/3
+[train] new best val_f1=0.7140 at epoch 1 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/pubmedbert_base/seed_45/best
+[train] epoch 2/10 train_loss=0.3776 val_loss=0.5329 val_f1=0.7694 patience=0/3
+[train] new best val_f1=0.7694 at epoch 2 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/pubmedbert_base/seed_45/best
+[train] epoch 3/10 train_loss=0.3093 val_loss=0.6039 val_f1=0.7560 patience=0/3
+[train] epoch 4/10 train_loss=0.2631 val_loss=0.6952 val_f1=0.7620 patience=1/3
+[train] epoch 5/10 train_loss=0.2318 val_loss=0.6353 val_f1=0.7839 patience=2/3
+[train] new best val_f1=0.7839 at epoch 5 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/pubmedbert_base/seed_45/best
+[train] epoch 6/10 train_loss=0.2062 val_loss=0.8080 val_f1=0.7491 patience=0/3
+[train] epoch 7/10 train_loss=0.1899 val_loss=0.8033 val_f1=0.7781 patience=1/3
+[train] epoch 8/10 train_loss=0.1756 val_loss=0.8022 val_f1=0.7751 patience=2/3
+[train] early stop at epoch 8 (no val_f1 improvement for 3 epochs)
+[train] done pubmedbert_base seed=45 best_val_f1=0.7839 best_epoch=5 epochs_run=8
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/pubmedbert_base/seed_45/best on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7503 precision=0.7136 recall=0.7910 n_positives=8875
+  COMPLETE PubMedBERT-base (pubmedbert_base) seed=45: benchmark_f1=0.750 best_epoch=5 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/results/pubmedbert_base/seed_45/matrix_complete.json
+  RUN START PubMedBERT-base (pubmedbert_base) seed=46 [5/8 in this job]
+[train] start pubmedbert_base seed=46 lr=5e-06 warmup=none train=24000 val=25311 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/pubmedbert_base/seed_46
+[train] device=cuda batch_size=16 max_epochs=10
+Some weights of BertForSequenceClassification were not initialized from the model checkpoint at microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract and are newly initialized: ['classifier.bias', 'classifier.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[train] epoch 1/10 train_loss=0.5545 val_loss=0.4965 val_f1=0.7686 patience=0/3
+[train] new best val_f1=0.7686 at epoch 1 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/pubmedbert_base/seed_46/best
+[train] epoch 2/10 train_loss=0.3829 val_loss=0.5031 val_f1=0.7824 patience=0/3
+[train] new best val_f1=0.7824 at epoch 2 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/pubmedbert_base/seed_46/best
+[train] epoch 3/10 train_loss=0.3101 val_loss=0.6209 val_f1=0.7701 patience=0/3
+[train] epoch 4/10 train_loss=0.2622 val_loss=0.6604 val_f1=0.7731 patience=1/3
+[train] epoch 5/10 train_loss=0.2311 val_loss=0.6481 val_f1=0.7770 patience=2/3
+[train] early stop at epoch 5 (no val_f1 improvement for 3 epochs)
+[train] done pubmedbert_base seed=46 best_val_f1=0.7824 best_epoch=2 epochs_run=5
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/pubmedbert_base/seed_46/best on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7440 precision=0.6948 recall=0.8007 n_positives=8875
+  COMPLETE PubMedBERT-base (pubmedbert_base) seed=46: benchmark_f1=0.744 best_epoch=2 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/results/pubmedbert_base/seed_46/matrix_complete.json
+  RUN START PubMedBERT-base (pubmedbert_base) seed=47 [6/8 in this job]
+[train] start pubmedbert_base seed=47 lr=5e-06 warmup=none train=24000 val=25311 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/pubmedbert_base/seed_47
+[train] device=cuda batch_size=16 max_epochs=10
+Some weights of BertForSequenceClassification were not initialized from the model checkpoint at microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract and are newly initialized: ['classifier.bias', 'classifier.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[train] epoch 1/10 train_loss=0.5342 val_loss=0.5085 val_f1=0.7611 patience=0/3
+[train] new best val_f1=0.7611 at epoch 1 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/pubmedbert_base/seed_47/best
+[train] epoch 2/10 train_loss=0.3781 val_loss=0.6048 val_f1=0.7158 patience=0/3
+[train] epoch 3/10 train_loss=0.3090 val_loss=0.5877 val_f1=0.7596 patience=1/3
+[train] epoch 4/10 train_loss=0.2589 val_loss=0.6418 val_f1=0.7731 patience=2/3
+[train] new best val_f1=0.7731 at epoch 4 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/pubmedbert_base/seed_47/best
+[train] epoch 5/10 train_loss=0.2310 val_loss=0.6941 val_f1=0.7506 patience=0/3
+[train] epoch 6/10 train_loss=0.2038 val_loss=0.7960 val_f1=0.7499 patience=1/3
+[train] epoch 7/10 train_loss=0.1896 val_loss=0.7736 val_f1=0.7433 patience=2/3
+[train] early stop at epoch 7 (no val_f1 improvement for 3 epochs)
+[train] done pubmedbert_base seed=47 best_val_f1=0.7731 best_epoch=4 epochs_run=7
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/pubmedbert_base/seed_47/best on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7233 precision=0.7161 recall=0.7307 n_positives=8875
+  COMPLETE PubMedBERT-base (pubmedbert_base) seed=47: benchmark_f1=0.723 best_epoch=4 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/results/pubmedbert_base/seed_47/matrix_complete.json
+  RUN START PubMedBERT-base (pubmedbert_base) seed=48 [7/8 in this job]
+[train] start pubmedbert_base seed=48 lr=5e-06 warmup=none train=24000 val=25311 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/pubmedbert_base/seed_48
+[train] device=cuda batch_size=16 max_epochs=10
+Some weights of BertForSequenceClassification were not initialized from the model checkpoint at microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract and are newly initialized: ['classifier.bias', 'classifier.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[train] epoch 1/10 train_loss=0.5357 val_loss=0.5392 val_f1=0.7411 patience=0/3
+[train] new best val_f1=0.7411 at epoch 1 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/pubmedbert_base/seed_48/best
+[train] epoch 2/10 train_loss=0.3722 val_loss=0.5890 val_f1=0.7208 patience=0/3
+[train] epoch 3/10 train_loss=0.3043 val_loss=0.5868 val_f1=0.7557 patience=1/3
+[train] new best val_f1=0.7557 at epoch 3 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/pubmedbert_base/seed_48/best
+[train] epoch 4/10 train_loss=0.2593 val_loss=0.6202 val_f1=0.7801 patience=0/3
+[train] new best val_f1=0.7801 at epoch 4 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/pubmedbert_base/seed_48/best
+[train] epoch 5/10 train_loss=0.2242 val_loss=0.8048 val_f1=0.7363 patience=0/3
+[train] epoch 6/10 train_loss=0.2030 val_loss=0.7907 val_f1=0.7310 patience=1/3
+[train] epoch 7/10 train_loss=0.1859 val_loss=0.7673 val_f1=0.7627 patience=2/3
+[train] early stop at epoch 7 (no val_f1 improvement for 3 epochs)
+[train] done pubmedbert_base seed=48 best_val_f1=0.7801 best_epoch=4 epochs_run=7
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/pubmedbert_base/seed_48/best on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7409 precision=0.7292 recall=0.7530 n_positives=8875
+  COMPLETE PubMedBERT-base (pubmedbert_base) seed=48: benchmark_f1=0.741 best_epoch=4 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/results/pubmedbert_base/seed_48/matrix_complete.json
+  RUN START PubMedBERT-base (pubmedbert_base) seed=49 [8/8 in this job]
+[train] start pubmedbert_base seed=49 lr=5e-06 warmup=none train=24000 val=25311 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/pubmedbert_base/seed_49
+[train] device=cuda batch_size=16 max_epochs=10
+Some weights of BertForSequenceClassification were not initialized from the model checkpoint at microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract and are newly initialized: ['classifier.bias', 'classifier.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[train] epoch 1/10 train_loss=0.5252 val_loss=0.4935 val_f1=0.7580 patience=0/3
+[train] new best val_f1=0.7580 at epoch 1 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/pubmedbert_base/seed_49/best
+[train] epoch 2/10 train_loss=0.3679 val_loss=0.5206 val_f1=0.7523 patience=0/3
+[train] epoch 3/10 train_loss=0.3028 val_loss=0.6223 val_f1=0.7398 patience=1/3
+[train] epoch 4/10 train_loss=0.2553 val_loss=0.7364 val_f1=0.7399 patience=2/3
+[train] early stop at epoch 4 (no val_f1 improvement for 3 epochs)
+[train] done pubmedbert_base seed=49 best_val_f1=0.7580 best_epoch=1 epochs_run=4
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/pubmedbert_base/seed_49/best on 14395 BioRED test examples
+[benchmark] batch 1/450 examples=32/14395
+[benchmark] batch 45/450 examples=1440/14395
+[benchmark] batch 90/450 examples=2880/14395
+[benchmark] batch 135/450 examples=4320/14395
+[benchmark] batch 180/450 examples=5760/14395
+[benchmark] batch 225/450 examples=7200/14395
+[benchmark] batch 270/450 examples=8640/14395
+[benchmark] batch 315/450 examples=10080/14395
+[benchmark] batch 360/450 examples=11520/14395
+[benchmark] batch 405/450 examples=12960/14395
+[benchmark] batch 450/450 examples=14395/14395
+[benchmark] done f1=0.7199 precision=0.7018 recall=0.7390 n_positives=8875
+  COMPLETE PubMedBERT-base (pubmedbert_base) seed=49: benchmark_f1=0.720 best_epoch=1 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/results/pubmedbert_base/seed_49/matrix_complete.json
+
+=== Step-2 matrix training complete (this job) ===
+  Trained: 8, skipped (already done): 0, planned: 8
+
+=== Done ===
+End: Tue  9 Jun 16:28:20 UTC 2026

@@ -37,8 +37,16 @@ export OUTPUT_ROOT
 export PYTHONUNBUFFERED=1
 export HF_HOME="${HF_HOME:-${HOME}/.cache/huggingface}"
 export TOKENIZERS_PARALLELISM=false
+# SLURM_TMPDIR often points at /local/user/<uid> which may not exist on the node.
+# Use a Lustre-backed job temp dir so torch import (distributed.nn jit) succeeds.
+export TMPDIR="${RUNS}/tmp/${JOB_TAG}"
+mkdir -p "${TMPDIR}"
+export TEMP="${TMPDIR}"
+export TMP="${TMPDIR}"
+echo "TMPDIR=${TMPDIR}"
 
 cd "${STEP_DIR}"
-python run.py --score-epochs-only ${STEP_ARGS:-}
+python run.py --score-epochs-only ${STEP_ARGS:-} ${FORCE_RESCORE:+--force-rescore}
 echo "End: $(date -u)"
-python -c "import json; from pathlib import Path; p=Path('${OUTPUT_ROOT}/data/20_round2_diagnostic/epoch_scoring_complete.json'); print(json.loads(p.read_text()) if p.exists() else 'no marker yet')"
+python -c "import json; from pathlib import Path; p=Path('${OUTPUT_ROOT}/data/20_round2_diagnostic/epoch_scoring_complete.json'); print(json.loads(p.read_text()) if p.exists() else 'no marker')"
+echo "Epoch score files: $(find '${OUTPUT_ROOT}/data/20_round2_diagnostic/scores' -name 'epoch_*.json' 2>/dev/null | wc -l)"

@@ -1,16 +1,11 @@
 #!/usr/bin/env python3
-"""Round 2 diagnostic: training dynamics and power (inference only)."""
+"""Round 2 training-dynamics diagnostic (inference only, 5e-6 per-epoch checkpoints)."""
 
 from __future__ import annotations
 
 import argparse
-import json
 import sys
-import time
-from datetime import datetime, timezone
 from pathlib import Path
-
-import pandas as pd
 
 REPO = Path(__file__).resolve().parents[1]
 if str(REPO) not in sys.path:
@@ -18,142 +13,162 @@ if str(REPO) not in sys.path:
 
 from importlib import import_module
 
-
-def _write_scoring_complete(cfg, expected: int, scored: int) -> None:
-    payload = {
-        "expected_epoch_checkpoints": expected,
-        "scored_epochs": scored,
-        "completed_at": datetime.now(timezone.utc).isoformat(),
-        "complete": scored >= expected,
-    }
-    cfg.EPOCH_SCORE_COMPLETE.parent.mkdir(parents=True, exist_ok=True)
-    cfg.EPOCH_SCORE_COMPLETE.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+import pandas as pd
 
 
-def run_score_epochs(*, force: bool = False) -> None:
-    cfg = import_module("20_round2_diagnostic.config")
-    ta = import_module("20_round2_diagnostic.two_axis")
-    expected = ta.count_epoch_checkpoints_to_score()
-    print(f"=== Epoch scoring (GPU): {expected} checkpoints across focus encoders ===")
-    ta.trajectory_from_training_logs(rescore_epochs=True)
-    scored = ta.count_scored_epochs()
-    _write_scoring_complete(cfg, expected, scored)
-    print(f"Scored epochs on disk: {scored}/{expected}")
+def run_score_epochs(*, force: bool = False, model_ids: list[str] | None = None) -> None:
+    es = import_module("20_round2_diagnostic.epoch_scoring")
+    es.score_all_epochs(model_ids=model_ids, force=force)
 
 
-def run_analysis(*, allow_partial: bool = False) -> None:
+def run_supplement_cross(*, force: bool = False, model_ids: list[str] | None = None) -> None:
+    scm = import_module("20_round2_diagnostic.supplement_cross_metrics")
+    scm.supplement_all_cross_metrics(model_ids=model_ids, force=force)
+
+
+def run_stratum_epoch1_cache(*, model_ids: list[str] | None = None) -> None:
+    from .config import PAIRED_CHANGES_CSV
+    from .mundane_explanations import build_epoch1_stratum_cache
+
+    paired = pd.read_csv(PAIRED_CHANGES_CSV)
+    build_epoch1_stratum_cache(paired)
+
+
+def run_analysis(*, allow_partial: bool = False, skip_stratum_inference: bool = False) -> None:
     cfg = import_module("20_round2_diagnostic.config")
     ci = import_module("20_round2_diagnostic.checkpoint_inventory")
-    tc = import_module("20_round2_diagnostic.training_curves")
-    ta = import_module("20_round2_diagnostic.two_axis")
-    pc = import_module("20_round2_diagnostic.power_check")
+    es = import_module("20_round2_diagnostic.epoch_scoring")
+    adj = import_module("20_round2_diagnostic.adjudication")
     fig = import_module("20_round2_diagnostic.figures")
     rep = import_module("20_round2_diagnostic.report")
 
-    expected = ta.count_epoch_checkpoints_to_score()
-    scored = ta.count_scored_epochs()
+    expected = es.count_expected_epochs()
+    scored = es.count_scored_epochs()
     if not allow_partial and scored < expected:
         raise SystemExit(
             f"Epoch scoring incomplete: {scored}/{expected}. "
             "Run --score-epochs-only first or use --allow-partial-analysis."
         )
 
-    t_all = time.perf_counter()
-    print("=== Round 2 diagnostic analysis (CPU) ===")
-
     inv, inv_case = ci.build_checkpoint_inventory()
-    inv.to_csv(cfg.OUTPUT_DIR / "checkpoint_inventory.csv", index=False)
+    inv.to_csv(cfg.INVENTORY_CSV, index=False)
     ci.print_inventory_summary(inv, inv_case)
 
-    curves = tc.load_epoch_curves()
-    mean_curves = tc.encoder_mean_curves(curves)
-    tsum = tc.training_curve_summary(curves)
-    tsum.to_csv(cfg.OUTPUT_DIR / "training_curve_summary.csv", index=False)
-    shape = tc.describe_curve_shape(tsum)
-    print(f"\n=== Training-curve shape ===\n{shape}")
+    results = adj.run_adjudication_analysis()
 
-    traj = ta.build_two_axis_trajectory(rescore_epochs=False)
-    traj.to_csv(cfg.OUTPUT_DIR / "two_axis_trajectory.csv", index=False)
-    timing = ta.summarize_timing(traj)
-    print(f"\n=== Two-axis trajectory ===\n{timing['narrative']}")
+    mundane_mod = import_module("20_round2_diagnostic.mundane_explanations")
+    mundane = mundane_mod.run_mundane_explanations(
+        results["trajectory"],
+        results["paired"],
+        skip_stratum_inference=skip_stratum_inference,
+    )
 
-    main_traj = traj[traj["source"] == "r11_best"] if not traj.empty else traj
-    pw = pc.build_power_check(main_traj, traj)
-    pw.to_csv(cfg.OUTPUT_DIR / "power_check.csv", index=False)
-    print("\n=== Power check ===")
-    for _, r in pw.iterrows():
-        print(
-            f"  {r.get('short_name')}: effect={r.get('estimated_training_effect_hard', float('nan')):.3f}, "
-            f"hard SD={r.get('kb_mrr_hard_sd_at_val_f1_ckpt', float('nan')):.3f}, "
-            f"R1 pool SD={r.get('r1_mean_within_encoder_sd_gene_drug', float('nan')):.3f}"
-        )
+    enc_mod = import_module("20_round2_diagnostic.encoder_correlation")
+    gd_enc = results.get("gene_disease", {}).get("encoder")
+    encoder_corr = enc_mod.run_encoder_correlation(
+        gd_enc if gd_enc is not None else pd.DataFrame(),
+        results["trajectory"],
+    )
 
-    fig.figure1_training_curves(mean_curves)
-    fig.figure2_two_axis_timing(traj)
-    fig.figure3_power(pw)
+    qual_mod = import_module("20_round2_diagnostic.qualitative_errors")
+    qual = qual_mod.run_qualitative_errors()
+
+    gd = results.get("gene_disease", {})
+    fig.generate_all_figures(
+        results["trajectory"],
+        results["paired"],
+        results["hard_easy"],
+        results["pair_type"],
+        results["robustness"],
+        gd.get("pair_subset"),
+        mundane.get("timing_summary"),
+        mundane.get("stratum_summary"),
+        encoder_corr.get("table"),
+        qual.get("patterns"),
+        qual.get("summary"),
+    )
 
     rep.write_report(
         inventory_case=inv_case,
-        curve_shape=shape,
-        timing_notes=timing["narrative"],
-        training_summary=tsum,
-        power_df=pw,
-        two_axis=traj,
+        inventory=inv,
+        verdict=results["verdict"],
+        gene_disease_verdict=gd.get("verdict", {}),
+        seed_dist=results["seed_dist"],
+        hard_easy=results["hard_easy"],
+        pair_type=results["pair_type"],
+        robustness=results["robustness"],
+        paired=results["paired"],
+        gd_subset=gd.get("subset"),
+        gd_robustness=gd.get("robustness"),
+        gd_encoder=gd.get("encoder"),
+        gd_seed=gd.get("seed_dist"),
+        mundane=mundane,
+        encoder_corr=encoder_corr,
     )
-    print(f"\n=== Round 2 diagnostic complete ({time.perf_counter() - t_all:.1f}s) ===")
-
-
-def run_three_point_analysis() -> None:
-    """CPU post-hoc three-point paired timing (reads epoch_kb_trajectory.csv only)."""
-    tp = import_module("20_round2_diagnostic.three_point_timing")
-    fig = import_module("20_round2_diagnostic.figures")
-    rep = import_module("20_round2_diagnostic.report")
-
-    three_pt, summary, overall = tp.run_three_point_timing()
-    fig.figure4_three_point_paired(three_pt, summary)
-    rep.append_three_point_section(three_pt=three_pt, summary=summary, overall=overall)
+    rep.write_qualitative_report(qual)
+    rep.write_readme(
+        verdict=results["verdict"],
+        gene_disease_verdict=gd.get("verdict", {}),
+        seed_dist=results["seed_dist"],
+        inventory=inv,
+        gd_subset=gd.get("subset"),
+        qual_summary=qual.get("summary"),
+        mundane=mundane,
+    )
+    print("\n=== Round 2 diagnostic analysis complete ===")
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Round 2 diagnostic (inference only)")
+    parser = argparse.ArgumentParser(description="Round 2 training-dynamics diagnostic")
     parser.add_argument(
         "--score-epochs-only",
         action="store_true",
-        help="Score benchmark F1 and KB at every saved epoch for focus encoders (GPU)",
+        help="Score benchmark + KB at every saved epoch checkpoint (GPU)",
+    )
+    parser.add_argument("--analyze-only", action="store_true", help="CPU analysis from stored scores")
+    parser.add_argument(
+        "--supplement-cross-metrics-only",
+        action="store_true",
+        help="GPU: add pair×subset cross metrics to existing epoch score JSON",
+    )
+    parser.add_argument("--force-rescore", action="store_true", help="Overwrite existing epoch score JSON")
+    parser.add_argument(
+        "--model-id",
+        action="append",
+        default=None,
+        help="Limit scoring to encoder(s)",
     )
     parser.add_argument(
-        "--analyze-only",
+        "--stratum-epoch1-only",
         action="store_true",
-        help="Run curves, power check, figures, report from stored epoch scores",
-    )
-    parser.add_argument("--force-rescore", action="store_true", help="Overwrite cached epoch scores")
-    parser.add_argument(
-        "--allow-partial-analysis",
-        action="store_true",
-        help="Run analysis even if epoch scoring is incomplete",
+        help="GPU/CPU: build epoch-1 stratum score cache for pool-size analysis",
     )
     parser.add_argument(
-        "--three-point-timing",
+        "--skip-stratum-inference",
         action="store_true",
-        help="Three-point paired timing from saved epoch_kb_trajectory.csv (CPU post-hoc)",
+        help="Skip epoch-1 inference during analyze (use existing stratum cache)",
     )
-    parser.add_argument("--dry-trace-three-point", action="store_true", help="Dry trace only")
     args = parser.parse_args()
 
-    if args.dry_trace_three_point:
-        ok = import_module("20_round2_diagnostic.three_point_timing").dry_trace()
-        raise SystemExit(0 if ok else 1)
-
     if args.score_epochs_only:
-        run_score_epochs(force=args.force_rescore)
+        run_score_epochs(force=args.force_rescore, model_ids=args.model_id)
         return
-    if args.three_point_timing:
-        run_three_point_analysis()
+    if args.supplement_cross_metrics_only:
+        run_supplement_cross(force=args.force_rescore, model_ids=args.model_id)
+        return
+    if args.stratum_epoch1_only:
+        run_stratum_epoch1_cache(model_ids=args.model_id)
         return
     if args.analyze_only:
-        run_analysis(allow_partial=args.allow_partial_analysis)
+        run_analysis(
+            allow_partial=args.allow_partial_analysis,
+            skip_stratum_inference=args.skip_stratum_inference,
+        )
         return
-    raise SystemExit("Use --score-epochs-only, --analyze-only, --three-point-timing, or --dry-trace-three-point")
+    raise SystemExit(
+        "Use --score-epochs-only, --supplement-cross-metrics-only, "
+        "--stratum-epoch1-only, or --analyze-only"
+    )
 
 
 if __name__ == "__main__":

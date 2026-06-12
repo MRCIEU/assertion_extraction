@@ -77,6 +77,47 @@ def plot_pubtator_recall_gap(summary: dict) -> None:
     plt.close(fig)
 
 
+def plot_entity_type_alignment(correspondence: pd.DataFrame, pool_stats: dict) -> None:
+    """Entity-type alignment: candidates affected by role mapping status."""
+    _apply_ieee_style()
+    primary = correspondence[correspondence["civic_role"].isin(["gene", "drug", "disease"])].copy()
+    roles = primary["civic_role"].tolist()
+    clean_counts: list[float] = []
+    gap_counts: list[float] = []
+    for role in roles:
+        n = float(primary.loc[primary["civic_role"] == role, "n_pool_candidates_on_role"].iloc[0])
+        status = primary.loc[primary["civic_role"] == role, "mapping_status"].iloc[0]
+        if status == "clean":
+            clean_counts.append(n)
+            gap_counts.append(0.0)
+        else:
+            clean_counts.append(0.0)
+            gap_counts.append(n)
+
+    x = np.arange(len(roles))
+    fig, ax = plt.subplots(figsize=(8.0, 5.0))
+    ax.bar(x, gap_counts, 0.55, label="Granularity-gap mapping (pool candidates)", color="#E69F00")
+    ax.bar(x, clean_counts, 0.55, label="Clean one-to-one mapping", color="#0072B2")
+    ax.set_xticks(x)
+    ax.set_xticklabels([r.capitalize() for r in roles], fontsize=12)
+    ax.set_ylabel("Primary-scope pool candidates (n)", fontsize=12)
+    ax.set_title(
+        "Entity-type alignment: primary candidates by CIViC role\n"
+        "(PubTator Chemical→drug and training-corpus breadth are granularity gaps)",
+        fontsize=13,
+    )
+    for i, role in enumerate(roles):
+        n = int(primary.loc[primary["civic_role"] == role, "n_pool_candidates_on_role"].iloc[0])
+        ax.text(i, n + 80, str(n), ha="center", fontsize=10)
+    ax.legend(loc="upper right", frameon=False, fontsize=10)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    fig.tight_layout()
+    out = FIGURE_DIR / "03_candidate_pool_entity_type_alignment.png"
+    fig.savefig(out, dpi=300, bbox_inches="tight", facecolor="white", edgecolor="none", pad_inches=0.1)
+    plt.close(fig)
+
+
 def plot_coverage(type_summary: pd.DataFrame) -> None:
     fig, ax = plt.subplots(figsize=(6, 4))
     order = ["gene", "drug", "disease", "variant"]

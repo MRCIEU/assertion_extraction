@@ -1,4 +1,4 @@
-"""Diagnostic figures (300 dpi, IEU-style)."""
+"""Publication figures for training-dynamics adjudication."""
 
 from __future__ import annotations
 
@@ -9,7 +9,8 @@ import pandas as pd
 
 from shared.models import MODELS
 
-from .config import DPI, FIGURE_DIR, FOCUS_MODEL_IDS, MODEL_BY_ID, PALETTE
+from .config import DPI, FIGURE_DIR, MODEL_BY_ID, PALETTE
+from .adjudication import WELL_DEFS, WELL_DEF_LABELS, WELL_DEF_VAL_F1
 
 
 def _apply_style() -> None:
@@ -39,189 +40,435 @@ def _save(fig: plt.Figure, name: str) -> None:
     plt.close(fig)
 
 
-def figure1_training_curves(mean_curves: pd.DataFrame) -> None:
+def figure1_per_seed_trajectories(traj: pd.DataFrame) -> None:
+    """Benchmark F1 and KB hard MRR across epochs; faint per-seed + mean."""
     _apply_style()
     encoders = [m.model_id for m in MODELS]
-    n = len(encoders)
     ncol = 3
-    nrow = int(np.ceil(n / ncol))
-    fig, axes = plt.subplots(nrow, ncol, figsize=(11, 3.2 * nrow), sharex=True)
+    nrow = int(np.ceil(len(encoders) / ncol))
+    fig, axes = plt.subplots(nrow, ncol, figsize=(12, 3.4 * nrow))
     axes = np.atleast_1d(axes).flatten()
 
     for ax, mid in zip(axes, encoders):
-        sub = mean_curves[mean_curves["model_id"] == mid]
+        sub = traj[traj["model_id"] == mid].sort_values(["seed", "epoch"])
         if sub.empty:
             ax.set_visible(False)
             continue
-        ax.plot(sub["epoch"], sub["val_f1"], "o-", color=PALETTE["neutral"], label="val F1", lw=1.5)
         ax2 = ax.twinx()
-        ax2.plot(sub["epoch"], sub["val_loss"], "s--", color=PALETTE["accent"], label="val loss", lw=1.2)
         ax2.spines["top"].set_visible(False)
+
+        for seed, g in sub.groupby("seed"):
+            ax.plot(
+                g["epoch"],
+                g["benchmark_f1"],
+                color=PALETTE["neutral_light"],
+                alpha=0.35,
+                lw=0.9,
+            )
+            ax2.plot(
+                g["epoch"],
+                g["kb_mrr_hard"],
+                color=PALETTE["accent"],
+                alpha=0.25,
+                lw=0.9,
+            )
+
+        mean_g = sub.groupby("epoch").agg(
+            benchmark_f1=("benchmark_f1", "mean"),
+            kb_mrr_hard=("kb_mrr_hard", "mean"),
+        )
+        ax.plot(
+            mean_g.index,
+            mean_g["benchmark_f1"],
+            "o-",
+            color=PALETTE["neutral"],
+            lw=2.2,
+            ms=4,
+            label="Benchmark F1 (mean)",
+        )
+        ax2.plot(
+            mean_g.index,
+            mean_g["kb_mrr_hard"],
+            "s-",
+            color=PALETTE["accent"],
+            lw=2.2,
+            ms=4,
+            label="KB hard MRR (mean)",
+        )
         name = MODEL_BY_ID[mid].short_name.replace("-base", "")
         ax.set_title(name, fontsize=10)
-        ax.set_xlabel("Epoch")
-        ax.set_ylabel("Val F1")
-        ax2.set_ylabel("Val loss")
+        ax.set_xlabel("Training epoch")
+        ax.set_ylabel("BioRED test F1")
+        ax2.set_ylabel("CIViC hard-subset MRR")
 
     for ax in axes[len(encoders) :]:
         ax.set_visible(False)
-    fig.suptitle("Validation curves by encoder (seed-averaged)", y=1.01, fontsize=13)
-    fig.tight_layout()
-    _save(fig, "fig1_training_curves.png")
-
-
-def figure2_two_axis_timing(traj: pd.DataFrame) -> None:
-    _apply_style()
-    pe = traj[traj["source"] == "matrix_per_epoch"].copy()
-    if pe.empty or pe["kb_mrr_hard"].isna().all() or pe["benchmark_f1"].isna().all():
-        print("  Skipping fig2 (per-epoch benchmark/KB not scored yet)")
-        return
-
-    mean_pe = (
-        pe.groupby(["model_id", "epoch"])[["benchmark_f1", "kb_mrr_hard"]]
-        .mean()
-        .reset_index()
-    )
-
-    fig, axes = plt.subplots(1, 2, figsize=(10, 4.5), sharex=True)
-    metrics = [
-        ("benchmark_f1", "BioRED test F1"),
-        ("kb_mrr_hard", "KB MRR (hard subset)"),
-    ]
-
-    for ax, (col, ylab) in zip(axes, metrics):
-        for mid in FOCUS_MODEL_IDS:
-            sub = mean_pe[mean_pe["model_id"] == mid].sort_values("epoch")
-            if sub[col].isna().all():
-                continue
-            label = MODEL_BY_ID[mid].short_name.replace("-base", "")
-            ax.plot(sub["epoch"], sub[col], "o-", lw=2, markersize=6, label=label)
-        ax.set_xlabel("Training epoch")
-        ax.set_ylabel(ylab)
-        ax.legend(fontsize=8, loc="best")
-
     fig.suptitle(
-        "Two-axis timing: benchmark vs hard-subset KB along per-epoch checkpoints "
-        "(focus encoders, seed-averaged)",
-        y=1.02,
-        fontsize=12,
+        "Within-model trajectories: in-distribution benchmark vs out-of-distribution KB (hard)",
+        y=1.01,
+        fontsize=13,
     )
     fig.tight_layout()
-    _save(fig, "fig2_two_axis_timing.png")
+    _save(fig, "fig1_per_seed_trajectories.png")
 
 
-def figure3_power(power_df: pd.DataFrame) -> None:
+def figure2_paired_change_distribution(paired: pd.DataFrame) -> None:
+    """Within-seed delta benchmark vs delta KB hard (epoch 1 -> best val F1)."""
     _apply_style()
-    fig, ax = plt.subplots(figsize=(7.5, 4.8))
-    labels = [MODEL_BY_ID[m].short_name.replace("-base", "") for m in power_df["model_id"]]
-    x = np.arange(len(labels))
-    w = 0.28
-    effect = power_df["estimated_training_effect_hard"].fillna(0).values
-    detect = power_df["approx_detectable_effect_hard"].fillna(0).values
-    r1_band = power_df["approx_detectable_vs_r1_pool_sd"].fillna(0).values
-    ax.bar(x - w, effect, w, label="Est. training-amount effect (hard KB)", color=PALETTE["neutral"])
-    ax.bar(x, detect, w, label="Detectable at 10 seeds (focus hard SD)", color=PALETTE["accent"], alpha=0.85)
-    ax.bar(
-        x + w,
-        r1_band,
-        w,
-        label="Detectable vs Round 1 pool SD",
-        color="#888888",
-        alpha=0.7,
-    )
-    ax.set_xticks(x)
-    ax.set_xticklabels(labels, rotation=25, ha="right")
-    ax.set_ylabel("KB MRR difference scale")
-    ax.legend(fontsize=8, loc="upper right")
-    ax.set_title("Training-amount effect vs seed-noise bands (hard subset)")
-    fig.tight_layout()
-    _save(fig, "fig3_power_check.png")
-
-
-def figure4_three_point_paired(three_pt: pd.DataFrame, summary: pd.DataFrame) -> None:
-    """Paired deltas under multiple well-trained definitions (selection decoupling)."""
-    from .three_point_timing import WELL_DEF_LABELS, WELL_DEF_VAL_F1, WELL_DEFS
-
-    _apply_style()
-    if three_pt.empty:
-        print("  Skipping fig4 (no three-point data)")
+    well = WELL_DEF_VAL_F1
+    pc = f"pairable_{well}"
+    sub = paired[paired[pc]].copy()
+    if sub.empty:
+        print("  Skipping fig2 (no pairable seeds)")
         return
 
-    fig, axes = plt.subplots(1, 3, figsize=(14.5, 5.2), sharey=True)
-    colors = {
-        "pubmedbert_base": PALETTE["neutral"],
-        "roberta_base": "#228833",
-        "distilbert_base": PALETTE["accent"],
-    }
+    fig, ax = plt.subplots(figsize=(7.5, 6.0))
+    x = sub[f"delta_benchmark_f1_{well}"].astype(float)
+    y = sub[f"delta_kb_mrr_hard_{well}"].astype(float)
+    colors = [PALETTE["accent"] if b > 0 and k < 0 else PALETTE["neutral"] for b, k in zip(x, y)]
+    ax.scatter(x, y, c=colors, alpha=0.75, s=42, edgecolors="white", linewidths=0.4)
+    ax.axhline(0, color=PALETTE["text"], lw=0.8, alpha=0.4)
+    ax.axvline(0, color=PALETTE["text"], lw=0.8, alpha=0.4)
+    ax.set_xlabel("Change in benchmark F1 (epoch 1 to best validation F1)")
+    ax.set_ylabel("Change in KB hard-subset MRR")
+    n_erosion = int(((x > 0) & (y < 0)).sum())
+    ax.set_title(
+        "Within-seed paired change\n"
+        f"(each point = one seed; accent = benchmark up and KB hard down, n={n_erosion})"
+    )
+    _save(fig, "fig2_within_seed_paired_change.png")
 
-    bench_sd = float(summary["r1_benchmark_f1_sd"].median()) if not summary.empty else np.nan
-    kb_sd = float(summary["r1_kb_hard_mrr_sd"].median()) if not summary.empty else np.nan
 
-    for ax, well_def in zip(axes, WELL_DEFS):
-        pair_col = f"pairable_{well_def}"
-        pair = three_pt[three_pt[pair_col]].copy()
-        title = WELL_DEF_LABELS[well_def].split(" (")[0]
-        if pair.empty:
-            ax.set_title(f"{title}\n(no pairable seeds)", fontsize=10)
-            ax.axhline(0, color=PALETTE["grid"], lw=0.8)
-            ax.axvline(0, color=PALETTE["grid"], lw=0.8)
+def figure3_hard_easy_pair_type(hard_easy: pd.DataFrame, pair_type: pd.DataFrame) -> None:
+    _apply_style()
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4.8))
+
+    # Panel A: hard vs easy
+    ax = axes[0]
+    he = hard_easy[hard_easy["well_trained_definition"] == WELL_DEF_VAL_F1]
+    labels = ["Hard\n(cross-sentence)", "Easy\n(co-sentence)"]
+    keys = ["hard_cross_sentence", "easy_co_sentence"]
+    means, los, his, cols = [], [], [], []
+    for key in keys:
+        row = he[he["subset"] == key]
+        if row.empty:
             continue
+        r = row.iloc[0]
+        means.append(float(r["mean_delta_kb_mrr"]))
+        los.append(float(r["mean_delta_kb_mrr"]) - float(r["ci_lo"]))
+        his.append(float(r["ci_hi"]) - float(r["mean_delta_kb_mrr"]))
+        cols.append(PALETTE["accent"] if key == "hard_cross_sentence" else PALETTE["neutral"])
+    x = np.arange(len(means))
+    ax.bar(x, means, color=cols, yerr=[los, his], capsize=4, width=0.55)
+    ax.axhline(0, color=PALETTE["text"], lw=0.8, alpha=0.5)
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels[: len(means)])
+    ax.set_ylabel("Mean KB MRR change (within seed)")
+    ax.set_title("Hard vs easy subset")
 
-        for mid in FOCUS_MODEL_IDS:
-            sub = pair[pair["model_id"] == mid]
-            if sub.empty:
-                continue
-            label = MODEL_BY_ID[mid].short_name.replace("-base", "")
-            ax.scatter(
-                sub[f"delta_benchmark_{well_def}"],
-                sub[f"delta_kb_hard_{well_def}"],
-                s=65,
-                alpha=0.85,
-                color=colors.get(mid, PALETTE["neutral"]),
-                edgecolors="white",
-                linewidths=0.6,
-                label=label,
-                zorder=3,
+    # Panel B: gene-drug vs gene-disease
+    ax = axes[1]
+    pt = pair_type[pair_type["well_trained_definition"] == WELL_DEF_VAL_F1]
+    labels2 = ["Gene-drug", "Gene-disease"]
+    means2, los2, his2 = [], [], []
+    for ptl in ["gene-drug", "gene-disease"]:
+        row = pt[pt["pair_type"] == ptl]
+        if row.empty:
+            continue
+        r = row.iloc[0]
+        means2.append(float(r["mean_delta_kb_mrr"]))
+        los2.append(float(r["mean_delta_kb_mrr"]) - float(r["ci_lo"]))
+        his2.append(float(r["ci_hi"]) - float(r["mean_delta_kb_mrr"]))
+    x2 = np.arange(len(means2))
+    ax.bar(x2, means2, color=[PALETTE["neutral"], PALETTE["accent"]], yerr=[los2, his2], capsize=4, width=0.55)
+    ax.axhline(0, color=PALETTE["text"], lw=0.8, alpha=0.5)
+    ax.set_xticks(x2)
+    ax.set_xticklabels(labels2[: len(means2)])
+    ax.set_ylabel("Mean KB MRR change (within seed)")
+    ax.set_title("Gene-drug vs gene-disease")
+
+    fig.suptitle("KB erosion by subset and pair type (epoch 1 to best validation F1)", y=1.02, fontsize=13)
+    fig.tight_layout()
+    _save(fig, "fig3_hard_easy_pair_type.png")
+
+
+def figure4_robustness_well_trained(robustness: pd.DataFrame) -> None:
+    _apply_style()
+    fig, ax = plt.subplots(figsize=(9, 5.2))
+    enc = robustness[robustness["model_id"] != "ALL"] if "ALL" in robustness["model_id"].values else robustness
+    if enc.empty:
+        enc = robustness
+    x = np.arange(len(enc))
+    width = 0.25
+    for i, well_def in enumerate(WELL_DEFS):
+        col = f"frac_erosion_{well_def}"
+        if col not in enc.columns:
+            continue
+        offset = (i - 1) * width
+        ax.bar(x + offset, enc[col].astype(float), width, label=WELL_DEF_LABELS[well_def])
+    ax.set_xticks(x)
+    ax.set_xticklabels(
+        [str(s).replace("-base", "") for s in enc["short_name"]],
+        rotation=45,
+        ha="right",
+    )
+    ax.set_ylabel("Fraction of seeds with benchmark up, KB hard down")
+    ax.set_ylim(0, 1.05)
+    ax.legend(loc="upper right", fontsize=9, frameon=False)
+    ax.set_title("Robustness: erosion fraction under three well-trained definitions")
+    fig.tight_layout()
+    _save(fig, "fig4_robustness_well_trained.png")
+
+
+def figure5_gene_disease_hard_trajectories(traj: pd.DataFrame) -> None:
+    """Gene-disease-hard KB MRR vs benchmark F1 per seed (analysis E)."""
+    _apply_style()
+    if "kb_mrr_gene_disease_hard" not in traj.columns:
+        print("  Skipping fig5 (missing gene-disease-hard cross metrics)")
+        return
+
+    encoders = [m.model_id for m in MODELS]
+    ncol = 3
+    nrow = int(np.ceil(len(encoders) / ncol))
+    fig, axes = plt.subplots(nrow, ncol, figsize=(12, 3.4 * nrow))
+    axes = np.atleast_1d(axes).flatten()
+
+    for ax, mid in zip(axes, encoders):
+        sub = traj[traj["model_id"] == mid].sort_values(["seed", "epoch"])
+        if sub.empty:
+            ax.set_visible(False)
+            continue
+        ax2 = ax.twinx()
+        ax2.spines["top"].set_visible(False)
+
+        for seed, g in sub.groupby("seed"):
+            ax.plot(g["epoch"], g["benchmark_f1"], color=PALETTE["neutral_light"], alpha=0.35, lw=0.9)
+            ax2.plot(
+                g["epoch"],
+                g["kb_mrr_gene_disease_hard"],
+                color=PALETTE["accent"],
+                alpha=0.25,
+                lw=0.9,
             )
 
-        if not np.isnan(bench_sd) and bench_sd > 0:
-            ax.axvline(bench_sd, color="#888888", ls=":", lw=1.0, alpha=0.75)
-            ax.axvline(-bench_sd, color="#888888", ls=":", lw=1.0, alpha=0.75)
-        if not np.isnan(kb_sd) and kb_sd > 0:
-            ax.axhline(kb_sd, color="#888888", ls=":", lw=1.0, alpha=0.75)
-            ax.axhline(-kb_sd, color="#888888", ls=":", lw=1.0, alpha=0.75)
-        if not np.isnan(bench_sd) and not np.isnan(kb_sd):
-            from matplotlib.patches import Rectangle
+        mean_g = sub.groupby("epoch").agg(
+            benchmark_f1=("benchmark_f1", "mean"),
+            kb_mrr_gene_disease_hard=("kb_mrr_gene_disease_hard", "mean"),
+        )
+        ax.plot(
+            mean_g.index,
+            mean_g["benchmark_f1"],
+            "o-",
+            color=PALETTE["neutral"],
+            lw=2.2,
+            ms=4,
+        )
+        ax2.plot(
+            mean_g.index,
+            mean_g["kb_mrr_gene_disease_hard"],
+            "s-",
+            color=PALETTE["accent"],
+            lw=2.2,
+            ms=4,
+        )
+        name = MODEL_BY_ID[mid].short_name.replace("-base", "")
+        ax.set_title(name, fontsize=10)
+        ax.set_xlabel("Training epoch")
+        ax.set_ylabel("BioRED test F1")
+        ax2.set_ylabel("Gene-disease hard MRR")
 
-            ax.add_patch(
-                Rectangle(
-                    (-bench_sd, -kb_sd),
-                    2 * bench_sd,
-                    2 * kb_sd,
-                    fill=False,
-                    ls="--",
-                    ec="#888888",
-                    lw=0.9,
-                    alpha=0.65,
-                    zorder=1,
-                )
-            )
-
-        ax.axhline(0, color=PALETTE["grid"], lw=0.8, zorder=0)
-        ax.axvline(0, color=PALETTE["grid"], lw=0.8, zorder=0)
-        ax.set_xlabel("Delta benchmark F1\n(well minus epoch 1)", fontsize=10)
-        if ax is axes[0]:
-            ax.set_ylabel("Delta KB MRR hard\n(well minus epoch 1)", fontsize=10)
-        short = "val_f1-best" if well_def == WELL_DEF_VAL_F1 else well_def.replace("_", " ")
-        ax.set_title(short, fontsize=10)
-        if ax is axes[-1]:
-            ax.legend(fontsize=8, loc="best")
-
+    for ax in axes[len(encoders) :]:
+        ax.set_visible(False)
     fig.suptitle(
-        "Three-point paired timing: robustness to well-trained definition\n"
-        "(dashed box = median Round 1 seed-noise band; per-seed dots)",
-        fontsize=11,
-        y=1.03,
+        "Gene-disease hard subset: benchmark vs knowledge-base ranking across training",
+        y=1.01,
+        fontsize=13,
     )
     fig.tight_layout()
-    _save(fig, "fig4_three_point_paired.png")
+    _save(fig, "fig5_gene_disease_hard_trajectories.png")
+
+
+def figure6_pair_type_subset_contrast(pair_subset: pd.DataFrame) -> None:
+    """Contrast gene-drug vs gene-disease paired change by hard/easy subset."""
+    _apply_style()
+    sub = pair_subset[pair_subset["well_trained_definition"] == WELL_DEF_VAL_F1]
+    if sub.empty:
+        print("  Skipping fig6 (no pair×subset contrast data)")
+        return
+
+    order = ["gene_drug_hard", "gene_drug_easy", "gene_disease_hard", "gene_disease_easy"]
+    labels = [
+        "Gene-drug\nhard",
+        "Gene-drug\neasy",
+        "Gene-disease\nhard",
+        "Gene-disease\neasy",
+    ]
+    colors = [PALETTE["neutral"], PALETTE["neutral_light"], PALETTE["accent"], "#EEBBB8"]
+
+    fig, ax = plt.subplots(figsize=(8.5, 5.2))
+    means, los, his, ns = [], [], [], []
+    for slug in order:
+        row = sub[sub["slug"] == slug]
+        if row.empty:
+            means.append(0)
+            los.append(0)
+            his.append(0)
+            ns.append(0)
+            continue
+        r = row.iloc[0]
+        means.append(float(r["mean_delta_kb_mrr"]))
+        los.append(float(r["mean_delta_kb_mrr"]) - float(r["ci_lo"]))
+        his.append(float(r["ci_hi"]) - float(r["mean_delta_kb_mrr"]))
+        ns.append(int(r["n_kb_falls"]))
+
+    x = np.arange(len(order))
+    ax.bar(x, means, color=colors[: len(means)], yerr=[los, his], capsize=4, width=0.58)
+    ax.axhline(0, color=PALETTE["text"], lw=0.8, alpha=0.5)
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels[: len(means)])
+    ax.set_ylabel("Mean KB MRR change (within seed, epoch 1 to best val F1)")
+    ax.set_title("Paired change by pair type and subset")
+    for i, (m, n) in enumerate(zip(means, ns)):
+        ax.text(i, m + (0.003 if m >= 0 else -0.008), f"{n} fall", ha="center", va="bottom", fontsize=8)
+    fig.tight_layout()
+    _save(fig, "fig6_pair_type_subset_contrast.png")
+
+
+    _save(fig, "fig6_pair_type_subset_contrast.png")
+
+
+def figure7_kb_peak_timing(timing_summary: pd.DataFrame) -> None:
+    _apply_style()
+    sub = timing_summary[
+        (timing_summary["slug"] == "gene_disease") & (timing_summary["timing_class"] != "all")
+    ]
+    if sub.empty:
+        print("  Skipping fig7 (no timing data)")
+        return
+    labels = ["Before\nbest-val", "Coincident\n(±1 epoch)", "After\nbest-val"]
+    keys = ["before_best_val", "coincident_best_val", "after_best_val"]
+    vals = [float(sub.loc[sub["timing_class"] == k, "frac_seeds"].iloc[0]) if k in sub["timing_class"].values else 0 for k in keys]
+    fig, ax = plt.subplots(figsize=(7, 4.8))
+    ax.bar(range(3), vals, color=[PALETTE["accent"], PALETTE["neutral"], PALETTE["neutral_light"]], width=0.55)
+    ax.set_xticks(range(3))
+    ax.set_xticklabels(labels)
+    ax.set_ylabel("Fraction of seeds")
+    ax.set_ylim(0, 1.05)
+    ax.set_title("When gene-disease KB ranking peaks relative to validation-best epoch")
+    fig.tight_layout()
+    _save(fig, "fig7_kb_peak_timing.png")
+
+
+def figure8_pool_stratum(stratum_summary: pd.DataFrame) -> None:
+    _apply_style()
+    if stratum_summary.empty:
+        print("  Skipping fig8 (no pool stratum data)")
+        return
+    order = ["small_pool", "large_pool", "comparable_to_gene_drug"]
+    labels = ["Small pool\n(≤ median)", "Large pool\n(> median)", "Comparable to\ngene-drug size"]
+    fig, ax = plt.subplots(figsize=(8, 5))
+    means, los, his = [], [], []
+    for key in order:
+        row = stratum_summary[stratum_summary["stratum"] == key]
+        if row.empty:
+            continue
+        r = row.iloc[0]
+        means.append(float(r["mean_delta_mrr"]))
+        los.append(float(r["mean_delta_mrr"]) - float(r["ci_lo"]))
+        his.append(float(r["ci_hi"]) - float(r["mean_delta_mrr"]))
+    x = np.arange(len(means))
+    ax.bar(x, means, color=PALETTE["accent"], yerr=[los, his], capsize=4, width=0.55)
+    ax.axhline(0, color=PALETTE["text"], lw=0.8, alpha=0.5)
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels[: len(means)])
+    ax.set_ylabel("Mean gene-disease MRR change (epoch 1 to best val)")
+    ax.set_title("Gene-disease paired change by abstract pool-size stratum")
+    fig.tight_layout()
+    _save(fig, "fig8_pool_stratum_gene_disease.png")
+
+
+def figure9_encoder_property_scatter(enc_table: pd.DataFrame) -> None:
+    _apply_style()
+    if enc_table.empty:
+        print("  Skipping fig9 (no encoder correlation table)")
+        return
+    fig, axes = plt.subplots(1, 3, figsize=(12, 4.2))
+    specs = [
+        ("mean_benchmark_f1", "Mean benchmark F1"),
+        ("biomedical_pretrain", "Biomedical pretrain (0/1)"),
+        ("params_millions", "Parameters (millions)"),
+    ]
+    for ax, (col, xlab) in zip(axes, specs):
+        x = enc_table[col].astype(float)
+        y = enc_table["erosion_magnitude"].astype(float)
+        ax.scatter(x, y, c=PALETTE["accent"], s=70, edgecolors="white", linewidths=0.5)
+        for _, r in enc_table.iterrows():
+            ax.annotate(
+                str(r.get("encoder_name", r.get("short_name", ""))).replace("-base", ""),
+                (float(r[col]), float(r["erosion_magnitude"])),
+                fontsize=7,
+                ha="left",
+                va="bottom",
+            )
+        ax.set_xlabel(xlab)
+        ax.set_ylabel("Gene-disease-hard erosion\n(−Δ MRR, epoch 1→best val)")
+    fig.suptitle("Encoder properties vs gene-disease-hard erosion (n=9, exploratory)", y=1.02)
+    fig.tight_layout()
+    _save(fig, "fig9_encoder_property_scatter.png")
+
+
+def figure10_failure_modes(patterns: pd.DataFrame, summary: dict) -> None:
+    _apply_style()
+    if patterns.empty:
+        print("  Skipping fig10 (no failure-mode data)")
+        return
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4.5))
+    ax = axes[0]
+    labels = ["Abstract-\nunsupported", "Genuine\nmodel error"]
+    frac_unsup = float(summary.get("frac_abstract_unsupported", 0))
+    vals = [frac_unsup, 1 - frac_unsup]
+    ax.bar([0, 1], vals, color=[PALETTE["neutral_light"], PALETTE["accent"]], width=0.5)
+    ax.set_xticks([0, 1])
+    ax.set_xticklabels(labels)
+    ax.set_ylabel("Share of missed positives")
+    ax.set_ylim(0, 1.05)
+    ax.set_title("Missed CIViC positives: abstract ceiling vs model error")
+
+    ax = axes[1]
+    psub = patterns.copy()
+    ax.barh(psub["pattern"], psub["rate_in_genuine_errors"], color=PALETTE["accent"])
+    ax.set_xlim(0, 1.05)
+    ax.set_xlabel("Rate among genuine errors")
+    ax.set_title("Systematic failure modes (abstract-supported only)")
+    fig.tight_layout()
+    _save(fig, "fig10_failure_mode_summary.png")
+
+
+def generate_all_figures(
+    traj: pd.DataFrame,
+    paired: pd.DataFrame,
+    hard_easy: pd.DataFrame,
+    pair_type: pd.DataFrame,
+    robustness: pd.DataFrame,
+    pair_subset: pd.DataFrame | None = None,
+    timing_summary: pd.DataFrame | None = None,
+    stratum_summary: pd.DataFrame | None = None,
+    enc_table: pd.DataFrame | None = None,
+    qual_patterns: pd.DataFrame | None = None,
+    qual_summary: dict | None = None,
+) -> None:
+    figure1_per_seed_trajectories(traj)
+    figure2_paired_change_distribution(paired)
+    figure3_hard_easy_pair_type(hard_easy, pair_type)
+    figure4_robustness_well_trained(robustness)
+    figure5_gene_disease_hard_trajectories(traj)
+    if pair_subset is not None:
+        figure6_pair_type_subset_contrast(pair_subset)
+    if timing_summary is not None:
+        figure7_kb_peak_timing(timing_summary)
+    if stratum_summary is not None:
+        figure8_pool_stratum(stratum_summary)
+    if enc_table is not None:
+        figure9_encoder_property_scatter(enc_table)
+    if qual_patterns is not None and qual_summary is not None:
+        figure10_failure_modes(qual_patterns, qual_summary)

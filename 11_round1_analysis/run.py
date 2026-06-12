@@ -18,6 +18,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Round 1 analysis (CPU; optional GPU rescore)")
     parser.add_argument("--analyze-only", action="store_true", help="Run analysis from stored scores")
     parser.add_argument("--score-only", action="store_true", help="Score KB at best checkpoints only")
+    parser.add_argument(
+        "--score-untrained-only",
+        action="store_true",
+        help="Score untrained-floor baselines (stage 1b, GPU)",
+    )
     parser.add_argument("--rescore", action="store_true", help="Force KB rescoring before analysis")
     parser.add_argument("--force-score", action="store_true", help="Overwrite existing score files")
     parser.add_argument("--model-id", action="append", default=None, help="Limit scoring to encoder(s)")
@@ -32,13 +37,20 @@ def main() -> None:
         )
         return
 
+    if args.score_untrained_only:
+        import_module("11_round1_analysis.score_untrained").score_all_untrained(
+            force=args.force_score,
+            model_ids=args.model_id,
+        )
+        return
+
     if args.analyze_only or args.rescore:
         import_module("11_round1_analysis.run_analysis").run_analysis(
             rescore=args.rescore, force_score=args.force_score
         )
         return
 
-    raise SystemExit("Use --score-only, --analyze-only, or --analyze-only --rescore")
+    raise SystemExit("Use --score-only, --score-untrained-only, --analyze-only, or --analyze-only --rescore")
 
 
 if __name__ == "__main__":

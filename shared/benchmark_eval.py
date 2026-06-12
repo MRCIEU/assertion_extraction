@@ -101,17 +101,21 @@ def build_biored_test_examples(seed: int = SAMPLING_SEED) -> list[dict]:
     return examples
 
 
-def evaluate_checkpoint_benchmark_f1(ckpt_dir: Path, test_examples: list[dict] | None = None) -> dict:
-    if test_examples is None:
-        test_examples = build_biored_test_examples()
-
+def evaluate_model_benchmark_f1(
+    model,
+    tokenizer,
+    test_examples: list[dict],
+    *,
+    label: str = "model",
+    device=None,
+) -> dict:
+    """BioRED test presence F1 for an in-memory sequence-classification model."""
+    if device is None:
+        device = require_gpu()
     print(
-        f"[benchmark] evaluating {ckpt_dir} on {len(test_examples)} BioRED test examples",
+        f"[benchmark] evaluating {label} on {len(test_examples)} BioRED test examples",
         flush=True,
     )
-    device = require_gpu()
-    tokenizer = AutoTokenizer.from_pretrained(ckpt_dir)
-    model = AutoModelForSequenceClassification.from_pretrained(ckpt_dir)
     model.to(device)
     model.eval()
 
@@ -150,3 +154,13 @@ def evaluate_checkpoint_benchmark_f1(ckpt_dir: Path, test_examples: list[dict] |
         "n_test_examples": len(test_examples),
         "n_positives": int(sum(labels)),
     }
+
+
+def evaluate_checkpoint_benchmark_f1(ckpt_dir: Path, test_examples: list[dict] | None = None) -> dict:
+    if test_examples is None:
+        test_examples = build_biored_test_examples()
+
+    device = require_gpu()
+    tokenizer = AutoTokenizer.from_pretrained(ckpt_dir)
+    model = AutoModelForSequenceClassification.from_pretrained(ckpt_dir)
+    return evaluate_model_benchmark_f1(model, tokenizer, test_examples, label=str(ckpt_dir), device=device)

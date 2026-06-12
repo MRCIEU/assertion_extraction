@@ -31,6 +31,11 @@ MATRIX_COMPLETE = "matrix_complete.json"
 
 SCORES_DIR = DATA_DIR / "scores"
 SCORE_COMPLETE = "scoring_complete.json"
+UNTRAINED_COMPLETE = "untrained_scoring_complete.json"
+UNTRAINED_HEAD_SEED = 4242
+UNTRAINED_LIFT_CSV = OUTPUT_DIR / "11_untrained_floor_lift.csv"
+ABSOLUTE_KB_CSV = OUTPUT_DIR / "11_absolute_kb_levels.csv"
+VARIANCE_BOOTSTRAP_CSV = OUTPUT_DIR / "11_variance_components_bootstrap.csv"
 PER_RUN_CSV = OUTPUT_DIR / "11_per_run_scores.csv"
 POOL_SIZE_CSV = OUTPUT_DIR / "11_abstract_pool_sizes.csv"
 EXPECTED_RUNS = len(MODELS) * len(TRAIN_SEEDS)

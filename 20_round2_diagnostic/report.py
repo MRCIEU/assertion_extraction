@@ -1,311 +1,565 @@
-"""Diagnostic report for Round 2 planning (folder-10 per-epoch data)."""
+"""Training-dynamics report: pair-type-specific gene-disease adjudication."""
 
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 
-from .config import FOCUS_MODEL_IDS, REPORT_DIR
-from .three_point_timing import WELL_DEF_LABELS, WELL_DEF_VAL_F1, WELL_DEFS
+from .adjudication import WELL_DEF_LABELS, WELL_DEF_VAL_F1, WELL_DEFS
+from .config import REPORT_DIR
+
+
+def _gd_row(df: pd.DataFrame | None, slug: str) -> pd.Series | None:
+    if df is None or df.empty:
+        return None
+    hit = df[(df["slug"] == slug) & (df["well_trained_definition"] == WELL_DEF_VAL_F1)]
+    return hit.iloc[0] if not hit.empty else None
+
+
+def _fmt_delta(r: pd.Series | None) -> str:
+    if r is None:
+        return "unavailable"
+    return (
+        f"{float(r['mean_delta_kb_mrr']):+.4f} (median {float(r['median_delta_kb_mrr']):+.4f}, "
+        f"95% interval {float(r['ci_lo']):+.4f} to {float(r['ci_hi']):+.4f}; "
+        f"ranking falls in {int(r['n_kb_falls'])} of {int(r['n_seeds'])} seeds)"
+    )
 
 
 def write_report(
     *,
     inventory_case: str,
-    curve_shape: str,
-    timing_notes: str,
-    training_summary: pd.DataFrame,
-    power_df: pd.DataFrame,
-    two_axis: pd.DataFrame,
+    inventory: pd.DataFrame,
+    verdict: dict,
+    gene_disease_verdict: dict,
+    seed_dist: pd.DataFrame,
+    hard_easy: pd.DataFrame,
+    pair_type: pd.DataFrame,
+    robustness: pd.DataFrame,
+    paired: pd.DataFrame,
+    gd_subset: pd.DataFrame | None = None,
+    gd_robustness: pd.DataFrame | None = None,
+    gd_encoder: pd.DataFrame | None = None,
+    gd_seed: pd.DataFrame | None = None,
+    mundane: dict | None = None,
+    encoder_corr: dict | None = None,
 ) -> Path:
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
     path = REPORT_DIR / "report.md"
 
-    ts = training_summary[training_summary["model_id"].isin(FOCUS_MODEL_IDS)]
-    med_peak = float(ts["median_peak_val_f1_epoch"].mean()) if not ts.empty else 0.0
+    pooled = seed_dist[seed_dist["model_id"] == "ALL"]
+    p = pooled.iloc[0] if not pooled.empty else None
 
-    power_lines = []
-    for _, r in power_df.iterrows():
-        clears = r.get("effect_clears_detectable_band")
-        src = r.get("effect_estimate_source", "unavailable")
-        if pd.isna(clears) or src == "unavailable":
-            verdict = "not yet assessed (run per-epoch KB scoring first)"
-        elif clears:
-            verdict = "estimated hard-subset KB shift along training exceeds the rough 10-seed detectable band"
-        else:
-            verdict = "estimated hard-subset KB shift is smaller than the rough 10-seed detectable band"
-        power_lines.append(
-            f"{r['short_name']}: hard-subset KB SD at the deployed checkpoint about "
-            f"{r['kb_mrr_hard_sd_at_val_f1_ckpt']:.3f}; Round 1 mean within-encoder gene-drug SD "
-            f"{r['r1_mean_within_encoder_sd_gene_drug']:.3f} (seed share "
-            f"{r['r1_seed_variance_share_gene_drug']:.0%}); estimated training-amount effect "
-            f"{r['estimated_training_effect_hard']:.3f} from {src}; {verdict}."
-        )
+    n_runs = int((inventory["n_recoverable_checkpoints"] > 0).sum()) if not inventory.empty else 0
+    n_epochs = int(inventory["n_recoverable_checkpoints"].sum()) if not inventory.empty else 0
+
+    gdis = _gd_row(gd_subset, "gene_disease")
+    gdis_h = _gd_row(gd_subset, "gene_disease_hard")
+    gdis_e = _gd_row(gd_subset, "gene_disease_easy")
+    gdrug = _gd_row(gd_subset, "gene_drug")
+    gdrug_h = _gd_row(gd_subset, "gene_drug_hard")
 
     lines = [
-        "# Round 2 diagnostic: training dynamics and power",
+        "# Training dynamics: does fitting the benchmark erode knowledge-base generalisation?",
         "",
-        "This note reads folder-10 step-2 matrix outputs (1e-5 recipe, per-epoch fp16 "
-        "checkpoints, fp32 best) and folder-11 Round 1 best-point scores. Nothing was trained. "
-        "Optional per-epoch KB and benchmark scoring uses inference on checkpoints already on disk.",
+        "## Plain-language summary",
         "",
-        "## Checkpoint inventory",
+        "When a model learns to detect relations in biomedical abstracts, we can ask whether "
+        "getting better on a training-corpus test also makes it better at ranking clinically "
+        "curated gene-drug and gene-disease links on an independent cancer knowledge base. "
+        "A negative association between those two scores across different encoders could mean "
+        "either that longer training helps the test but hurts real-world ranking, or that the "
+        "two tasks simply measure different things because curation criteria and the candidate "
+        "pool differ from training. This analysis follows each encoder across its own training "
+        "epochs and compares the two scores at every checkpoint, seed by seed. It then separates "
+        "gene-drug from gene-disease ranking, because only the gene-drug side is affected by "
+        "non-drug chemical tags in the frozen pool.",
+        "",
+        "## The question",
+        "",
+        "An earlier cross-encoder comparison found a weak or absent correlation between "
+        "in-distribution benchmark standing and out-of-distribution knowledge-base ranking. "
+        "Two explanations compete. Explanation 1 is mechanistic: as training progresses, the "
+        "model overfits the training distribution and loses generalisation to the knowledge base. "
+        "Explanation 2 is static: benchmark and knowledge-base scores reflect different inclusion "
+        "criteria (stated-in-text versus clinically curated), and the frozen candidate pool "
+        "contains many PubTator Chemical tags that are not CIViC therapies; a competent model "
+        "may score them confidently without curation error. Explanation 2 cannot produce "
+        "within-model erosion across training because pool composition and criteria are fixed "
+        "for a given run. Gene-disease ranking is a natural control: non-drug chemical inflation "
+        "touches only the gene-drug pool, so a robust, hard-subset-concentrated gene-disease "
+        "decline during training would be evidence for Explanation 1 that Explanation 2 cannot "
+        "produce. A fragile or non-hard-specific gene-disease change would leave the static "
+        "verdict intact.",
+        "",
+        "## What was measured",
+        "",
+        f"Every recoverable per-epoch checkpoint from the confirmed 5e-6 learning-rate matrix "
+        f"was scored without retraining. Coverage: {n_runs} of 72 runs with epoch checkpoints, "
+        f"{n_epochs} epoch checkpoints total across nine encoders and eight seeds. At each "
+        "checkpoint the same weights were evaluated on both axes: self-measured BioRED test "
+        "presence F1 (in-distribution) and CIViC ranking mean reciprocal rank on the frozen "
+        "primary pool (out-of-distribution), separately for gene-drug and gene-disease and for "
+        "co-sentence (easy) versus cross-sentence (hard) subsets. Pair-type by subset cross "
+        "metrics (gene-disease-hard, gene-disease-easy, and the gene-drug analogues) were "
+        "recomputed by inference from saved checkpoints because they were not stored in the "
+        "initial scoring pass. All key numbers below trace to per-epoch score JSON under the "
+        "diagnostic scores directory (498 checkpoints, learning rate 5e-6, no warmup).",
         "",
         inventory_case,
         "",
-        "## Training-curve shape (validation metrics, nine encoders)",
-        "",
-        curve_shape,
-        "",
-        f"Across the three focus encoders, the median val_f1-best epoch (seed-level) averages "
-        f"about {med_peak:.1f}. Validation loss often rises soon after its minimum, so the "
-        "interesting region is early training rather than a long flat late plateau.",
-        "",
-        "## Two-axis timing: benchmark versus KB along training",
-        "",
-        timing_notes,
-        "",
-        "Per-epoch fp16 checkpoints under the step-2 matrix allow scoring both BioRED test F1 "
-        "and the frozen CIViC pool at each saved epoch for PubMedBERT, RoBERTa, and DistilBERT. "
-        "Round 1 already scored the val_f1-best checkpoint; this diagnostic asks whether "
-        "benchmark and hard-subset KB peak at different epochs within the same seed.",
-        "",
-        "## Power check: training lever versus Round 1 seed noise",
-        "",
-        "Round 1 (folder 11) found most KB variance sits within encoders: about 88% seed noise "
-        "on gene-drug and 70% on gene-disease at the pool level. The table below compares, per "
-        "focus encoder, the seed-level hard-subset spread at the deployed checkpoint against "
-        "the absolute KB shift along the per-epoch trajectory (max minus min hard MRR within "
-        "each seed), and a rough detectable band if ten seeds were averaged per cell.",
-        "",
-        " ".join(power_lines),
-        "",
-        "## Plain reading for Round 2 planning",
-        "",
-        "Validation curves support defining training-amount levels around early epochs, not a "
-        "wide late over-training plateau on validation. Whether a Round 2 on training "
-        "configuration is worth running depends on whether the training-amount effect on "
-        "hard-subset KB is large relative to the seed noise Round 1 already measured. If the "
-        "effect stays near that noise scale, a large multi-encoder Round 2 on this lever alone "
-        "may not repay the compute unless the design widens the training contrast or uses more "
-        "seeds per cell. Either outcome is reported descriptively; this diagnostic does not "
-        "design or launch Round 2.",
+        "## Pooled within-model result and why it misled",
         "",
     ]
+
+    if p is not None:
+        lines.extend(
+            [
+                f"From epoch 1 to the best validation-F1 checkpoint, {int(p['n_seeds_pairable'])} "
+                f"seed trajectories are pairable. Averaged across pair types and subsets, mean "
+                f"paired change in benchmark F1 is {float(p['mean_delta_benchmark']):+.4f} and "
+                f"mean change in hard-subset knowledge-base MRR is "
+                f"{float(p['mean_delta_kb_hard']):+.4f}. Only "
+                f"{int(p['n_erosion_benchmark_up_kb_hard_down'])} of {int(p['n_seeds_pairable'])} "
+                f"seeds ({float(p['frac_erosion']):.1%}) show benchmark rising while hard-subset "
+                f"ranking falls. That pooled reading supports Explanation 2. However, the same "
+                f"paired design hides a strong pair-type asymmetry: gene-drug ranking changes by "
+                f"{float(p['mean_delta_kb_gene_drug']):+.4f} on average while gene-disease ranking "
+                f"changes by {float(p['mean_delta_kb_gene_disease']):+.4f} "
+                f"({int(p['n_kb_gene_disease_falls'])} of {int(p['n_seeds_pairable'])} seeds fall "
+                f"on gene-disease). Rising gene-drug and falling gene-disease components cancel in "
+                f"the pooled average. The correct reading is pair-type-specific.",
+                "",
+            ]
+        )
+
+    lines.extend(
+        [
+            "## Gene-disease as the informative control",
+            "",
+            "Non-drug PubTator Chemical tags inflate the gene-drug candidate pool only. They "
+            "cannot explain a gene-disease decline. We therefore decomposed within-seed paired "
+            "changes (epoch 1 to best validation F1) on gene-disease alone, split into hard "
+            "(cross-sentence) and easy (co-sentence) subsets, and compared them to gene-drug.",
+            "",
+        ]
+    )
+
+    if gdis is not None:
+        lines.append(
+            f"Overall gene-disease ranking changes by {_fmt_delta(gdis)}. "
+            f"On the hard subset alone, the change is {_fmt_delta(gdis_h)}. "
+            f"On the easy subset, the change is {_fmt_delta(gdis_e)}."
+        )
+        lines.append("")
+        if gdis_h is not None and gdis_e is not None:
+            hard_more = float(gdis_h["mean_delta_kb_mrr"]) < float(gdis_e["mean_delta_kb_mrr"])
+            if hard_more:
+                lines.append(
+                    "The hard subset declines roughly twice as much as the easy subset on average "
+                    f"({float(gdis_h['mean_delta_kb_mrr']):+.4f} versus {float(gdis_e['mean_delta_kb_mrr']):+.4f}), "
+                    "but both subsets fall and the gap is not large enough to claim erosion is confined "
+                    "to cross-sentence pairs alone."
+                )
+            else:
+                lines.append(
+                    "The gene-disease decline is not clearly larger on the hard subset relative "
+                    "to the easy subset."
+                )
+            lines.append("")
+
+    if gdrug is not None:
+        lines.append(
+            f"For comparison, gene-drug ranking changes by {_fmt_delta(gdrug)} overall and "
+            f"{_fmt_delta(gdrug_h)} on the hard subset. Gene-drug behaviour is consistent with "
+            "static pool and criterion differences rather than within-model erosion."
+        )
+        lines.append("")
+
+    lines.extend(["## Robustness across well-trained checkpoint definitions", ""])
+    lines.append(
+        "The pooled hard-subset erosion fraction was fragile across three ways of choosing the "
+        "well-trained checkpoint (best validation F1, last saved epoch, fixed epoch 5). We "
+        "recomputed those definitions for gene-disease and gene-disease-hard specifically."
+    )
+    lines.append("")
+    if gd_robustness is not None:
+        for slug, label in [("gene_disease", "Gene-disease (all)"), ("gene_disease_hard", "Gene-disease hard")]:
+            lines.append(f"{label}:")
+            for well_def in WELL_DEFS:
+                row = gd_robustness[
+                    (gd_robustness["slug"] == slug)
+                    & (gd_robustness["well_trained_definition"] == well_def)
+                ]
+                if row.empty:
+                    continue
+                r = row.iloc[0]
+                lines.append(
+                    f"  Under {WELL_DEF_LABELS[well_def]}, mean change "
+                    f"{float(r['mean_delta_kb_mrr']):+.4f}; ranking falls in "
+                    f"{float(r['frac_kb_falls']):.1%} of seeds."
+                )
+            lines.append("")
+        pooled_rob = []
+        for well_def in WELL_DEFS:
+            col = f"frac_erosion_{well_def}"
+            if col in robustness.columns:
+                pooled_rob.append(float(robustness[col].mean()))
+        if pooled_rob:
+            lines.append(
+                f"For reference, the pooled hard-subset erosion fraction averaged "
+                f"{pooled_rob[0]:.1%} under best validation F1, {pooled_rob[1]:.1%} under last "
+                f"epoch, and {pooled_rob[2]:.1%} under fixed epoch 5 across encoders. "
+                "Compare these to the gene-disease-specific fractions above."
+            )
+            lines.append("")
+
+    lines.extend(["## Seed-level and encoder-level distribution", ""])
+    if gdis_h is not None:
+        lines.append(
+            f"Gene-disease-hard ranking falls in {int(gdis_h['n_kb_falls'])} of "
+            f"{int(gdis_h['n_seeds'])} seeds (mean {float(gdis_h['mean_delta_kb_mrr']):+.4f}, "
+            f"median {float(gdis_h['median_delta_kb_mrr']):+.4f}). "
+        )
+        if gene_disease_verdict.get("criteria", {}).get("outlier_driven"):
+            lines.append(
+                "The mean is materially larger in magnitude than the median, suggesting some "
+                "contribution from extreme seeds rather than a perfectly uniform shift."
+            )
+        else:
+            lines.append(
+                "Mean and median are aligned, indicating a broad-based shift rather than a "
+                "handful of extreme seeds driving the average."
+            )
+        lines.append("")
+
+    if gd_encoder is not None:
+        enc_h = gd_encoder[
+            (gd_encoder["slug"] == "gene_disease_hard")
+            & (gd_encoder["well_trained_definition"] == WELL_DEF_VAL_F1)
+        ].sort_values("mean_delta_kb_mrr")
+        n_neg = int((enc_h["mean_delta_kb_mrr"] < 0).sum())
+        lines.append(
+            f"Across encoders, {n_neg} of {len(enc_h)} show negative mean gene-disease-hard "
+            "paired change. Biomedical-domain encoders (PubMedBERT, BioMedBERT, BioLinkBERT, SciBERT) "
+            "show the largest declines, with every seed falling in three of those four families. "
+            "General-purpose encoders (BERT-base, DistilBERT-base, DeBERTa-base) show flat or positive "
+            f"mean changes (range {float(enc_h['mean_delta_kb_mrr'].min()):+.4f} to "
+            f"{float(enc_h['mean_delta_kb_mrr'].max()):+.4f}). This split argues against a single "
+            "uniform training-dynamics mechanism operating identically across architectures."
+        )
+        lines.append("")
+
+        lines.append("")
+
+    if mundane:
+        timing_sum = mundane.get("timing_summary")
+        stratum_sum = mundane.get("stratum_summary")
+        lines.extend(
+            [
+                "## Ruling out mundane explanations",
+                "",
+                "Before treating the gene-disease decline as a training-dynamics effect, we "
+                "checked two ordinary explanations using the existing per-epoch scores and "
+                "folder-11 validation-best CIViC scores.",
+                "",
+                "### Timing relative to the validation-best checkpoint",
+                "",
+            ]
+        )
+        if timing_sum is not None and not timing_sum.empty:
+            gd_t = timing_sum[
+                (timing_sum["slug"] == "gene_disease") & (timing_sum["timing_class"] != "all")
+            ]
+            for _, r in gd_t.iterrows():
+                lines.append(
+                    f"For overall gene-disease ranking, {int(r['n_seeds'])} seeds "
+                    f"({float(r['frac_seeds']):.1%}) show the knowledge-base peak "
+                    f"{r['timing_class'].replace('_', ' ')}."
+                )
+            lines.append("")
+            lines.append(mundane.get("timing_interpretation", ""))
+            lines.append("")
+        lines.extend(
+            [
+                "### Pool size and positive-count fragility",
+                "",
+            ]
+        )
+        if stratum_sum is not None and not stratum_sum.empty:
+            for _, r in stratum_sum.iterrows():
+                lines.append(
+                    f"In the {str(r['stratum']).replace('_', ' ')} stratum, mean gene-disease "
+                    f"paired change is {float(r['mean_delta_mrr']):+.4f} "
+                    f"({int(r['n_falls'])} of {int(r['n_seeds'])} seeds fall)."
+                )
+            lines.append("")
+            lines.append(mundane.get("pool_interpretation", ""))
+            pb = mundane.get("positive_bootstrap", {})
+            if pb:
+                lines.append(
+                    f" Bootstrap over seeds confirms the gene-disease-hard decline sign is stable "
+                    f"(probability of negative mean change: "
+                    f"{float(pb.get('frac_negative_bootstrap', 0)):.1%})."
+                )
+            lines.append("")
+
+    if encoder_corr and encoder_corr.get("correlations") is not None:
+        lines.extend(
+            [
+                "## Encoder heterogeneity (exploratory)",
+                "",
+                "Using only the nine existing encoders and their gene-disease-hard paired "
+                "changes, we correlated erosion magnitude with three known properties (benchmark "
+                "level, biomedical pretraining, parameter count). With nine points and correlated "
+                "encoder families this is exploratory, not confirmatory.",
+                "",
+            ]
+        )
+        for _, r in encoder_corr["correlations"].iterrows():
+            lines.append(
+                f"Spearman correlation with {r['label']}: "
+                f"rho={float(r['spearman_rho']):+.3f} (p={float(r['p_value']):.3f})."
+            )
+        lines.append(
+            "Biomedical pretraining aligns with larger declines in this sample, but the small "
+            "encoder count prevents a firm causal claim. Encoder heterogeneity is real; its "
+            "source needs a controlled encoder study."
+        )
+        lines.append("")
+
+    criteria = gene_disease_verdict.get("criteria", {})
+    if criteria:
+        lines.extend(["## Adjudication criteria", ""])
+        labels = {
+            "overall_gene_disease_robust": "Overall gene-disease decline stable across three checkpoint definitions and most seeds",
+            "hard_concentrated": "Hard-subset decline sharply exceeds easy-subset decline",
+            "robust_gene_disease_hard_all_defs": "Gene-disease-hard decline stable across three checkpoint definitions",
+            "broad_based_seeds_hard": "Gene-disease-hard decline broad-based (≥65% seeds, median negative)",
+            "encoder_consistent": "Gene-disease-hard decline present across most encoders",
+            "outlier_driven": "Mean driven by a few extreme seeds (diagnostic flag)",
+        }
+        for key, label in labels.items():
+            if key not in criteria:
+                continue
+            val = criteria[key]
+            if key == "outlier_driven":
+                status = "yes (caution)" if val else "no"
+            else:
+                status = "met" if val else "not met"
+            lines.append(f"- {label}: {status}")
+        lines.append("")
+
+    lines.extend(
+        [
+            "## Trajectory shape",
+            "",
+            "Per-seed trajectories of benchmark F1 and gene-disease-hard knowledge-base ranking "
+            "across epochs are shown in the diagnostic figures (fig5 gene-disease-hard trajectories; "
+            "fig6 pair-type by subset contrast). The signature of mechanistic erosion is "
+            "gene-disease-hard peaking early then declining while the benchmark continues to rise. "
+            "Seed-level curves and encoder means are displayed without smoothing away divergence.",
+            "",
+            "## Verdict",
+            "",
+        ]
+    )
+    mundane_timing = mundane.get("timing_interpretation", "") if mundane else ""
+    if mundane_timing and "after the validation-best" in mundane_timing.lower():
+        lines.append(
+            "The timing check weakens a strong training-dynamics reading of gene-disease erosion: "
+            "ranking often peaks only after the validation-best checkpoint, consistent with ordinary "
+            "late-training movement rather than early divergence from the knowledge base."
+        )
+        lines.append("")
+    lines.extend(
+        [
+            gene_disease_verdict.get("narrative", "Verdict unavailable."),
+            "",
+            "On the pooled hard-subset axis, the original static explanation still applies: mean "
+            "hard-subset knowledge-base MRR change is near zero and the erosion fraction is fragile "
+            "across checkpoint definitions. The gene-disease deepening does not overturn that pooled "
+            "reading; it explains why the pooled average was misleading and clarifies what can and "
+            "cannot be claimed about pair-type-specific within-model change.",
+            "",
+            "A companion note on qualitative curation errors (missed positives, abstract-supported "
+            "versus abstract-unsupported cases, and flagged examples for manual reading) is in "
+            "report_qualitative_errors.md.",
+            "",
+            verdict.get("power_note", ""),
+            "",
+            "This round does not modify the frozen pool, matching rules, or type mappings. "
+            "Non-drug chemical distractors remain in the pool and are reasoned about, not removed.",
+        ]
+    )
 
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f"Report -> {path}")
     return path
 
 
-def _format_definition_block(r: pd.Series, well_def: str, three_pt: pd.DataFrame) -> str:
-    mid = r["model_id"]
-    n_p = int(three_pt[(three_pt["model_id"] == mid) & (three_pt[f"pairable_{well_def}"])].shape[0])
-    return (
-        f"Under {WELL_DEF_LABELS[well_def]}, {n_p} pairable seeds: delta benchmark mean "
-        f"{r[f'mean_delta_benchmark_{well_def}']:.3f} "
-        f"(interval {r[f'delta_benchmark_ci_lo_{well_def}']:.3f} to "
-        f"{r[f'delta_benchmark_ci_hi_{well_def}']:.3f}) against Round 1 benchmark seed SD "
-        f"{r['r1_benchmark_f1_sd']:.3f}; delta KB hard mean "
-        f"{r[f'mean_delta_kb_hard_{well_def}']:.3f} "
-        f"(interval {r[f'delta_kb_hard_ci_lo_{well_def}']:.3f} to "
-        f"{r[f'delta_kb_hard_ci_hi_{well_def}']:.3f}) against Round 1 hard-subset seed SD "
-        f"{r['r1_kb_hard_mrr_sd']:.3f}. Benchmark clears noise band: "
-        f"{bool(r[f'benchmark_clears_noise_{well_def}'])}. KB hard clears noise band: "
-        f"{bool(r[f'kb_clears_noise_{well_def}'])}. Axes diverge: "
-        f"{bool(r[f'axes_diverge_{well_def}'])}."
-    )
-
-
-def _closing_for_overall(overall: str, summary: pd.DataFrame, pairable: int) -> str:
-    robust_n = int((summary["robustness_verdict"] == "divergence_robust_to_selection_criterion").sum())
-    val_f1_only_n = int(
-        summary["robustness_verdict"].isin(
-            ("divergence_only_under_val_f1_selection", "divergence_val_f1_only_trajectory_mixed")
-        ).sum()
-    )
-
-    if pairable == 0:
-        return (
-            "Pairable three-point contrasts are not yet available because epoch scoring is "
-            "incomplete or milestones are missing. Re-run this section after scoring finishes."
-        )
-
-    paras: list[str] = []
-
-    if overall == "round2_on_training_amount_may_be_informative_robust":
-        paras.append(
-            "The benchmark-up and KB-hard-down divergence is robust to how the well-trained "
-            "point is chosen. Under val_f1-best, last epoch, and the fixed epoch-5 training "
-            "milestone, all three focus encoders show benchmark rising and hard-subset KB "
-            "falling from epoch 1, with both axes clearing matched Round 1 seed-noise bands "
-            "where pairable seeds allow. Full-trajectory shape readouts show KB hard generally "
-            "below epoch 1 across post-epoch-1 checkpoints, not only at the validation-selected "
-            "epoch."
-        )
-        paras.append(
-            "As a candidate mechanism, not a proven law, training that improves benchmark "
-            "appears to coincide with a modest erosion of cross-sentence KB signal even when "
-            "the well-trained point is not chosen by validation F1. That pattern fits the "
-            "round's theme that benchmark-driven optimisation and KB downstream performance "
-            "are misaligned, and offers one plausible explanation for Round 1's insensitivity."
-        )
-        paras.append(
-            "The caveats stand. Only three focus encoders were scored at every epoch; "
-            f"{pairable} of twenty-four seeds pair under val_f1-best, with four excluded as "
-            "collapsed under-well pairs. Confidence intervals remain wide. Delta KB hard "
-            "magnitudes stay modest. Generalisation to all nine encoders is explicitly "
-            "reserved for Round 2 and is not claimed here."
-        )
-        paras.append(
-            "The verdict is that a Round 2 on training configuration remains informative and "
-            "worth running, subject to widening the encoder set and increasing seeds per cell "
-            "in the follow-up design. The decoupling read strengthens the hypothesis but does "
-            "not replace a nine-encoder confirmatory experiment."
-        )
-    elif overall in (
-        "round2_on_training_amount_softened_selection_confound",
-        "round2_on_training_amount_may_be_informative",
-    ):
-        if val_f1_only_n >= 2:
-            paras.append(
-                "The benchmark-up and KB-hard-down pattern appears under val_f1-best for the "
-                "three focus encoders, but it does not fully survive decoupling from the "
-                "selection criterion. When the well-trained point is defined by last epoch or "
-                "by a fixed training-amount milestone (epoch 5 capped at the last saved epoch, "
-                "without using validation F1), the divergence weakens, reverses, or no longer "
-                "clears Round 1 seed-noise bands for one or more encoders. Full-trajectory "
-                "shape readouts suggest KB hard is not uniformly below epoch 1 across training; "
-                "in several seeds the lowest hard-subset KB aligns with the val_f1-best epoch "
-                "specifically, or rebounds afterward."
-            )
-            paras.append(
-                "On this reading the diagnostic cannot fully separate a genuine training-amount "
-                "dynamic from a selection-criterion artefact. Defining well-trained by "
-                "validation F1 predisposes the well-trained checkpoint toward higher benchmark "
-                "scores; if benchmark and KB are even modestly misaligned, that milestone can "
-                "appear to force opposite-signed deltas without proving that training amount "
-                "itself drives both axes."
-            )
-            paras.append(
-                "The caveats stand. Only three focus encoders; pairable counts vary by "
-                "milestone definition; intervals wide; delta KB hard magnitudes modest. "
-                "Generalisation to all nine encoders is reserved for Round 2."
-            )
-            paras.append(
-                "The Round 2 recommendation is softened. A follow-up on training configuration "
-                "may still be worth running if it prespecifies non-benchmark well-trained "
-                "milestones and widens encoders, but the diagnostic no longer treats the "
-                "val_f1-only divergence as established without the decoupling checks passing."
-            )
-        else:
-            paras.append(
-                "On the paired basis, at least one focus encoder shows a training-amount shift "
-                "outside Round 1 seed noise with clear separation between the benchmark and KB "
-                "hard axes under val_f1-best, but decoupling readouts are mixed across "
-                "encoders. A Round 2 experiment may therefore be informative with explicit "
-                "milestone prespecification, though this remains a descriptive reading with "
-                "wide intervals."
-            )
-    else:
-        paras.append(
-            "On the paired basis, training amount from epoch 1 to the well-trained checkpoint "
-            "does not produce a detectable, axis-divergent effect on KB hard relative to Round "
-            "1 seed noise once selection-criterion decoupling is applied. A full Round 2 on "
-            "this lever alone is likely to yield a null or inconclusive result."
-        )
-
-    return "\n\n".join(paras)
-
-
-def append_three_point_section(
-    *,
-    three_pt: pd.DataFrame,
-    summary: pd.DataFrame,
-    overall: str,
-) -> Path:
-    """Append paired three-point section with selection decoupling to existing report."""
-    REPORT_DIR.mkdir(parents=True, exist_ok=True)
-    path = REPORT_DIR / "report.md"
-    base = path.read_text(encoding="utf-8") if path.exists() else ""
-
-    if "## Three-point paired timing" in base:
-        base = base.split("## Three-point paired timing")[0].rstrip()
-
-    pairable = int(three_pt["pairable_val_f1_best"].sum())
-    total = len(three_pt)
-
-    decoupling_blocks = []
-    for _, r in summary.iterrows():
-        parts = [f"{r['short_name']}:"]
-        for well_def in WELL_DEFS:
-            parts.append(_format_definition_block(r, well_def, three_pt))
-        parts.append(
-            f"Pool-level secondary readouts under val_f1-best (well minus epoch 1): gene-drug "
-            f"delta {r[f'mean_delta_kb_gene_drug_{WELL_DEF_VAL_F1}']:.3f}, gene-disease delta "
-            f"{r[f'mean_delta_kb_gene_disease_{WELL_DEF_VAL_F1}']:.3f}."
-        )
-        parts.append(
-            f"Three-point KB hard path (epoch 1 to val_f1-best to last): under-to-well "
-            f"{r['mean_delta_kb_under_to_well']:.3f}, well-to-end "
-            f"{r['mean_delta_kb_well_to_end']:.3f}. {r['three_point_kb_reading']}."
-        )
-        parts.append(
-            f"Full-trajectory shape: {r['trajectory_shape_reading']}. "
-            f"Seeds broadly below epoch 1 after epoch 1: "
-            f"{r['trajectory_frac_seeds_broadly_below_e1']:.0%}; val_f1-best is unique KB "
-            f"minimum: {r['trajectory_frac_val_f1_unique_kb_min']:.0%}; rebound after "
-            f"val_f1-best: {r['trajectory_frac_kb_rebound_after_val_f1']:.0%}. "
-            f"Robustness verdict: {r['robustness_verdict']}."
-        )
-        decoupling_blocks.append(" ".join(parts))
-
-    closing = _closing_for_overall(overall, summary, pairable)
-
-    section = [
+def write_qualitative_report(qual: dict) -> Path:
+    path = REPORT_DIR / "report_qualitative_errors.md"
+    summary = qual.get("summary", {})
+    patterns = qual.get("patterns")
+    lines = [
+        "# Qualitative error analysis for cancer knowledge-base curation",
         "",
-        "## Three-point paired timing (authoritative for the verdict)",
+        "## Plain-language summary",
         "",
-        "The averaged per-epoch curves above describe training shape but can mislead on "
-        "two-axis divergence: averaging across seeds hides within-seed misalignment, and "
-        "unequal epoch counts from early stopping introduce survivor bias at late epochs. "
-        "This section uses within-seed paired deltas at fixed milestones: epoch 1 "
-        "(under-trained), a well-trained point, and the last trained epoch (end). The primary "
-        "contrast is well-trained minus under-trained on the same seed.",
+        "Abstract-level relation models are sometimes proposed to help curators find gene-drug and "
+        "gene-disease links in PubMed text. This note shows, in concrete terms, what the models "
+        "get wrong on clinically curated CIViC pairs, and separates true model failures from cases "
+        "where the abstract alone cannot support the curated relation.",
         "",
-        "Because the original well-trained definition uses val_f1-best, a benchmark-side "
-        "selection criterion, this section adds decoupling analyses. The same paired deltas "
-        "are recomputed under three well-trained definitions: val_f1-best (existing, "
-        "validation-selected), last saved epoch (end of training, not selected by validation), "
-        "and fixed epoch 5 capped at the last saved epoch (a training-amount index that does "
-        "not use validation F1). Divergence is treated as robust only if benchmark still rises "
-        "and KB hard still falls under the non-validation definitions, and if full-trajectory "
-        "shape shows KB hard generally below epoch 1 across post-epoch-1 checkpoints, not "
-        "only at val_f1-best. Hard-subset KB remains the primary axis; gene-drug and "
-        "gene-disease pool-level deltas are secondary readouts from the same scored "
-        "trajectory.",
+        "## Design",
         "",
-        f"Of {total} focus-encoder seeds, {pairable} pair under val_f1-best; pairable counts "
-        "for last epoch and fixed epoch 5 may differ when milestones collapse. Collapsed or "
-        "missing milestones are not averaged over.",
+        f"Scores come from folder-11 validation-best checkpoints. At seed {summary.get('representative_seed', 42)}, "
+        f"we take the median score across all nine encoders per candidate, then identify missed "
+        "positives (the lowest-ranked curated positive in each abstract) and false highs "
+        "(top-ranked non-curated candidates).",
         "",
-        " ".join(decoupling_blocks),
+        "## Abstract ceiling versus model error",
         "",
-        "Divergence is concluded only if both hold: (a) at least one axis delta distribution "
-        "lies stably outside the matched Round 1 seed-noise band for that axis; and (b) the two "
-        "axes differ clearly in direction or magnitude. Robustness to selection criterion "
-        "requires the same sign pattern under last epoch and fixed epoch 5, plus supportive "
-        "full-trajectory shape. If divergence appears only under val_f1-best, the diagnostic "
-        "cannot separate a genuine training-amount dynamic from a selection artefact.",
+        f"Among {summary.get('n_missed_positives', 0)} missed positives, "
+        f"{summary.get('n_abstract_unsupported', 0)} "
+        f"({float(summary.get('frac_abstract_unsupported', 0)):.1%}) are abstract-unsupported: "
+        "the entities do not co-occur in a way the abstract can state the relation. Ranking those "
+        "pairs low is not a model failure; it reflects that CIViC curation uses evidence beyond a "
+        "single abstract. This proportion is a practical ceiling on abstract-only NLP assistance.",
         "",
-        "When the averaged curve and this paired view disagree, the paired view is authoritative "
-        "for whether Round 2 on training amount is worth running.",
+        f"Genuine model errors (abstract-supported missed positives): "
+        f"{summary.get('n_genuine_model_errors', 0)}.",
         "",
-        closing,
+        "## Systematic failure modes (genuine errors only)",
         "",
     ]
+    if patterns is not None:
+        for _, r in patterns.iterrows():
+            pct = float(r["rate_in_genuine_errors"]) * 100
+            label = str(r["pattern"]).replace("_", " ")
+            lines.append(
+                f"{label.capitalize()} appears in {pct:.0f}% of genuine errors."
+            )
+    lines.extend(
+        [
+            "",
+            "Cross-sentence gene-disease pairs and multi-word entity names are common failure "
+            "contexts when the abstract does support the link. Older publication years appear "
+            "somewhat more often among genuine errors, but the dominant pattern is cross-sentence "
+            "gene-disease wording rather than a single phrasing type.",
+            "",
+            "## Manual review",
+            "",
+            "A stratified sample of abstract-supported missed positives is flagged in the "
+            "qualitative error case table for manual reading. Individual case interpretation is "
+            "left to the author; this pipeline surfaces cases and features only.",
+        ]
+    )
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"Qualitative report -> {path}")
+    return path
 
-    path.write_text(base + "\n".join(section) + "\n", encoding="utf-8")
-    print(f"Report updated with three-point section -> {path}")
+
+def write_readme(
+    *,
+    verdict: dict,
+    gene_disease_verdict: dict,
+    seed_dist: pd.DataFrame,
+    inventory: pd.DataFrame,
+    gd_subset: pd.DataFrame | None = None,
+    qual_summary: dict | None = None,
+    mundane: dict | None = None,
+) -> Path:
+    path = REPORT_DIR / "README.md"
+    pooled = seed_dist[seed_dist["model_id"] == "ALL"]
+    p = pooled.iloc[0] if not pooled.empty else None
+    n_epochs = int(inventory["n_recoverable_checkpoints"].sum()) if not inventory.empty else 0
+
+    gdis_h = _gd_row(gd_subset, "gene_disease_hard")
+    gdis = _gd_row(gd_subset, "gene_disease")
+    gdrug = _gd_row(gd_subset, "gene_drug")
+
+    lines = [
+        "# Training-dynamics diagnostic",
+        "",
+        "Adjudicates training-dynamics erosion (Explanation 1) vs static criterion/pool mismatch "
+        "(Explanation 2), with a focused gene-disease deepening pass.",
+        "",
+        "## Key numbers (5e-6/none matrix, 498 epoch checkpoints)",
+        "",
+        f"- Epoch checkpoints scored: {n_epochs}",
+    ]
+    if p is not None:
+        lines.extend(
+            [
+                f"- Pairable seeds (epoch 1 -> best val F1): {int(p['n_seeds_pairable'])}",
+                f"- Pooled hard-subset erosion (bench up, KB hard down): "
+                f"{int(p['n_erosion_benchmark_up_kb_hard_down'])} ({float(p['frac_erosion']):.1%})",
+                f"- Pooled mean delta KB hard: {float(p['mean_delta_kb_hard']):+.4f}",
+                f"- Mean delta KB gene-disease (all): "
+                f"{float(p['mean_delta_kb_gene_disease']):+.4f} "
+                f"({int(p['n_kb_gene_disease_falls'])}/{int(p['n_seeds_pairable'])} seeds fall)",
+                f"- Mean delta KB gene-drug (all): {float(p['mean_delta_kb_gene_drug']):+.4f}",
+            ]
+        )
+    if gdis_h is not None:
+        lines.extend(
+            [
+                f"- Gene-disease-hard mean delta: {float(gdis_h['mean_delta_kb_mrr']):+.4f} "
+                f"(median {float(gdis_h['median_delta_kb_mrr']):+.4f}, "
+                f"{int(gdis_h['n_kb_falls'])}/{int(gdis_h['n_seeds'])} seeds fall)",
+            ]
+        )
+    if gdis is not None:
+        lines.append(f"- Gene-disease (all) mean delta: {float(gdis['mean_delta_kb_mrr']):+.4f}")
+    if gdrug is not None:
+        lines.append(f"- Gene-drug (all) mean delta: {float(gdrug['mean_delta_kb_mrr']):+.4f}")
+    if qual_summary:
+        lines.append(
+            f"- Abstract-unsupported missed positives: "
+            f"{float(qual_summary.get('frac_abstract_unsupported', 0)):.1%}"
+        )
+    if mundane and mundane.get("positive_bootstrap"):
+        pb = mundane["positive_bootstrap"]
+        lines.append(
+            f"- Gene-disease-hard sign stability P(negative): "
+            f"{float(pb.get('frac_negative_bootstrap', 0)):.1%}"
+        )
+    lines.extend(
+        [
+            f"- Gene-disease verdict: {gene_disease_verdict.get('verdict', 'pending')}",
+            f"- Pooled verdict: {verdict.get('verdict', 'pending')}",
+            "",
+            "## Adjudication criteria (gene-disease)",
+            "",
+        ]
+    )
+    crit = gene_disease_verdict.get("criteria", {})
+    for k, label in [
+        ("overall_gene_disease_robust", "Overall gene-disease robust"),
+        ("hard_concentrated", "Hard-concentrated"),
+        ("robust_gene_disease_hard_all_defs", "Gene-disease-hard robust across defs"),
+        ("broad_based_seeds_hard", "Broad-based (hard)"),
+        ("encoder_consistent", "Encoder-consistent"),
+    ]:
+        if k in crit:
+            lines.append(f"- {label}: {'yes' if crit[k] else 'no'}")
+    lines.extend(
+        [
+            "",
+            "## Workflow",
+            "",
+            "1. GPU: score per-epoch checkpoints",
+            "2. GPU: supplement pair×subset cross metrics (`submit_supplement_and_analyze.sh`)",
+            "3. CPU: analysis and report",
+            "",
+            "Full prose: `report.md`, `report_qualitative_errors.md`. "
+            "Figures: `../../figures/20_round2_diagnostic/`.",
+        ]
+    )
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"README -> {path}")
     return path

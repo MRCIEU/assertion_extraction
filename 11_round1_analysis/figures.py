@@ -189,66 +189,111 @@ def figure1_benchmark_kb_faceted(encoder_df: pd.DataFrame) -> None:
     _save(fig, "fig1_benchmark_kb_scatter.png")
 
 
-def figure2_benchmark_f1_range(
-    encoder_df: pd.DataFrame,
-    deberta_all_seeds_mean: float | None = None,
+def figure2_variance_components(
+    variance_df: pd.DataFrame,
+    variance_boot: pd.DataFrame | None = None,
 ) -> None:
-    """Figure 2: horizontal dot plot with zoomed x-axis; DeBERTa accent + failed-seed marker."""
+    """Figure 2: between-encoder vs seed variance share for benchmark F1 and KB MRR."""
     _apply_style()
-    order = encoder_df.sort_values("benchmark_f1_mean", ascending=True)
-    y_pos = np.arange(len(order))
-    x = order["benchmark_f1_mean"].astype(float).values
-    xerr = np.array(
-        [
-            x - order.get("benchmark_f1_ci_lo", x).astype(float).values,
-            order.get("benchmark_f1_ci_hi", x).astype(float).values - x,
-        ]
-    )
-    colors = _encoder_point_colors(order["model_id"].tolist())
+    metrics = [
+        ("benchmark_f1", "Benchmark F1\n(in-distribution)"),
+        ("kb_mrr_gene_drug", "KB MRR\ngene-drug"),
+        ("kb_mrr_gene_disease", "KB MRR\ngene-disease"),
+    ]
+    labels = [m[1] for m in metrics]
+    enc_shares: list[float] = []
+    seed_shares: list[float] = []
+    enc_err_lo: list[float] = []
+    enc_err_hi: list[float] = []
 
-    fig, ax = plt.subplots(figsize=(8.5, 5.0))
-    ax.errorbar(
+    boot_map = {}
+    if variance_boot is not None and not variance_boot.empty:
+        boot_map = {row["metric"]: row for _, row in variance_boot.iterrows()}
+
+    for key, _ in metrics:
+        row = variance_df[variance_df["metric"] == key]
+        if row.empty:
+            enc_shares.append(0.0)
+            seed_shares.append(0.0)
+            enc_err_lo.append(0.0)
+            enc_err_hi.append(0.0)
+            continue
+        r = row.iloc[0]
+        enc = float(r["encoder_variance_share"])
+        seed = float(r["seed_variance_share"])
+        enc_shares.append(enc)
+        seed_shares.append(seed)
+        if key in boot_map:
+            b = boot_map[key]
+            lo = b.get("encoder_share_ci_lo")
+            hi = b.get("encoder_share_ci_hi")
+            if lo is not None and hi is not None:
+                enc_err_lo.append(enc - float(lo))
+                enc_err_hi.append(float(hi) - enc)
+            else:
+                enc_err_lo.append(0.0)
+                enc_err_hi.append(0.0)
+        else:
+            enc_err_lo.append(0.0)
+            enc_err_hi.append(0.0)
+
+    x = np.arange(len(labels))
+    width = 0.55
+    fig, ax = plt.subplots(figsize=(8.5, 5.2))
+    ax.bar(
         x,
-        y_pos,
-        xerr=xerr,
-        fmt="o",
+        enc_shares,
+        width,
+        label="Between-encoder share",
         color=PALETTE["neutral"],
-        ecolor=PALETTE["neutral_light"],
-        elinewidth=0.7,
-        capsize=2,
-        markersize=9,
-        zorder=3,
+        yerr=[enc_err_lo, enc_err_hi],
+        capsize=3,
+        error_kw={"elinewidth": 0.8, "ecolor": PALETTE["text"], "alpha": 0.7},
     )
-    for xi, yi, c in zip(x, y_pos, colors):
-        ax.plot(xi, yi, "o", color=c, markersize=9, zorder=4)
+    ax.bar(
+        x,
+        seed_shares,
+        width,
+        bottom=enc_shares,
+        label="Within-encoder (seed) share",
+        color=PALETTE["neutral_light"],
+    )
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels)
+    ax.set_ylabel("Variance share")
+    ax.set_ylim(0, 1.05)
+    ax.legend(loc="upper right", frameon=True)
+    ax.set_title(
+        "Discriminative power: benchmark vs KB axes\n"
+        "(low between-encoder share indicates saturation or seed-dominated axis)"
+    )
+    _save(fig, "fig2_variance_components.png")
 
-    ax.set_yticks(y_pos)
+
+def figure4_finetuning_lift(lift_df: pd.DataFrame) -> None:
+    """Figure 4: fine-tuned minus untrained-floor lift on benchmark and KB."""
+    _apply_style()
+    order = lift_df.sort_values("lift_benchmark_f1", ascending=True)
+    y = np.arange(len(order))
+    bench_lift = order["lift_benchmark_f1"].astype(float).values
+    kb_lift = (
+        (order["lift_kb_mrr_gene_drug"].astype(float) + order["lift_kb_mrr_gene_disease"].astype(float)) / 2
+    ).values
+
+    fig, ax = plt.subplots(figsize=(8.5, 5.5))
+    ax.barh(y - 0.18, bench_lift, height=0.34, label="Benchmark F1 lift", color=PALETTE["neutral"])
+    ax.barh(y + 0.18, kb_lift, height=0.34, label="KB MRR lift (pair-type mean)", color=PALETTE["accent"])
+    ax.axvline(0, color=PALETTE["text"], linewidth=0.8, linestyle="-", alpha=0.5)
+    ax.set_yticks(y)
     ax.set_yticklabels([_short_label(s) for s in order["short_name"]])
-    xmin = max(0.70, float(x.min()) - 0.015)
-    xmax = min(0.80, float(x.max()) + 0.02)
-    ax.set_xlim(xmin, xmax)
-    ax.set_xlabel("BioRED test presence F1 (encoder mean; seed uncertainty)")
-    ax.set_title("Benchmark quality gradient across nine encoders")
-    spread = float(x.max() - x.min())
-    ax.text(0.98, 0.04, f"Spread = {spread:.3f}", transform=ax.transAxes, ha="right", va="bottom", fontsize=10)
-
-    deb_idx = order.index[order["model_id"] == "deberta_base"].tolist()
-    if deberta_all_seeds_mean is not None and deb_idx:
-        yi = deb_idx[0]
-        ax.scatter(
-            [deberta_all_seeds_mean],
-            [yi],
-            marker="D",
-            s=55,
-            facecolors="none",
-            edgecolors=PALETTE["accent"],
-            linewidths=1.4,
-            zorder=5,
-            label=f"DeBERTa with failed seeds included ({deberta_all_seeds_mean:.3f})",
-        )
-        ax.legend(loc="lower right", frameon=True, borderpad=0.6)
-
-    _save(fig, "fig2_benchmark_f1_range.png")
+    ax.set_xlabel("Fine-tuned minus untrained floor (random classification head)")
+    ax.set_title(
+        "What fine-tuning adds on each axis\n"
+        "(pretrained encoder only; not a zero-shot capability claim)"
+    )
+    ax.legend(loc="lower right", frameon=True)
+    fig.subplots_adjust(left=0.22)
+    _save(fig, "fig4_finetuning_lift.png")
 
 
 def figure3_easy_hard_prerequisite(
@@ -380,13 +425,18 @@ def figure4_calibration_benchmark_ece(encoder_df: pd.DataFrame) -> None:
 def generate_publication_figures(
     encoder_df: pd.DataFrame,
     easy_hard_df: pd.DataFrame,
-    deberta_all_seeds_mean: float | None = None,
+    variance_df: pd.DataFrame,
+    variance_boot: pd.DataFrame | None = None,
+    lift_df: pd.DataFrame | None = None,
 ) -> None:
     """Emit exactly four PNG figures."""
     encoder_order = (
         encoder_df.sort_values("benchmark_f1_mean", ascending=False)["model_id"].tolist()
     )
     figure1_benchmark_kb_faceted(encoder_df)
-    figure2_benchmark_f1_range(encoder_df, deberta_all_seeds_mean=deberta_all_seeds_mean)
+    figure2_variance_components(variance_df, variance_boot)
     figure3_easy_hard_prerequisite(easy_hard_df, encoder_order)
-    figure4_calibration_benchmark_ece(encoder_df)
+    if lift_df is not None and not lift_df.empty:
+        figure4_finetuning_lift(lift_df)
+    else:
+        figure4_calibration_benchmark_ece(encoder_df)

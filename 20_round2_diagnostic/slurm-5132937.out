@@ -1,0 +1,41 @@
+=== Round 2 diagnostic analysis (CPU) ===
+STEP_DIR=/home/b5ac/freddieyu.b5ac/project_1/20_round2_diagnostic
+OUTPUT_ROOT=/home/b5ac/freddieyu.b5ac/project_1/../projects/project_1
+
+=== Checkpoint inventory (5e-6/none matrix) ===
+Folder-10 step-2 matrix at learning rate 5e-06 with no warmup: 72/72 runs have recoverable per-epoch fp16 checkpoints under matrix/checkpoints/{{model_id}}/seed_{{seed}}/epochs/epoch_NN/, plus fp32 best/ at validation-F1 best. Total 498 epoch checkpoints across nine encoders (eight seeds each where training completed). Per-encoder epoch counts: bert_base 60 epochs (8.0 seeds, mean 7.5/seed); biobert_base 57 epochs (8.0 seeds, mean 7.1/seed); biolinkbert_base 58 epochs (8.0 seeds, mean 7.2/seed); biomedbert_base 58 epochs (8.0 seeds, mean 7.2/seed); deberta_base 48 epochs (8.0 seeds, mean 6.0/seed); distilbert_base 67 epochs (8.0 seeds, mean 8.4/seed); pubmedbert_base 58 epochs (8.0 seeds, mean 7.2/seed); roberta_base 43 epochs (8.0 seeds, mean 5.4/seed); scibert_base 49 epochs (8.0 seeds, mean 6.1/seed).
+  PubMedBERT-base: 58 epoch checkpoints across 8 seeds
+  BioMedBERT-base: 58 epoch checkpoints across 8 seeds
+  BioLinkBERT-base: 58 epoch checkpoints across 8 seeds
+  BioBERT-base: 57 epoch checkpoints across 8 seeds
+  SciBERT: 49 epoch checkpoints across 8 seeds
+  RoBERTa-base: 43 epoch checkpoints across 8 seeds
+  BERT-base: 60 epoch checkpoints across 8 seeds
+  DistilBERT-base: 67 epoch checkpoints across 8 seeds
+  DeBERTa-base: 48 epoch checkpoints across 8 seeds
+
+=== Within-seed paired change summary (epoch 1 -> best val F1) ===
+  Pairable seeds: 65 | erosion (bench up, KB hard down): 37 (56.9%)
+  Mean delta benchmark: +0.0257 | mean delta KB hard: -0.0016 | mean delta KB gene-disease: -0.0569
+
+=== Hard vs easy (KB MRR change) ===
+  hard_cross_sentence: mean delta -0.0016 [-0.0081, +0.0049], KB falls in 39/65 seeds
+  easy_co_sentence: mean delta +0.0034 [-0.0035, +0.0102], KB falls in 31/65 seeds
+
+=== Pair type (KB MRR change) ===
+  gene-drug: mean delta +0.0080 [-0.0029, +0.0195], KB falls in 41/65 seeds
+  gene-disease: mean delta -0.0569 [-0.0854, -0.0269], KB falls in 48/65 seeds
+
+=== Robustness across well-trained definitions (mean frac erosion per encoder) ===
+  best validation F1 checkpoint: 58.1%
+  last saved epoch: 38.9%
+  fixed epoch 5 (capped at last saved): 41.7%
+
+=== ADJUDICATION VERDICT: explanation_2_static ===
+Knowledge-base ranking does not systematically fall within models as the in-distribution benchmark rises. The negative benchmark–KB association observed between models is better explained by static differences in inclusion criteria and evaluation pool construction (including PubTator Chemical breadth), not by progressive overfitting during training.
+Round 1 found KB gene-drug variance was about 77% within-encoder seed noise and 23% between encoders, so between-model comparisons had limited power. Within-seed paired changes across training remove between-seed noise and are the appropriate design for detecting a training-dynamics effect.
+Report -> /lus/lfs1aip2/projects/b5ac/project_1/reports/20_round2_diagnostic/report.md
+README -> /lus/lfs1aip2/projects/b5ac/project_1/reports/20_round2_diagnostic/README.md
+
+=== Round 2 diagnostic analysis complete ===
+End: Wed Jun 10 11:27:46 UTC 2026

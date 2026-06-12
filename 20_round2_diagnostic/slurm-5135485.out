@@ -1,0 +1,70 @@
+=== Round 2 cross-metric supplement (GPU) ===
+  Loaded enriched pool cache (enriched_primary_pool.parquet)
+
+=== Supplement pair×subset cross metrics ===
+Encoders: ['biomedbert_base']
+Seeds: [42, 43, 44, 45, 46, 47, 48, 49]
+
+  SUPPLEMENT biomedbert_base seed=42 epoch=1
+  SUPPLEMENT biomedbert_base seed=42 epoch=2
+  SUPPLEMENT biomedbert_base seed=42 epoch=3
+  SUPPLEMENT biomedbert_base seed=42 epoch=4
+  SUPPLEMENT biomedbert_base seed=42 epoch=5
+  SUPPLEMENT biomedbert_base seed=42 epoch=6
+  SUPPLEMENT biomedbert_base seed=42 epoch=7
+  SUPPLEMENT biomedbert_base seed=42 epoch=8
+  SUPPLEMENT biomedbert_base seed=42 epoch=9
+  SUPPLEMENT biomedbert_base seed=43 epoch=1
+  SUPPLEMENT biomedbert_base seed=43 epoch=2
+  SUPPLEMENT biomedbert_base seed=43 epoch=3
+  SUPPLEMENT biomedbert_base seed=43 epoch=4
+  SUPPLEMENT biomedbert_base seed=43 epoch=5
+  SUPPLEMENT biomedbert_base seed=43 epoch=6
+  SUPPLEMENT biomedbert_base seed=43 epoch=7
+  SUPPLEMENT biomedbert_base seed=43 epoch=8
+  SUPPLEMENT biomedbert_base seed=43 epoch=9
+  SUPPLEMENT biomedbert_base seed=44 epoch=1
+  SUPPLEMENT biomedbert_base seed=44 epoch=2
+  SUPPLEMENT biomedbert_base seed=44 epoch=3
+  SUPPLEMENT biomedbert_base seed=44 epoch=4
+  SUPPLEMENT biomedbert_base seed=44 epoch=5
+  SUPPLEMENT biomedbert_base seed=44 epoch=6
+  SUPPLEMENT biomedbert_base seed=44 epoch=7
+  SUPPLEMENT biomedbert_base seed=44 epoch=8
+  SUPPLEMENT biomedbert_base seed=44 epoch=9
+  SUPPLEMENT biomedbert_base seed=45 epoch=1
+  SUPPLEMENT biomedbert_base seed=45 epoch=2
+  SUPPLEMENT biomedbert_base seed=45 epoch=3
+  SUPPLEMENT biomedbert_base seed=45 epoch=4
+  SUPPLEMENT biomedbert_base seed=45 epoch=5
+  SUPPLEMENT biomedbert_base seed=45 epoch=6
+  SUPPLEMENT biomedbert_base seed=45 epoch=7
+  SUPPLEMENT biomedbert_base seed=45 epoch=8
+  SUPPLEMENT biomedbert_base seed=46 epoch=1
+  SUPPLEMENT biomedbert_base seed=46 epoch=2
+  SUPPLEMENT biomedbert_base seed=46 epoch=3
+  SUPPLEMENT biomedbert_base seed=46 epoch=4
+  SUPPLEMENT biomedbert_base seed=46 epoch=5
+  SUPPLEMENT biomedbert_base seed=47 epoch=1
+  SUPPLEMENT biomedbert_base seed=47 epoch=2
+  SUPPLEMENT biomedbert_base seed=47 epoch=3
+  SUPPLEMENT biomedbert_base seed=47 epoch=4
+  SUPPLEMENT biomedbert_base seed=47 epoch=5
+  SUPPLEMENT biomedbert_base seed=47 epoch=6
+  SUPPLEMENT biomedbert_base seed=47 epoch=7
+  SUPPLEMENT biomedbert_base seed=48 epoch=1
+  SUPPLEMENT biomedbert_base seed=48 epoch=2
+  SUPPLEMENT biomedbert_base seed=48 epoch=3
+  SUPPLEMENT biomedbert_base seed=48 epoch=4
+  SUPPLEMENT biomedbert_base seed=48 epoch=5
+  SUPPLEMENT biomedbert_base seed=48 epoch=6
+  SUPPLEMENT biomedbert_base seed=48 epoch=7
+  SUPPLEMENT biomedbert_base seed=49 epoch=1
+  SUPPLEMENT biomedbert_base seed=49 epoch=2
+  SUPPLEMENT biomedbert_base seed=49 epoch=3
+  SUPPLEMENT biomedbert_base seed=49 epoch=4
+
+=== Cross-metric supplement done ===
+  Total epoch JSON: 58, updated: 58, already complete: 0
+
+End: Wed Jun 10 12:56:19 UTC 2026

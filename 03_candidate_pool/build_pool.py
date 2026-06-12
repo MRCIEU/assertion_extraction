@@ -482,6 +482,13 @@ def build_candidate_pool(force_fetch: bool = False) -> dict[str, Any]:
     return protocol
 
 
+def refresh_entity_type_alignment() -> dict[str, Any]:
+    """CPU-only: entity-type alignment diagnostic + report section."""
+    from .entity_type_alignment import refresh_entity_type_alignment as _run
+
+    return _run()
+
+
 def refresh_recall_diagnostic() -> None:
     """Read-only PubTator recall diagnostic; patch report section in place."""
     from .pubtator_recall import recall_report_section, run_pubtator_recall_diagnostic
@@ -630,6 +637,9 @@ def refresh_full_report() -> None:
     )
     plot_systematic_loss(loss_comparison, gene_comparison)
     refresh_recall_diagnostic()
+    from .entity_type_alignment import refresh_entity_type_alignment
+
+    refresh_entity_type_alignment()
 
 
 def refresh_baselines_and_report() -> None:

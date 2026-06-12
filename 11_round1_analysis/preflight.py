@@ -1,13 +1,12 @@
-#!/usr/bin/env python3
 """Pre-flight checks for folder 11 (no full KB scoring)."""
 
 from __future__ import annotations
 
-import importlib
 import py_compile
 import sys
 from pathlib import Path
 
+import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 REPO = Path(__file__).resolve().parents[1]
@@ -20,10 +19,9 @@ from shared.constants import TRAIN_SEEDS
 from shared.models import MODELS
 from shared.pool_loader import load_primary_candidates
 
-from importlib import import_module as im
-
-cfg = im("11_round1_analysis.config")
-score_runs = im("11_round1_analysis.score_runs")
+cfg = import_module("11_round1_analysis.config")
+score_runs = import_module("11_round1_analysis.score_runs")
+score_untrained = import_module("11_round1_analysis.score_untrained")
 
 
 def _check(name: str, ok: bool, detail: str = "") -> bool:
@@ -78,23 +76,40 @@ def main() -> int:
     except Exception as exc:
         all_ok &= _check("Sample checkpoint loadable", False, str(exc))
 
-    # 3. Frozen pool
+    # 3. Untrained-floor path (pretrained + random head, CPU smoke)
+    try:
+        spec = MODELS[0]
+        torch.manual_seed(cfg.UNTRAINED_HEAD_SEED)
+        tok = AutoTokenizer.from_pretrained(spec.hf_name)
+        mdl = AutoModelForSequenceClassification.from_pretrained(spec.hf_name, num_labels=2)
+        n_params = sum(p.numel() for p in mdl.parameters())
+        del mdl, tok
+        all_ok &= _check(
+            "Untrained-floor model loadable",
+            True,
+            f"{spec.hf_name} ({n_params:,} params, head seed {cfg.UNTRAINED_HEAD_SEED})",
+        )
+    except Exception as exc:
+        all_ok &= _check("Untrained-floor model loadable", False, str(exc))
+
+    # 4. Frozen pool
     try:
         pool = load_primary_candidates()
         n_abs = pool["pmid"].nunique()
         n_cand = len(pool)
         pair_types = sorted(pool["pair_type"].unique().tolist())
+        n_pos = int(pool["label_civic_curated_positive"].sum()) if "label_civic_curated_positive" in pool.columns else -1
         all_ok &= _check(
             "Frozen CIViC pool loads",
             n_cand > 0 and n_abs > 0,
-            f"{n_cand} candidates, {n_abs} abstracts, pair types {pair_types}",
+            f"{n_cand} candidates, {n_abs} abstracts, {n_pos} pool positives, pair types {pair_types}",
         )
         variant_in_pool = any(str(pt).startswith("variant") for pt in pair_types)
         all_ok &= _check("Variant pairs excluded from pool", not variant_in_pool, f"pair types={pair_types}")
     except Exception as exc:
         all_ok &= _check("Frozen CIViC pool loads", False, str(exc))
 
-    # 4. Step-02 eval targets + step-01 PMID list
+    # 5. Step-02 eval targets + step-01 PMID list
     try:
         from _paths import OUTPUT_ROOT
 
@@ -105,12 +120,15 @@ def main() -> int:
 
         excl = upstream_paths()["excluded_pmids_json"]
         all_ok &= _check("Step-01 excluded PMIDs list", excl.exists(), str(excl))
+        baselines = OUTPUT_ROOT / "outputs" / "03_candidate_pool" / "ranking_baselines.csv"
+        all_ok &= _check("Step-03 ranking baselines", baselines.exists(), str(baselines))
     except Exception as exc:
         all_ok &= _check("Evaluation upstream artifacts", False, str(exc))
 
-    # 5. Shared inference imports
+    # 6. Shared inference imports
     try:
         import_module("shared.inference")
+        import_module("shared.benchmark_eval")
         import_module("shared.metrics_ranking")
         import_module("shared.metrics_calibration")
         import_module("shared.distance_analysis")
@@ -119,7 +137,7 @@ def main() -> int:
     except Exception as exc:
         all_ok &= _check("Shared inference/metrics imports", False, str(exc))
 
-    # 6. py_compile folder-11 modules
+    # 7. py_compile folder-11 modules
     step_dir = REPO / "11_round1_analysis"
     py_files = sorted(step_dir.glob("*.py"))
     compile_ok = True
@@ -133,25 +151,30 @@ def main() -> int:
             break
     all_ok &= _check("py_compile folder-11 modules", compile_ok, compile_err or f"{len(py_files)} files")
 
-    # 7. Scoring path trace (imports + marker helpers)
+    # 8. Scoring path trace
     try:
         assert hasattr(score_runs, "is_scored")
         assert hasattr(score_runs, "count_scored_runs")
+        assert hasattr(score_untrained, "is_untrained_scored")
+        assert hasattr(score_untrained, "count_untrained_scored")
         n_scored = score_runs.count_scored_runs()
+        n_untrained = score_untrained.count_untrained_scored()
         all_ok &= _check(
             "Scoring path trace",
             True,
-            f"markers on disk {n_scored}/{expected} (0 expected before stage 1)",
+            f"fine-tuned markers {n_scored}/{expected}, untrained {n_untrained}/{len(MODELS)} "
+            "(0 expected before stage 1/1b on fresh rerun)",
         )
     except Exception as exc:
         all_ok &= _check("Scoring path trace", False, str(exc))
 
-    # 8. Analysis path trace
+    # 9. Analysis path trace
     try:
         import_module("11_round1_analysis.run_analysis")
         import_module("11_round1_analysis.build_auxiliary")
         import_module("11_round1_analysis.figures")
         import_module("11_round1_analysis.report")
+        import_module("11_round1_analysis.score_untrained")
         all_ok &= _check("Analysis path trace", True)
     except Exception as exc:
         all_ok &= _check("Analysis path trace", False, str(exc))

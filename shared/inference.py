@@ -15,6 +15,42 @@ from .pool_loader import load_primary_candidates
 from .train_core import require_gpu
 
 
+def score_model_on_candidates(
+    model,
+    tokenizer,
+    candidates: pd.DataFrame,
+    *,
+    model_id: str = "unknown",
+    seed: int = -1,
+    run_id: str | None = None,
+    device=None,
+) -> pd.DataFrame:
+    """Score candidates with an in-memory model (fine-tuned checkpoint or untrained floor)."""
+    if device is None:
+        device = require_gpu()
+    texts = [format_eval_input(row) for _, row in candidates.iterrows()]
+    probs: list[float] = []
+    model.eval()
+    with torch.no_grad():
+        for i in range(0, len(texts), INFER_BATCH_SIZE):
+            enc = tokenizer(
+                texts[i : i + INFER_BATCH_SIZE],
+                truncation=True,
+                padding=True,
+                max_length=MAX_SEQ_LENGTH,
+                return_tensors="pt",
+            )
+            enc = {k: v.to(device) for k, v in enc.items()}
+            p = torch.softmax(model(**enc).logits, dim=-1)[:, 1].cpu().numpy()
+            probs.extend(p.tolist())
+    out = candidates.copy()
+    out["model_id"] = model_id
+    out["seed"] = seed
+    out["run_id"] = run_id or f"{model_id}_seed_{seed}"
+    out["score"] = probs
+    return out
+
+
 def score_checkpoint_path(
     ckpt_dir: Path,
     candidates: pd.DataFrame | None = None,
@@ -26,23 +62,17 @@ def score_checkpoint_path(
     if candidates is None:
         candidates = load_primary_candidates()
     device = require_gpu()
-    texts = [format_eval_input(row) for _, row in candidates.iterrows()]
     tokenizer = AutoTokenizer.from_pretrained(ckpt_dir)
     model = AutoModelForSequenceClassification.from_pretrained(ckpt_dir).to(device)
-    probs: list[float] = []
-    model.eval()
-    with torch.no_grad():
-        for i in range(0, len(texts), INFER_BATCH_SIZE):
-            enc = tokenizer(texts[i : i + INFER_BATCH_SIZE], truncation=True, padding=True, max_length=MAX_SEQ_LENGTH, return_tensors="pt")
-            enc = {k: v.to(device) for k, v in enc.items()}
-            p = torch.softmax(model(**enc).logits, dim=-1)[:, 1].cpu().numpy()
-            probs.extend(p.tolist())
-    out = candidates.copy()
-    out["model_id"] = model_id
-    out["seed"] = seed
-    out["run_id"] = run_id or f"{model_id}_seed_{seed}"
-    out["score"] = probs
-    return out
+    return score_model_on_candidates(
+        model,
+        tokenizer,
+        candidates,
+        model_id=model_id,
+        seed=seed,
+        run_id=run_id,
+        device=device,
+    )
 
 
 def write_scores_jsonl(df: pd.DataFrame, out_path: Path) -> None:
