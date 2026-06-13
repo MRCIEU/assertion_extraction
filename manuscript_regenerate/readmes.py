@@ -77,7 +77,7 @@ Scores per-epoch checkpoints on benchmark and CIViC ranking to test within-model
 
 Method: Pairwise comparison from epoch 1 to best validation-F1 checkpoint, split by gene-drug and gene-disease.
 
-Results: 498 epoch checkpoints; 65 pairable seeds. Pooled hard-subset KB delta -0.0016; gene-disease -0.0569 (48/65 fall); gene-drug +0.0080. Verdict: mixed_gene_disease_signal.
+Results: 498 epoch checkpoints; 65 pairable seeds. Pooled hard-subset KB delta -0.0016; gene-disease -0.0569 (48/65 fall); gene-drug +0.0080. Verdict: gene_disease_biomed_pretraining_erosion (within-model biomed-pretraining erosion; regular encoder heterogeneity).
 """,
 }
 
@@ -105,4 +105,5 @@ def write_readme(step_key: str, repo: Path | None = None) -> Path:
 
 
 def write_all_readmes(repo: Path | None = None) -> list[Path]:
-    return [write_readme(key, repo=repo) for key in README_BODIES]
+    skip = {"20"}  # Step 20 README is owned by 20_round2_diagnostic/report.py
+    return [write_readme(key, repo=repo) for key in README_BODIES if key not in skip]

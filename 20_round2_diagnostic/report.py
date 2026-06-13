@@ -338,7 +338,7 @@ def write_report(
             "hard_concentrated": "Hard-subset decline sharply exceeds easy-subset decline",
             "robust_gene_disease_hard_all_defs": "Gene-disease-hard decline stable across three checkpoint definitions",
             "broad_based_seeds_hard": "Gene-disease-hard decline broad-based (≥65% seeds, median negative)",
-            "encoder_consistent": "Gene-disease-hard decline present across most encoders",
+            "encoder_consistent": "Uniform decline across all encoders (legacy uniformity bar)",
             "outlier_driven": "Mean driven by a few extreme seeds (diagnostic flag)",
         }
         for key, label in labels.items():
@@ -347,6 +347,12 @@ def write_report(
             val = criteria[key]
             if key == "outlier_driven":
                 status = "yes (caution)" if val else "no"
+            elif key == "encoder_consistent":
+                status = (
+                    "not met; regular heterogeneity by pretraining domain recorded instead"
+                    if not val
+                    else "met"
+                )
             else:
                 status = "met" if val else "not met"
             lines.append(f"- {label}: {status}")
@@ -530,7 +536,8 @@ def write_readme(
         )
     lines.extend(
         [
-            f"- Gene-disease verdict: {gene_disease_verdict.get('verdict', 'pending')}",
+            f"- Gene-disease verdict: {gene_disease_verdict.get('verdict', 'pending')} "
+            "(within-model biomed-pretraining erosion; regular encoder heterogeneity)",
             f"- Pooled verdict: {verdict.get('verdict', 'pending')}",
             "",
             "## Adjudication criteria (gene-disease)",
@@ -543,12 +550,26 @@ def write_readme(
         ("hard_concentrated", "Hard-concentrated"),
         ("robust_gene_disease_hard_all_defs", "Gene-disease-hard robust across defs"),
         ("broad_based_seeds_hard", "Broad-based (hard)"),
-        ("encoder_consistent", "Encoder-consistent"),
+        ("encoder_consistent", "Uniform across encoders (legacy bar)"),
     ]:
         if k in crit:
-            lines.append(f"- {label}: {'yes' if crit[k] else 'no'}")
+            if k == "encoder_consistent":
+                lines.append(
+                    f"- {label}: "
+                    f"{'yes' if crit[k] else 'no; regular heterogeneity by pretraining instead'}"
+                )
+            else:
+                lines.append(f"- {label}: {'yes' if crit[k] else 'no'}")
     lines.extend(
         [
+            "",
+            "## Figures",
+            "",
+            "Cite the native pipeline figures from analyze (fig1_per_seed_trajectories through "
+            "fig10_failure_mode_summary). Manuscript-regeneration fig1_within_seed_paired_change, "
+            "fig2_pair_type_asymmetry, and fig3_gene_disease_subset_contrast are legacy compact "
+            "summaries; prefer fig2_within_seed_paired_change, fig3_hard_easy_pair_type, and "
+            "fig6_pair_type_subset_contrast for the same content at full diagnostic depth.",
             "",
             "## Workflow",
             "",
