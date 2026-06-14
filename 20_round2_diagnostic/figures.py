@@ -46,7 +46,7 @@ def figure1_per_seed_trajectories(traj: pd.DataFrame) -> None:
     encoders = [m.model_id for m in MODELS]
     ncol = 3
     nrow = int(np.ceil(len(encoders) / ncol))
-    fig, axes = plt.subplots(nrow, ncol, figsize=(12, 3.4 * nrow))
+    fig, axes = plt.subplots(nrow, ncol, figsize=(9.0, 2.2 * nrow))
     axes = np.atleast_1d(axes).flatten()
 
     for ax, mid in zip(axes, encoders):
@@ -230,7 +230,7 @@ def figure5_gene_disease_hard_trajectories(traj: pd.DataFrame) -> None:
     encoders = [m.model_id for m in MODELS]
     ncol = 3
     nrow = int(np.ceil(len(encoders) / ncol))
-    fig, axes = plt.subplots(nrow, ncol, figsize=(12, 3.4 * nrow))
+    fig, axes = plt.subplots(nrow, ncol, figsize=(9.0, 2.2 * nrow))
     axes = np.atleast_1d(axes).flatten()
 
     for ax, mid in zip(axes, encoders):

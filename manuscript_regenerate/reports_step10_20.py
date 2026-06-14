@@ -65,6 +65,15 @@ Lower rates at **5e-6/none** and **5e-6/warmup** kept DeBERTa healthy within thr
 
 The confirmed matrix uses learning rate **5e-6** with **no warmup**, offset-marked training data from the step-05 gate, and validation-F1 checkpoint selection. Seventy-two runs completed across nine encoders and eight seeds with per-epoch fp16 weights plus fp32 best checkpoints. Mean {_BENCH} across encoders spans about **{bench_min:.2f}** to **{bench_max:.2f}**, a spread near **0.72** to **0.75** on the encoder means in matrix_encoder_summary.csv. Within-recipe seed spread at **5e-6/none** is **{confirmed_spread:.3f}** on the sweep advisory axis.
 
+| Matrix summary | Value |
+| --- | ---: |
+| Confirmed recipe | 5e-6 / none |
+| Encoders | 9 |
+| Seeds per encoder | 8 |
+| Benchmark F1 spread (encoder means) | {confirmed_spread:.3f} |
+| Benchmark F1 mean range | {bench_min:.3f} – {bench_max:.3f} |
+| Epoch checkpoints for step 20 | 498 |
+
 DeBERTa-base passes the hard acceptance gate at this recipe: no seed collapses and no systematic suppression relative to peer encoders. Attempts at **3e-5/warmup** remain a documented failure mode for DeBERTa despite recovery on guard seeds.
 
 ## Matrix outcomes

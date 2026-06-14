@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 from .figures import REGENERATORS
-from .paths import REPO, STEPS, VOCAB, step_paths
+from .paths import OUTPUT_ROOT, REPO, STEPS, VOCAB, step_paths
 from .preflight import check_artifacts, check_style_module
 from .provenance_checks import VERIFY
 from .readmes import write_all_readmes
@@ -30,7 +30,7 @@ REPORT_WRITERS = {
 }
 
 FIGURE_BUDGET = {
-    "00": 1, "01": 2, "02": 1, "03": 2, "04": 1, "05": 1, "10": 2, "11": 4, "20": 3,
+    "00": 1, "01": 2, "02": 1, "03": 2, "04": 1, "05": 1, "10": 2, "11": 4, "20": 10,
 }
 TABLE_BUDGET = {
     "00": 2, "01": 3, "02": 2, "03": 3, "04": 2, "05": 1, "10": 2, "11": 0, "20": 1,
@@ -112,6 +112,25 @@ label overlap and variance-bar ambiguity; resolve duplicate figure numbers. Skip
     print(f"\nReports and figures written under {projects} (outside git repo).")
 
 
+def regenerate_step20_report() -> None:
+    """Refresh step-20 report from report.py (CPU only, existing scores)."""
+    import os
+    import subprocess
+    import sys
+
+    step_dir = REPO / "20_round2_diagnostic"
+    env = os.environ.copy()
+    env["OUTPUT_ROOT"] = str(OUTPUT_ROOT)
+    env["PYTHONUNBUFFERED"] = "1"
+    print("\n=== Step 20 report assembly (CPU, existing artifacts) ===")
+    subprocess.run(
+        [sys.executable, "run.py", "--analyze-only", "--skip-stratum-inference"],
+        cwd=step_dir,
+        env=env,
+        check=True,
+    )
+
+
 def main() -> None:
     print("=== Manuscript source regeneration ===")
     print(f"Shared vocabulary: {VOCAB['benchmark']}; {VOCAB['kb']}; {VOCAB['question']}")
@@ -129,6 +148,8 @@ def main() -> None:
 
     print("\n=== Regenerating READMEs ===")
     readmes = write_all_readmes()
+
+    regenerate_step20_report()
 
     for key in sorted(set(list(REPORT_WRITERS.keys()) + list(REGENERATORS.keys()))):
         report_path = step_paths(STEPS[key])["reports"] / "report.md" if key in STEPS else Path()

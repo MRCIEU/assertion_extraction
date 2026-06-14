@@ -395,6 +395,10 @@ def run_mundane_explanations(
         stratum_detail, stratum_summary = build_pool_stratum_paired_change(paired)
         stratum_detail.to_csv(POOL_STRATUM_CSV, index=False)
         stratum_summary.to_csv(POOL_STRATUM_SUMMARY_CSV, index=False)
+    elif POOL_STRATUM_SUMMARY_CSV.exists():
+        stratum_summary = pd.read_csv(POOL_STRATUM_SUMMARY_CSV)
+        if POOL_STRATUM_CSV.exists():
+            stratum_detail = pd.read_csv(POOL_STRATUM_CSV)
 
     pos_boot = bootstrap_positive_sign_stability(traj)
 

@@ -370,7 +370,7 @@ def regenerate_step11() -> list[str]:
         "Benchmark vs knowledge-base ranking by pair type\n(encoder means; seed uncertainty bars)",
         y=0.98, fontsize=11,
     )
-    fig.subplots_adjust(wspace=0.22, bottom=0.22, top=0.82)
+    fig.subplots_adjust(wspace=0.22, bottom=0.26, top=0.82, left=0.10, right=0.98)
     _encoder_legend(fig, model_ids, y_anchor=0.02)
     n1 = "fig1_benchmark_kb_scatter.png"
     save_figure(fig, fig_dir / n1)
@@ -397,16 +397,25 @@ def regenerate_step11() -> list[str]:
 
     fig, ax = plt.subplots(figsize=FIG_SINGLE)
     x = np.arange(len(labels))
-    ax.bar(x, shares, width=0.55, color=COLORS["benchmark"], yerr=[err_lo, err_hi], capsize=3,
-           error_kw={"elinewidth": 0.8, "ecolor": COLORS["neutral"]})
+    bars = ax.bar(x, shares, width=0.55, color=COLORS["benchmark"])
+    ax.errorbar(
+        x, shares, yerr=[err_lo, err_hi], fmt="none", capsize=3,
+        ecolor=COLORS["neutral"], elinewidth=0.8,
+    )
     for i, (xi, yi, txt) in enumerate(zip(x, shares, seed_txt)):
-        ax.text(xi, yi + err_hi[i] + 0.04, txt, ha="center", va="bottom", fontsize=8, color=COLORS["neutral"])
+        ax.text(
+            xi, yi + err_hi[i] + 0.02, f"{100 * yi:.0f}%",
+            ha="center", va="bottom", fontsize=8, color=COLORS["benchmark"],
+        )
+        ax.text(xi, -0.14, txt, ha="center", va="top", fontsize=7, color=COLORS["neutral"],
+                transform=ax.get_xaxis_transform())
     ax.set_xticks(x)
     ax.set_xticklabels(labels)
     ax.set_ylabel("Between-encoder variance share")
-    ax.set_ylim(0, max(shares) + max(err_hi) + 0.15)
+    ax.set_ylim(0, max(shares) + max(err_hi) + 0.12)
     ax.set_title("Discriminative power: between-encoder share by axis")
     add_light_grid(ax, "y")
+    fig.subplots_adjust(bottom=0.22)
     n2 = "fig2_variance_between_encoder.png"
     save_figure(fig, fig_dir / n2)
     kept.append(n2)
@@ -488,64 +497,62 @@ def regenerate_step11() -> list[str]:
 
 
 def regenerate_step20() -> list[str]:
-    apply_style()
-    out = _out_dir("20")
+    """Regenerate native step-20 figures; remove legacy manuscript-regen duplicates."""
+    import sys
+    from importlib import import_module
+
     fig_dir = _fig_dir("20")
-    kept: list[str] = []
+    for legacy in (
+        "fig1_within_seed_paired_change.png",
+        "fig2_pair_type_asymmetry.png",
+        "fig3_gene_disease_subset_contrast.png",
+    ):
+        _remove(fig_dir / legacy)
 
-    paired = pd.read_csv(out / "20_within_seed_paired_changes.csv")
-    agg = paired.groupby("short_name").agg(
-        d_bench=("delta_benchmark_f1_val_f1_best", "mean"),
-        d_kb_hard=("delta_kb_mrr_hard_val_f1_best", "mean"),
-    ).reset_index()
-    fig, ax = plt.subplots(figsize=FIG_WIDE)
-    x = np.arange(len(agg))
-    w = 0.35
-    ax.bar(x - w / 2, agg["d_bench"], w, label="Benchmark F1 change", color=COLORS["benchmark"])
-    ax.bar(x + w / 2, agg["d_kb_hard"], w, label="KB hard MRR change", color=COLORS["kb"])
-    ax.axhline(0, color=COLORS["neutral"], linewidth=0.8)
-    ax.set_xticks(x)
-    ax.set_xticklabels(agg["short_name"].str.replace("-base", ""), rotation=35, ha="right", fontsize=8)
-    ax.set_ylabel("Mean paired change (epoch 1 to best val F1)")
-    ax.set_title("Within-seed paired change by encoder")
-    ax.legend(frameon=False)
-    add_light_grid(ax, "y")
-    n1 = "fig1_within_seed_paired_change.png"
-    save_figure(fig, fig_dir / n1)
-    kept.append(n1)
+    repo = Path(__file__).resolve().parents[1]
+    if str(repo) not in sys.path:
+        sys.path.insert(0, str(repo))
 
-    pt = pd.read_csv(out / "20_pair_type_breakdown.csv")
-    sub = pt[pt["well_trained_definition"] == "val_f1_best"]
-    fig, ax = plt.subplots(figsize=FIG_SINGLE)
-    pair_order = ["gene-drug", "gene-disease"]
-    sub = sub.set_index("pair_type").reindex(pair_order).reset_index()
-    colors = [COLORS["gene_drug"], COLORS["gene_disease"]]
-    ax.bar(sub["pair_type"], sub["mean_delta_kb_mrr"], color=colors, width=0.5)
-    ax.axhline(0, color=COLORS["neutral"], linewidth=0.8)
-    ax.set_ylabel("Mean KB MRR change")
-    ax.set_title("Pair-type asymmetry (best val F1 checkpoint)")
-    add_light_grid(ax, "y")
-    n2 = "fig2_pair_type_asymmetry.png"
-    save_figure(fig, fig_dir / n2)
-    kept.append(n2)
+    out = _out_dir("20")
+    cfg = import_module("20_round2_diagnostic.config")
+    adj = import_module("20_round2_diagnostic.adjudication")
+    mundane_mod = import_module("20_round2_diagnostic.mundane_explanations")
+    enc_mod = import_module("20_round2_diagnostic.encoder_correlation")
+    qual_mod = import_module("20_round2_diagnostic.qualitative_errors")
+    fig_mod = import_module("20_round2_diagnostic.figures")
 
-    gd = pd.read_csv(out / "20_gene_disease_subset_breakdown.csv")
-    sub2 = gd[gd["well_trained_definition"] == "val_f1_best"]
-    fig, ax = plt.subplots(figsize=FIG_SINGLE)
-    labels = sub2["label"].str.replace("gene-disease ", "").tolist()
-    ax.bar(labels, sub2["mean_delta_kb_mrr"], color=COLORS["gene_disease"], width=0.55)
-    ax.axhline(0, color=COLORS["neutral"], linewidth=0.8)
-    ax.set_ylabel("Mean KB MRR change")
-    ax.set_title("Gene-disease decline by subset")
-    add_light_grid(ax, "y")
-    plt.xticks(rotation=15, ha="right")
-    n3 = "fig3_gene_disease_subset_contrast.png"
-    save_figure(fig, fig_dir / n3)
-    kept.append(n3)
+    results = adj.run_adjudication_analysis()
+    mundane = mundane_mod.run_mundane_explanations(
+        results["trajectory"],
+        results["paired"],
+        skip_stratum_inference=True,
+    )
+    stratum_summary = (
+        pd.read_csv(cfg.POOL_STRATUM_SUMMARY_CSV)
+        if cfg.POOL_STRATUM_SUMMARY_CSV.exists()
+        else pd.DataFrame()
+    )
+    gd_enc = results.get("gene_disease", {}).get("encoder")
+    encoder_corr = enc_mod.run_encoder_correlation(
+        gd_enc if gd_enc is not None else __import__("pandas").DataFrame(),
+        results["trajectory"],
+    )
+    qual = qual_mod.run_qualitative_errors()
 
-    for old in fig_dir.glob("fig*.png"):
-        if old.name not in kept:
-            _remove(old)
+    fig_mod.generate_all_figures(
+        results["trajectory"],
+        results["paired"],
+        results["hard_easy"],
+        results["pair_type"],
+        results["robustness"],
+        results.get("gene_disease", {}).get("pair_subset"),
+        mundane.get("timing_summary"),
+        stratum_summary if not stratum_summary.empty else None,
+        encoder_corr.get("table"),
+        qual.get("patterns"),
+        qual.get("summary"),
+    )
+    kept = sorted(p.name for p in fig_dir.glob("fig*.png"))
     return kept
 
 

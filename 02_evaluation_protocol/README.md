@@ -4,4 +4,10 @@ Freezes evaluable ranking targets and defines metrics only.
 
 Method: Freeze abstract-grounded gene-drug and gene-disease positives from step 00; define MRR, Recall@k, and AUC-PR.
 
-Results: 1812 targets across 915 PMIDs (1230 gene-drug; 582 gene-disease). 262 variant pairs excluded. Trivial baselines run in step 03.
+| Target set | Count |
+| --- | ---: |
+| Frozen ranking targets | 1812 |
+| PMIDs | 915 |
+| Gene-drug | 1230 |
+| Gene-disease | 582 |
+| Variant pairs excluded | 262 |

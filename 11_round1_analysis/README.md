@@ -2,6 +2,12 @@
 
 Compares nine encoders on in-distribution benchmark and out-of-distribution CIViC ranking at a single checkpoint.
 
-Method: Score seventy-two fine-tuned runs plus nine untrained-floor references on both axes; variance decomposition, association bootstrap, and calibration diagnostics.
+Method: Score seventy-two fine-tuned runs plus nine untrained-floor references on both axes; variance decomposition and seed-level association bootstrap.
 
-Results: Benchmark spread 0.025; variance shares 36/64 benchmark, 23/77 gene-drug KB, 13/87 gene-disease KB. Fine-tuned KB means 0.676 gene-drug and 0.625 gene-disease. Seed-level benchmark–KB association negative on both pair types.
+| Axis | Between / within encoder variance | Fine-tuned mean |
+| --- | --- | ---: |
+| Benchmark F1 | 36% / 64% | spread 0.025 |
+| KB MRR gene-drug | 23% / 77% | 0.676 |
+| KB MRR gene-disease | 13% / 87% | 0.625 |
+
+Seed-level benchmark–KB Spearman: gene-drug negative; gene-disease negative (interval-heavy).

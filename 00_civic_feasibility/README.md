@@ -4,4 +4,10 @@ Pulls accepted CIViC evidence and inventories PubMed-backed two-entity targets f
 
 Method: GraphQL fetch of accepted evidence, abstract-grounding check, entity-pair inventory.
 
-Results: 4856 accepted evidence items; 4674 evaluable two-entity targets; 2074 abstract-grounded pairs. Step 02 freezes 1812 gene-drug and gene-disease targets; 262 variant pairs are excluded from ranking.
+| Metric | Count |
+| --- | ---: |
+| Accepted evidence items | 4856 |
+| Evaluable two-entity targets | 4674 |
+| Abstract-grounded pairs | 2074 |
+| Frozen gene-drug + gene-disease (step 02) | 1812 |
+| Variant pairs excluded | 262 |

@@ -205,11 +205,71 @@ def _robustness_passes(robust_df: pd.DataFrame, slug: str) -> dict[str, Any]:
     return {"by_def": out, "stable_across_defs": stable}
 
 
+def _encoder_correlation_prose(encoder: pd.DataFrame, traj: pd.DataFrame) -> tuple[str, str]:
+    """Read Spearman values from the same inputs as encoder_correlation.py."""
+    from scipy.stats import spearmanr
+
+    from .encoder_correlation import build_encoder_correlation_table
+
+    table = build_encoder_correlation_table(encoder, traj)
+    y = table["erosion_magnitude"].astype(float).to_numpy()
+    out: dict[str, tuple[float, float]] = {}
+    for prop in ("mean_benchmark_f1", "biomedical_pretrain"):
+        x = table[prop].astype(float).to_numpy()
+        rho, p = spearmanr(x, y)
+        out[prop] = (float(rho), float(p))
+    biomed_rho, biomed_p = out["biomedical_pretrain"]
+    bench_rho, bench_p = out["mean_benchmark_f1"]
+    biomed_line = f"Spearman rho={biomed_rho:+.3f}, p={biomed_p:.3f}"
+    bench_line = f"rho={bench_rho:+.3f}, p={bench_p:.3f}"
+    return biomed_line, bench_line
+
+
+def _mixed_verdict_narrative(
+    encoder: pd.DataFrame,
+    traj: pd.DataFrame,
+) -> str:
+    from .mundane_explanations import bootstrap_positive_sign_stability
+
+    biomed_line, bench_line = _encoder_correlation_prose(encoder, traj)
+    pb = bootstrap_positive_sign_stability(traj)
+    boot_txt = f"{100 * float(pb.get('frac_negative_bootstrap', 0)):.1f}%"
+    return (
+        "The three mundane checks rule out ordinary artefacts. Gene-disease ranking decline "
+        "is stable across all three well-trained checkpoint definitions. In most seeds the "
+        "knowledge-base peak precedes or coincides with the validation-best checkpoint, so "
+        "simple post-optimum overfitting is not the main story. The decline persists in "
+        "abstracts whose pool size matches the gene-drug range, and bootstrap over seeds "
+        f"puts the probability of a negative gene-disease-hard mean change at {boot_txt}. This is "
+        "a non-trivial within-model effect, not an artefact of checkpoint choice, pool size, "
+        "or a few outlier seeds. "
+        "There is no single uniform mechanism acting identically on every architecture. "
+        "Instead the data show regular, predictable encoder heterogeneity. Biomedical-domain "
+        "encoders (PubMedBERT, BioMedBERT, BioLinkBERT, SciBERT) show systematic gene-disease "
+        "decline during training, with every seed falling in three of those four families. "
+        "General-purpose encoders show flat or rising hard-subset ranking. Erosion magnitude "
+        f"increases monotonically with biomedical pretraining ({biomed_line}) "
+        f"and with benchmark level ({bench_line}) across nine encoders. That pattern is "
+        "a descriptive finding, not noise or a failed uniformity check. With only nine "
+        "correlated encoder families, this relationship is exploratory and needs a controlled "
+        "encoder study before any causal claim. "
+        "Gene-drug ranking stays flat or positive in the pooled average and fits the static "
+        "pool and criterion differences on the between-model axis. Non-drug chemical inflation "
+        "sits only on the gene-drug side, which is why gene-disease is the informative control. "
+        "Overall: pushing a model to fit the in-distribution benchmark systematically erodes "
+        "out-of-distribution gene-disease knowledge-base ranking for biomedically pretrained "
+        "encoders. That effect is not explained by the static pool or criterion differences "
+        "and is not present uniformly across architectures. This remains a descriptive "
+        "diagnostic with the stated caveats; it does not establish a confirmed causal mechanism."
+    )
+
+
 def adjudicate_gene_disease_verdict(
     subset: pd.DataFrame,
     robustness: pd.DataFrame,
     encoder: pd.DataFrame,
     pooled_seed_dist: pd.DataFrame,
+    traj: pd.DataFrame | None = None,
 ) -> dict[str, Any]:
     def _row(slug: str) -> pd.Series | None:
         hit = subset[(subset["slug"] == slug) & (subset["well_trained_definition"] == WELL_DEF_VAL_F1)]
@@ -305,34 +365,9 @@ def adjudicate_gene_disease_verdict(
         )
     elif mixed:
         verdict = "gene_disease_biomed_pretraining_erosion"
-        narrative = (
-            "The three mundane checks rule out ordinary artefacts. Gene-disease ranking decline "
-            "is stable across all three well-trained checkpoint definitions. In most seeds the "
-            "knowledge-base peak precedes or coincides with the validation-best checkpoint, so "
-            "simple post-optimum overfitting is not the main story. The decline persists in "
-            "abstracts whose pool size matches the gene-drug range, and bootstrap over seeds "
-            "puts the probability of a negative gene-disease-hard mean change at 99.1%. This is "
-            "a non-trivial within-model effect, not an artefact of checkpoint choice, pool size, "
-            "or a few outlier seeds. "
-            "There is no single uniform mechanism acting identically on every architecture. "
-            "Instead the data show regular, predictable encoder heterogeneity. Biomedical-domain "
-            "encoders (PubMedBERT, BioMedBERT, BioLinkBERT, SciBERT) show systematic gene-disease "
-            "decline during training, with every seed falling in three of those four families. "
-            "General-purpose encoders show flat or rising hard-subset ranking. Erosion magnitude "
-            "increases monotonically with biomedical pretraining (Spearman rho=+0.866, p=0.003) "
-            "and with benchmark level (rho=+0.800, p=0.010) across nine encoders. That pattern is "
-            "a descriptive finding, not noise or a failed uniformity check. With only nine "
-            "correlated encoder families, this relationship is exploratory and needs a controlled "
-            "encoder study before any causal claim. "
-            "Gene-drug ranking stays flat or positive in the pooled average and fits the static "
-            "pool and criterion differences on the between-model axis. Non-drug chemical inflation "
-            "sits only on the gene-drug side, which is why gene-disease is the informative control. "
-            "Overall: pushing a model to fit the in-distribution benchmark systematically erodes "
-            "out-of-distribution gene-disease knowledge-base ranking for biomedically pretrained "
-            "encoders. That effect is not explained by the static pool or criterion differences "
-            "and is not present uniformly across architectures. This remains a descriptive "
-            "diagnostic with the stated caveats; it does not establish a confirmed causal mechanism."
-        )
+        if traj is None:
+            raise ValueError("traj required for mixed verdict narrative (encoder correlations)")
+        narrative = _mixed_verdict_narrative(encoder, traj)
     else:
         verdict = "static_verdict_stands"
         narrative = (
@@ -381,7 +416,7 @@ def run_gene_disease_analysis(
     encoder = build_gene_disease_encoder_breakdown(paired)
     encoder.to_csv(GENE_DISEASE_ENCODER_CSV, index=False)
 
-    verdict = adjudicate_gene_disease_verdict(subset, robustness, encoder, pooled_seed_dist)
+    verdict = adjudicate_gene_disease_verdict(subset, robustness, encoder, pooled_seed_dist, traj=traj)
 
     print("\n=== Gene-disease erosion deepening (epoch 1 -> best validation F1) ===")
     for slug in ("gene_disease", "gene_disease_hard", "gene_disease_easy", "gene_drug"):

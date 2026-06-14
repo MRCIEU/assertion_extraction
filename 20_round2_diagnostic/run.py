@@ -27,11 +27,13 @@ def run_supplement_cross(*, force: bool = False, model_ids: list[str] | None = N
 
 
 def run_stratum_epoch1_cache(*, model_ids: list[str] | None = None) -> None:
-    from .config import PAIRED_CHANGES_CSV
-    from .mundane_explanations import build_epoch1_stratum_cache
+    cfg = import_module("20_round2_diagnostic.config")
+    mundane = import_module("20_round2_diagnostic.mundane_explanations")
 
-    paired = pd.read_csv(PAIRED_CHANGES_CSV)
-    build_epoch1_stratum_cache(paired)
+    paired = pd.read_csv(cfg.PAIRED_CHANGES_CSV)
+    if model_ids:
+        paired = paired[paired["model_id"].isin(model_ids)]
+    mundane.build_epoch1_stratum_cache(paired)
 
 
 def run_analysis(*, allow_partial: bool = False, skip_stratum_inference: bool = False) -> None:
@@ -147,6 +149,11 @@ def main() -> None:
         "--skip-stratum-inference",
         action="store_true",
         help="Skip epoch-1 inference during analyze (use existing stratum cache)",
+    )
+    parser.add_argument(
+        "--allow-partial-analysis",
+        action="store_true",
+        help="Run analysis even if epoch scoring is incomplete",
     )
     args = parser.parse_args()
 

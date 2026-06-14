@@ -215,6 +215,12 @@ After repair, training and benchmark positives use native offsets through the sh
 
 Overall gate status: **{"PASS" if overall_pass else "FAIL"}**. {checks_prose} Figure 05_marker_quality_gate_before_after.png compares key rates before and after the gate when figure regeneration is run.
 
+| Gate metric | Value |
+| --- | ---: |
+| Overall pass | {"yes" if overall_pass else "no"} |
+| Training offset insertion | {100 * train_offset:.1f}% |
+| Training same-sentence rate (post-repair) | {100 * train_offset:.1f}% |
+
 ## Residual limitations
 
 PubTator NER recall still caps which CIViC relations enter the pool, as documented in step 03. Entity-key collapse in pool construction remains a property of the frozen pool. Regex sentence splitting and the small fallback subset on some candidates are unchanged by marker repair.

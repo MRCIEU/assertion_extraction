@@ -70,28 +70,49 @@ def write_report_11(paths: dict[str, Path] | None = None) -> Path:
         if hard_sub[hard_sub["model_id"] == mid]["mrr"].mean() > dr_hard
     )
 
-    gd_min = float(enc["kb_mrr_gene_drug_mean"].min())
-    gd_max = float(enc["kb_mrr_gene_drug_mean"].max())
-    gdis_min = float(enc["kb_mrr_gene_disease_mean"].min())
-    gdis_max = float(enc["kb_mrr_gene_disease_mean"].max())
+    enc_rows = []
+    for _, row in enc.sort_values("benchmark_f1_mean", ascending=False).iterrows():
+        enc_rows.append(
+            f"| {row['short_name'].replace('-base', '')} | {float(row['benchmark_f1_mean']):.3f} | "
+            f"{float(row['kb_mrr_gene_drug_mean']):.3f} | {float(row['kb_mrr_gene_disease_mean']):.3f} |"
+        )
+    enc_table = "\n".join(enc_rows)
 
     body = f"""# Round-one encoder comparison (step 11)
 
 Generated: {ru.utc_now()}
 
-## Plain-language summary
-
-This step asks whether a model that scores well on the {_BENCH} also ranks curated CIViC relations well on the frozen evaluation pool. Nine encoders trained at the confirmed step-10 recipe are compared on both axes using seventy-two completed runs. The answer is read through variance shares, absolute ranking levels, and association estimates, not through a single correlation alone.
-
 ## Purpose
 
 The {_QUESTION} needs a between-encoder reading on clean data after the step-05 marker repair. Step 11 scores fine-tuned checkpoints from the step-10 matrix on {_BENCH} and {_KB} without retraining. Variant pairs remain excluded because PubTator cannot build variant pools. The frozen step-03 pool has **1590** matched positives and **222** misses under PubTator recall limits; those limits apply equally to every encoder.
 
+## Plain-language summary
+
+This step asks whether a model that scores well on the {_BENCH} also ranks curated CIViC relations well on the frozen evaluation pool. Nine encoders trained at the confirmed step-10 recipe are compared on both axes using seventy-two completed runs. The answer is read through variance shares, absolute ranking levels, and association estimates, not through a single correlation alone.
+
 ## What was measured
 
-Each of seventy-two runs (nine encoders, eight seeds) is evaluated at its best validation-F1 checkpoint on BioRED test presence F1 and on CIViC mean reciprocal rank on the primary pool, split into gene-drug and gene-disease pair types and into easy co-sentence and hard cross-sentence subsets. Nine additional untrained-floor references score pretrained weights with a random classification head and no fine-tuning. All numbers below are derived from stored per-run scores in this rerun; prior round-one prose is not reused.
+Each of seventy-two runs (nine encoders, eight seeds) is evaluated at its best validation-F1 checkpoint on BioRED test presence F1 and on CIViC mean reciprocal rank on the primary pool, split into gene-drug and gene-disease pair types and into easy co-sentence and hard cross-sentence subsets. Nine additional untrained-floor references score pretrained weights with a random classification head and no fine-tuning. All numbers below are derived from stored per-run scores in this rerun.
 
 No runs were flagged degenerate. DeBERTa-base across eight seeds enters the primary set with benchmark F1 between roughly **0.740** and **0.752** per seed.
+
+## Core results
+
+| Encoder | Benchmark F1 | KB MRR gene-drug | KB MRR gene-disease |
+| --- | ---: | ---: | ---: |
+{enc_table}
+
+| Summary statistic | Value |
+| --- | --- |
+| Benchmark encoder-mean spread | {spread:.3f} ({bench_min:.3f} to {bench_max:.3f}) |
+| Variance share benchmark (between / within encoder) | {100 * float(bench_enc['encoder_variance_share']):.0f}% / {100 * float(bench_enc['seed_variance_share']):.0f}% |
+| Variance share gene-drug {_KB} (between / within) | {100 * float(gd_var['encoder_variance_share']):.0f}% / {100 * float(gd_var['seed_variance_share']):.0f}% |
+| Variance share gene-disease {_KB} (between / within) | {100 * float(gdis_var['encoder_variance_share']):.0f}% / {100 * float(gdis_var['seed_variance_share']):.0f}% |
+| Fine-tuned mean {_KB} gene-drug / gene-disease | {ft_gd:.3f} / {ft_gdis:.3f} |
+| Seed-level Spearman gene-drug (95% interval) | {float(gd_seed['spearman']):+.3f} ({float(gd_seed['ci_lo']):+.3f} to {float(gd_seed['ci_hi']):+.3f}) |
+| Seed-level Spearman gene-disease (95% interval) | {float(gdis_seed['spearman']):+.3f} ({float(gdis_seed['ci_lo']):+.3f} to {float(gdis_seed['ci_hi']):+.3f}) |
+| Encoder-mean Spearman gene-drug (nine points) | {float(gd_enc['estimate']):+.3f} ({float(gd_enc['ci_lo']):+.3f} to {float(gd_enc['ci_hi']):+.3f}) |
+| Encoder-mean Spearman gene-disease (nine points) | {float(gdis_enc['estimate']):+.3f} ({float(gdis_enc['ci_lo']):+.3f} to {float(gdis_enc['ci_hi']):+.3f}) |
 
 ## Ranking validity and absolute knowledge-base levels
 
@@ -99,43 +120,33 @@ On the easy co-sentence subset the distance ranker reaches mean reciprocal rank 
 
 Absolute levels matter alongside relative comparisons. On the frozen pool, random ranking achieves MRR **{random_mrr:.3f}** and the distance ranker **{dist_mrr:.3f}**. Fine-tuned encoder means average **{ft_gd:.3f}** on gene-drug and **{ft_gdis:.3f}** on gene-disease, with hard-subset mean **{ft_hard:.3f}** versus distance **{dist_hard:.3f}**. Models sit well above random but only modestly above the distance ranker, so {_KB} adequacy is limited in absolute terms even when hard-subset ranking beats proximity.
 
-Figure fig3_easy_hard_ranking_validity.png plots encoder means against the distance-ranker baseline on easy and hard subsets, using the same encoder colours as fig1. The dashed vertical line marks the proximity-only ranker; its MRR values are noted below the panels.
+Figure fig1_benchmark_kb_scatter.png shows encoder means with seed uncertainty bars on both pair-type panels using the shared encoder palette. Figure fig3_easy_hard_ranking_validity.png plots encoder means against the distance-ranker baseline on easy and hard subsets.
 
 ## Benchmark discriminative power
 
-Among encoder means, {_BENCH} ranges from **{bench_min:.3f}** to **{bench_max:.3f}** (spread **{spread:.3f}**), comparable to within-encoder seed standard deviation near **{bench_std:.3f}**. Figure fig1_benchmark_kb_scatter.png shows encoder means with seed uncertainty bars on both pair-type panels; each encoder has a fixed colour in the shared palette (legend below the panels).
+Among encoder means, {_BENCH} ranges from **{bench_min:.3f}** to **{bench_max:.3f}** (spread **{spread:.3f}**), comparable to within-encoder seed standard deviation near **{bench_std:.3f}**. The variance-components method applied to benchmark F1 and to {_KB} MRR separates between-encoder from within-encoder seed variance. For benchmark F1, **{100 * float(bench_enc['encoder_variance_share']):.0f}%** of variance lies between encoders and **{100 * float(bench_enc['seed_variance_share']):.0f}%** within encoders (encoder-share interval **{100 * float(bench_boot['encoder_share_ci_lo']):.0f}%** to **{100 * float(bench_boot['encoder_share_ci_hi']):.0f}%**).
 
-The variance-components method applied to benchmark F1 and to {_KB} MRR separates between-encoder from within-encoder seed variance. For benchmark F1, **{100 * float(bench_enc['encoder_variance_share']):.0f}%** of variance lies between encoders and **{100 * float(bench_enc['seed_variance_share']):.0f}%** within encoders (encoder-share interval **{100 * float(bench_boot['encoder_share_ci_lo']):.0f}%** to **{100 * float(bench_boot['encoder_share_ci_hi']):.0f}%**). For gene-drug {_KB}, between-encoder share is **{100 * float(gd_var['encoder_variance_share']):.0f}%** and within-encoder **{100 * float(gd_var['seed_variance_share']):.0f}%**. For gene-disease {_KB}, between-encoder share is **{100 * float(gdis_var['encoder_variance_share']):.0f}%** and within-encoder **{100 * float(gdis_var['seed_variance_share']):.0f}%**.
-
-Figure fig2_variance_between_encoder.png plots the between-encoder share alone with bootstrap intervals attached to each bar. Benchmark F1 has a higher between-encoder share than either {_KB} axis, so the benchmark discriminates encoders more strongly than knowledge-base ranking does on this recipe.
+Figure fig2_variance_between_encoder.png plots the between-encoder share with bootstrap intervals attached to that share only. Benchmark F1 has a higher between-encoder share than either {_KB} axis, so the benchmark discriminates encoders more strongly than knowledge-base ranking does on this recipe.
 
 ## Benchmark versus knowledge-base association
 
-Encoder-mean Spearman correlation (nine points) is **{float(gd_enc['estimate']):+.3f}** (interval **{float(gd_enc['ci_lo']):+.3f}** to **{float(gd_enc['ci_hi']):+.3f}**) for gene-drug and **{float(gdis_enc['estimate']):+.3f}** (interval **{float(gdis_enc['ci_lo']):+.3f}** to **{float(gdis_enc['ci_hi']):+.3f}**) for gene-disease. These nine-point estimates are weak and interval-heavy.
+The primary association method is seed-level cluster bootstrap over encoders. Gene-drug Spearman **{float(gd_seed['spearman']):+.3f}** (interval **{float(gd_seed['ci_lo']):+.3f}** to **{float(gd_seed['ci_hi']):+.3f}**); gene-disease Spearman **{float(gdis_seed['spearman']):+.3f}** (interval **{float(gdis_seed['ci_lo']):+.3f}** to **{float(gdis_seed['ci_hi']):+.3f}**). Read these through the variance shares above. When the benchmark discriminates more than {_KB}, a negative association is closer to genuine decoupling than to benchmark saturation alone.
 
-The primary association method is seed-level cluster bootstrap over encoders: gene-drug Spearman **{float(gd_seed['spearman']):+.3f}** (interval **{float(gd_seed['ci_lo']):+.3f}** to **{float(gd_seed['ci_hi']):+.3f}**); gene-disease Spearman **{float(gdis_seed['spearman']):+.3f}** (interval **{float(gdis_seed['ci_lo']):+.3f}** to **{float(gdis_seed['ci_hi']):+.3f}**). Read these through the variance shares above. When the benchmark discriminates more than {_KB}, a negative association is closer to genuine decoupling than to benchmark saturation alone.
+## Fine-tuning lift and calibration
 
-Gene-drug {_KB} encoder means span **{gd_min:.3f}** to **{gd_max:.3f}**. Gene-disease spans **{gdis_min:.3f}** to **{gdis_max:.3f}**.
+Untrained-floor references use pretrained encoders with a randomly initialised head and no fine-tuning. Mean lift across encoders is **{mean_bench_lift:.3f}** on benchmark F1 and **{mean_kb_lift:.3f}** on {_KB} MRR averaged across pair types. Figure fig4_finetuning_lift.png compares per-encoder lifts on both axes.
 
-## Fine-tuning lift
-
-Untrained-floor references use pretrained encoders with a randomly initialised head and no fine-tuning. Mean lift across encoders is **{mean_bench_lift:.3f}** on benchmark F1 and **{mean_kb_lift:.3f}** on {_KB} MRR averaged across pair types. Fine-tuning adds substantial benchmark signal but more modest knowledge-base gain. Figure fig4_finetuning_lift.png compares per-encoder lifts on both axes.
-
-## Calibration
-
-At nine encoder means, higher benchmark F1 associates with lower expected calibration error against CIViC curation inclusion (Spearman **{float(ece_row['estimate']):+.3f}**, interval **{float(ece_row['ci_lo']):+.3f}** to **{float(ece_row['ci_hi']):+.3f}**). Calibration is measured against curation inclusion, not objective biomedical truth, and may diverge from ranking.
+At nine encoder means, higher benchmark F1 associates with lower expected calibration error against CIViC curation inclusion (Spearman **{float(ece_row['estimate']):+.3f}**, interval **{float(ece_row['ci_lo']):+.3f}** to **{float(ece_row['ci_hi']):+.3f}**). Calibration is measured against curation inclusion, not objective biomedical truth.
 
 ## Robustness diagnostics
 
-Across runs, median Spearman correlation between model scores and entity proximity is **{med_dist_spearman:.3f}**. Values nearer one suggest ranking tracks closeness; values nearer zero suggest signal beyond proximity.
+Across runs, median Spearman correlation between model scores and entity proximity is **{med_dist_spearman:.3f}**. Correlating per-abstract pool size with per-abstract MRR gives mean Spearman **{pool_gd:.3f}** on gene-drug and **{pool_gdis:.3f}** on gene-disease. This tests whether observed pool size drives the metric common-mode across models.
 
-Correlating per-abstract pool size with per-abstract MRR gives mean Spearman **{pool_gd:.3f}** on gene-drug and **{pool_gdis:.3f}** on gene-disease. This tests whether observed pool size drives the metric common-mode across models. It does not measure distractors PubTator missed entirely.
+## Read
 
-## Closing read
+The clean seventy-two-run matrix at **5e-6/none** supports three descriptive pictures: genuine decoupling when the benchmark discriminates but that dimension does not transfer to CIViC; both axes seed-dominated; or benchmark saturation when encoder spread on {_BENCH} is tiny. The variance-component comparison in fig2_variance_between_encoder.png is the central diagnostic. Absolute {_KB} levels sit modestly above random and proximity baselines; encoder choice matters less than seed noise on {_KB} axes.
 
-The clean seventy-two-run matrix at **5e-6/none** supports three descriptive pictures: genuine decoupling when the benchmark discriminates but that dimension does not transfer to CIViC; both axes seed-dominated; or benchmark saturation when encoder spread on {_BENCH} is tiny. The variance-component comparison in fig2_variance_between_encoder.png is the central diagnostic. Absolute {_KB} levels sit modestly above random and proximity baselines; encoder choice matters less than seed noise on {_KB} axes. No go/no-go threshold is applied.
-
-A second knowledge base was explored for external validity; its usable abstract-grounded subset was limited, so CIViC remains the primary {_KB} axis (recorded as future work).
+A parallel OncoKB probe explored a second knowledge base; its usable abstract-grounded subset was limited, so CIViC remains the primary {_KB} axis (recorded as future work).
 
 ## Linkage
 

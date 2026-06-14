@@ -173,10 +173,62 @@ def write_report(
     if gdrug is not None:
         lines.append(
             f"For comparison, gene-drug ranking changes by {_fmt_delta(gdrug)} overall and "
-            f"{_fmt_delta(gdrug_h)} on the hard subset. Gene-drug behaviour is consistent with "
-            "static pool and criterion differences rather than within-model erosion."
+            f"{_fmt_delta(gdrug_h)} on the hard subset. Gene-drug behaviour fits static pool "
+            "and criterion differences instead of within-model erosion."
         )
         lines.append("")
+
+    # Core results table for manuscript lift.
+    lines.extend(["## Core results", "", "| Result | Value |", "| --- | --- |"])
+    if gdrug is not None and gdis is not None and p is not None:
+        lines.append(
+            f"| Gene-drug KB MRR change (epoch 1 to best val F1) | "
+            f"{float(gdrug['mean_delta_kb_mrr']):+.4f} |"
+        )
+        lines.append(
+            f"| Gene-disease KB MRR change | {float(gdis['mean_delta_kb_mrr']):+.4f} "
+            f"({int(gdis['n_kb_falls'])}/{int(gdis['n_seeds'])} seeds fall) |"
+        )
+    if gd_robustness is not None:
+        for slug, label in [("gene_disease", "Gene-disease all"), ("gene_disease_hard", "Gene-disease hard")]:
+            for well_def in WELL_DEFS:
+                row = gd_robustness[
+                    (gd_robustness["slug"] == slug)
+                    & (gd_robustness["well_trained_definition"] == well_def)
+                ]
+                if row.empty:
+                    continue
+                lines.append(
+                    f"| {label}, {WELL_DEF_LABELS[well_def]} | mean "
+                    f"{float(row.iloc[0]['mean_delta_kb_mrr']):+.4f}; falls "
+                    f"{float(row.iloc[0]['frac_kb_falls']):.1%} of seeds |"
+                )
+    if mundane:
+        ts = mundane.get("timing_summary")
+        if ts is not None and not ts.empty:
+            gd = ts[(ts["slug"] == "gene_disease") & (ts["timing_class"] == "before_best_val")]
+            if not gd.empty:
+                lines.append(
+                    f"| Peak KB before validation-best (gene-disease) | "
+                    f"{100 * float(gd['frac_seeds'].iloc[0]):.1f}% of seeds |"
+                )
+        ss = mundane.get("stratum_summary")
+        if ss is not None and not ss.empty:
+            comp = ss[ss["stratum"] == "comparable_to_gene_drug"]
+            if not comp.empty:
+                r = comp.iloc[0]
+                lines.append(
+                    f"| Pool-stratum comparable to gene-drug | mean "
+                    f"{float(r['mean_delta_mrr']):+.4f}; "
+                    f"{int(r['n_falls'])}/{int(r['n_seeds'])} seeds fall |"
+                )
+        pb = mundane.get("positive_bootstrap", {})
+        if pb:
+            lines.append(
+                f"| Bootstrap sign stability (gene-disease-hard) | "
+                f"P(negative) = {100 * float(pb.get('frac_negative_bootstrap', 0)):.1f}% |"
+            )
+    lines.append("")
 
     lines.extend(["## Robustness across well-trained checkpoint definitions", ""])
     lines.append(
@@ -452,6 +504,25 @@ def write_qualitative_report(qual: dict) -> Path:
     lines.extend(
         [
             "",
+            "## Core results",
+            "",
+            "| Failure mode (genuine errors) | Share |",
+            "| --- | ---: |",
+        ]
+    )
+    if patterns is not None:
+        for _, r in patterns.iterrows():
+            pct = float(r["rate_in_genuine_errors"]) * 100
+            label = str(r["pattern"]).replace("_", " ")
+            lines.append(f"| {label} | {pct:.0f}% |")
+    lines.extend(
+        [
+            "",
+            f"| Missed positives | {summary.get('n_missed_positives', 0)} |",
+            f"| Abstract-unsupported | {summary.get('n_abstract_unsupported', 0)} "
+            f"({float(summary.get('frac_abstract_unsupported', 0)):.1%}) |",
+            f"| Genuine model errors | {summary.get('n_genuine_model_errors', 0)} |",
+            "",
             "Cross-sentence gene-disease pairs and multi-word entity names are common failure "
             "contexts when the abstract does support the link. Older publication years appear "
             "somewhat more often among genuine errors, but the dominant pattern is cross-sentence "
@@ -479,108 +550,15 @@ def write_readme(
     qual_summary: dict | None = None,
     mundane: dict | None = None,
 ) -> Path:
-    path = REPORT_DIR / "README.md"
-    pooled = seed_dist[seed_dist["model_id"] == "ALL"]
-    p = pooled.iloc[0] if not pooled.empty else None
-    n_epochs = int(inventory["n_recoverable_checkpoints"].sum()) if not inventory.empty else 0
+    """Delegate to the shared minimal README writer (reports/ location)."""
+    import sys
+    from pathlib import Path as P
 
-    gdis_h = _gd_row(gd_subset, "gene_disease_hard")
-    gdis = _gd_row(gd_subset, "gene_disease")
-    gdrug = _gd_row(gd_subset, "gene_drug")
+    repo = P(__file__).resolve().parents[1]
+    if str(repo) not in sys.path:
+        sys.path.insert(0, str(repo))
+    from manuscript_regenerate.readmes import write_readme as write_minimal
 
-    lines = [
-        "# Training-dynamics diagnostic",
-        "",
-        "Adjudicates training-dynamics erosion (Explanation 1) vs static criterion/pool mismatch "
-        "(Explanation 2), with a focused gene-disease deepening pass.",
-        "",
-        "## Key numbers (5e-6/none matrix, 498 epoch checkpoints)",
-        "",
-        f"- Epoch checkpoints scored: {n_epochs}",
-    ]
-    if p is not None:
-        lines.extend(
-            [
-                f"- Pairable seeds (epoch 1 -> best val F1): {int(p['n_seeds_pairable'])}",
-                f"- Pooled hard-subset erosion (bench up, KB hard down): "
-                f"{int(p['n_erosion_benchmark_up_kb_hard_down'])} ({float(p['frac_erosion']):.1%})",
-                f"- Pooled mean delta KB hard: {float(p['mean_delta_kb_hard']):+.4f}",
-                f"- Mean delta KB gene-disease (all): "
-                f"{float(p['mean_delta_kb_gene_disease']):+.4f} "
-                f"({int(p['n_kb_gene_disease_falls'])}/{int(p['n_seeds_pairable'])} seeds fall)",
-                f"- Mean delta KB gene-drug (all): {float(p['mean_delta_kb_gene_drug']):+.4f}",
-            ]
-        )
-    if gdis_h is not None:
-        lines.extend(
-            [
-                f"- Gene-disease-hard mean delta: {float(gdis_h['mean_delta_kb_mrr']):+.4f} "
-                f"(median {float(gdis_h['median_delta_kb_mrr']):+.4f}, "
-                f"{int(gdis_h['n_kb_falls'])}/{int(gdis_h['n_seeds'])} seeds fall)",
-            ]
-        )
-    if gdis is not None:
-        lines.append(f"- Gene-disease (all) mean delta: {float(gdis['mean_delta_kb_mrr']):+.4f}")
-    if gdrug is not None:
-        lines.append(f"- Gene-drug (all) mean delta: {float(gdrug['mean_delta_kb_mrr']):+.4f}")
-    if qual_summary:
-        lines.append(
-            f"- Abstract-unsupported missed positives: "
-            f"{float(qual_summary.get('frac_abstract_unsupported', 0)):.1%}"
-        )
-    if mundane and mundane.get("positive_bootstrap"):
-        pb = mundane["positive_bootstrap"]
-        lines.append(
-            f"- Gene-disease-hard sign stability P(negative): "
-            f"{float(pb.get('frac_negative_bootstrap', 0)):.1%}"
-        )
-    lines.extend(
-        [
-            f"- Gene-disease verdict: {gene_disease_verdict.get('verdict', 'pending')} "
-            "(within-model biomed-pretraining erosion; regular encoder heterogeneity)",
-            f"- Pooled verdict: {verdict.get('verdict', 'pending')}",
-            "",
-            "## Adjudication criteria (gene-disease)",
-            "",
-        ]
-    )
-    crit = gene_disease_verdict.get("criteria", {})
-    for k, label in [
-        ("overall_gene_disease_robust", "Overall gene-disease robust"),
-        ("hard_concentrated", "Hard-concentrated"),
-        ("robust_gene_disease_hard_all_defs", "Gene-disease-hard robust across defs"),
-        ("broad_based_seeds_hard", "Broad-based (hard)"),
-        ("encoder_consistent", "Uniform across encoders (legacy bar)"),
-    ]:
-        if k in crit:
-            if k == "encoder_consistent":
-                lines.append(
-                    f"- {label}: "
-                    f"{'yes' if crit[k] else 'no; regular heterogeneity by pretraining instead'}"
-                )
-            else:
-                lines.append(f"- {label}: {'yes' if crit[k] else 'no'}")
-    lines.extend(
-        [
-            "",
-            "## Figures",
-            "",
-            "Cite the native pipeline figures from analyze (fig1_per_seed_trajectories through "
-            "fig10_failure_mode_summary). Manuscript-regeneration fig1_within_seed_paired_change, "
-            "fig2_pair_type_asymmetry, and fig3_gene_disease_subset_contrast are legacy compact "
-            "summaries; prefer fig2_within_seed_paired_change, fig3_hard_easy_pair_type, and "
-            "fig6_pair_type_subset_contrast for the same content at full diagnostic depth.",
-            "",
-            "## Workflow",
-            "",
-            "1. GPU: score per-epoch checkpoints",
-            "2. GPU: supplement pair×subset cross metrics (`submit_supplement_and_analyze.sh`)",
-            "3. CPU: analysis and report",
-            "",
-            "Full prose: `report.md`, `report_qualitative_errors.md`. "
-            "Figures: `../../figures/20_round2_diagnostic/`.",
-        ]
-    )
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    path = write_minimal("20")
     print(f"README -> {path}")
     return path
