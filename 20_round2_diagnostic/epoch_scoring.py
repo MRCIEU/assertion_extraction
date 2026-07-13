@@ -11,14 +11,14 @@ import pandas as pd
 
 from shared.models import MODEL_BY_ID, MODELS
 
-from .config import SCORES_DIR, SCORING_COMPLETE, SCORING_MODEL_IDS, TRAIN_SEEDS
+from .config import SCORES_DIR, SCORING_COMPLETE, SCORING_MODEL_IDS, TRAIN_SEEDS, resolve_checkpoint_model_id
 from .matrix_io import epoch_checkpoint_dir, list_recoverable_epochs, load_training_meta
 from .pool_cache import load_enriched_pool
 from .scoring import score_checkpoint_full
 
 
 def epoch_score_path(model_id: str, seed: int, epoch: int) -> Path:
-    return SCORES_DIR / model_id / f"seed_{seed}" / f"epoch_{epoch:02d}.json"
+    return SCORES_DIR / resolve_checkpoint_model_id(model_id) / f"seed_{seed}" / f"epoch_{epoch:02d}.json"
 
 
 def is_epoch_scored(model_id: str, seed: int, epoch: int) -> bool:
@@ -30,7 +30,7 @@ def count_scored_epochs(model_ids: list[str] | None = None) -> int:
     n = 0
     for mid in mids:
         for seed in TRAIN_SEEDS:
-            d = SCORES_DIR / mid / f"seed_{seed}"
+            d = SCORES_DIR / resolve_checkpoint_model_id(mid) / f"seed_{seed}"
             if d.exists():
                 n += len(list(d.glob("epoch_*.json")))
     return n
@@ -177,9 +177,11 @@ def load_all_epoch_scores() -> pd.DataFrame:
     rows: list[dict] = []
     for spec in MODELS:
         for seed in TRAIN_SEEDS:
-            d = SCORES_DIR / spec.model_id / f"seed_{seed}"
+            d = SCORES_DIR / resolve_checkpoint_model_id(spec.model_id) / f"seed_{seed}"
             if not d.exists():
                 continue
             for p in sorted(d.glob("epoch_*.json")):
-                rows.append(json.loads(p.read_text(encoding="utf-8")))
+                row = json.loads(p.read_text(encoding="utf-8"))
+                row["model_id"] = spec.model_id
+                rows.append(row)
     return pd.DataFrame(rows)

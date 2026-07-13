@@ -38,7 +38,15 @@ def write_report_11(paths: dict[str, Path] | None = None) -> Path:
     bench_enc = var[var["metric"] == "benchmark_f1"].iloc[0]
     gd_var = var[var["metric"] == "kb_mrr_gene_drug"].iloc[0]
     gdis_var = var[var["metric"] == "kb_mrr_gene_disease"].iloc[0]
-    bench_boot = boot[boot["metric"] == "benchmark_f1"].iloc[0]
+    bench_boot_rows = boot[boot["metric"] == "benchmark_f1"]
+    if bench_boot_rows.empty:
+        bench_boot_ci = "n/a (bootstrap table has no benchmark_f1 row)"
+    else:
+        bench_boot = bench_boot_rows.iloc[0]
+        bench_boot_ci = (
+            f"**{100 * float(bench_boot['encoder_share_ci_lo']):.0f}%** to "
+            f"**{100 * float(bench_boot['encoder_share_ci_hi']):.0f}%**"
+        )
 
     finetuned = abs_kb[abs_kb["reference"] == "finetuned_encoders_mean"].iloc[0]
     random_mrr = float(abs_kb[abs_kb["reference"] == "random_uniform"]["mrr_overall"].iloc[0])
@@ -53,7 +61,17 @@ def write_report_11(paths: dict[str, Path] | None = None) -> Path:
     gdis_seed = seed_assoc[seed_assoc["pair_type"] == "gene-disease"].iloc[0]
     gd_enc = enc_corr[(enc_corr["pair_type"] == "gene-drug") & (enc_corr["method"] == "encoder_mean_n9")].iloc[0]
     gdis_enc = enc_corr[(enc_corr["pair_type"] == "gene-disease") & (enc_corr["method"] == "encoder_mean_n9")].iloc[0]
-    ece_row = ece_corr[ece_corr["pair_type"] == "calibration"].iloc[0]
+    ece_cal = ece_corr[(ece_corr["pair_type"] == "calibration") & (ece_corr["metric"] == "spearman")]
+    if ece_cal.empty:
+        from scipy.stats import spearmanr
+
+        ece_r, _ = spearmanr(enc["benchmark_f1_mean"].astype(float), enc["ece_mean"].astype(float))
+        ece_estimate, ece_lo, ece_hi = float(ece_r), float("nan"), float("nan")
+    else:
+        ece_row = ece_cal.iloc[0]
+        ece_estimate = float(ece_row["estimate"])
+        ece_lo = float(ece_row["ci_lo"])
+        ece_hi = float(ece_row["ci_hi"])
 
     mean_bench_lift = float(lift["lift_benchmark_f1"].mean())
     mean_kb_lift = float(((lift["lift_kb_mrr_gene_drug"] + lift["lift_kb_mrr_gene_disease"]) / 2).mean())
@@ -124,7 +142,7 @@ Figure fig1_benchmark_kb_scatter.png shows encoder means with seed uncertainty b
 
 ## Benchmark discriminative power
 
-Among encoder means, {_BENCH} ranges from **{bench_min:.3f}** to **{bench_max:.3f}** (spread **{spread:.3f}**), comparable to within-encoder seed standard deviation near **{bench_std:.3f}**. The variance-components method applied to benchmark F1 and to {_KB} MRR separates between-encoder from within-encoder seed variance. For benchmark F1, **{100 * float(bench_enc['encoder_variance_share']):.0f}%** of variance lies between encoders and **{100 * float(bench_enc['seed_variance_share']):.0f}%** within encoders (encoder-share interval **{100 * float(bench_boot['encoder_share_ci_lo']):.0f}%** to **{100 * float(bench_boot['encoder_share_ci_hi']):.0f}%**).
+Among encoder means, {_BENCH} ranges from **{bench_min:.3f}** to **{bench_max:.3f}** (spread **{spread:.3f}**), comparable to within-encoder seed standard deviation near **{bench_std:.3f}**. The variance-components method applied to benchmark F1 and to {_KB} MRR separates between-encoder from within-encoder seed variance. For benchmark F1, **{100 * float(bench_enc['encoder_variance_share']):.0f}%** of variance lies between encoders and **{100 * float(bench_enc['seed_variance_share']):.0f}%** within encoders (encoder-share interval {bench_boot_ci}).
 
 Figure fig2_variance_between_encoder.png plots the between-encoder share with bootstrap intervals attached to that share only. Benchmark F1 has a higher between-encoder share than either {_KB} axis, so the benchmark discriminates encoders more strongly than knowledge-base ranking does on this recipe.
 
@@ -136,7 +154,7 @@ The primary association method is seed-level cluster bootstrap over encoders. Ge
 
 Untrained-floor references use pretrained encoders with a randomly initialised head and no fine-tuning. Mean lift across encoders is **{mean_bench_lift:.3f}** on benchmark F1 and **{mean_kb_lift:.3f}** on {_KB} MRR averaged across pair types. Figure fig4_finetuning_lift.png compares per-encoder lifts on both axes.
 
-At nine encoder means, higher benchmark F1 associates with lower expected calibration error against CIViC curation inclusion (Spearman **{float(ece_row['estimate']):+.3f}**, interval **{float(ece_row['ci_lo']):+.3f}** to **{float(ece_row['ci_hi']):+.3f}**). Calibration is measured against curation inclusion, not objective biomedical truth.
+At nine encoder means, higher benchmark F1 associates with lower expected calibration error against CIViC curation inclusion (Spearman **{ece_estimate:+.3f}**{'' if pd.isna(ece_lo) else f', interval **{ece_lo:+.3f}** to **{ece_hi:+.3f}**'}). Calibration is measured against curation inclusion, not objective biomedical truth.
 
 ## Robustness diagnostics
 

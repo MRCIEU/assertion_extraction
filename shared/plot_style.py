@@ -39,7 +39,7 @@ COLORS = {
 # Fixed per-encoder colours (Okabe-Ito / Tol bright extension) — same mapping in every multi-encoder figure.
 ENCODER_COLORS: dict[str, str] = {
     "pubmedbert_base": OKABE_ITO["blue"],
-    "biomedbert_base": OKABE_ITO["vermillion"],
+    "bluebert_base": OKABE_ITO["vermillion"],
     "biolinkbert_base": OKABE_ITO["green"],
     "biobert_base": OKABE_ITO["purple"],
     "scibert_base": OKABE_ITO["orange"],
@@ -105,6 +105,32 @@ def save_figure(fig: plt.Figure, path: Path) -> Path:
     return path
 
 
+def save_figure_dual(fig: plt.Figure, stem: Path) -> tuple[Path, Path]:
+    """Save PNG (300 dpi) and vector PDF from the same figure."""
+    stem = stem.with_suffix("")
+    stem.parent.mkdir(parents=True, exist_ok=True)
+    png_path = stem.with_suffix(".png")
+    pdf_path = stem.with_suffix(".pdf")
+    fig.savefig(
+        png_path,
+        dpi=DPI,
+        bbox_inches="tight",
+        pad_inches=0.18,
+        facecolor="white",
+        edgecolor="none",
+    )
+    fig.savefig(
+        pdf_path,
+        format="pdf",
+        bbox_inches="tight",
+        pad_inches=0.12,
+        facecolor="white",
+        edgecolor="none",
+    )
+    plt.close(fig)
+    return png_path, pdf_path
+
+
 def add_light_grid(ax: plt.Axes, axis: str = "y") -> None:
     """Add thin unobtrusive gridlines."""
     ax.grid(True, axis=axis, color=COLORS["grid"], linewidth=0.6, alpha=0.8)
@@ -113,6 +139,7 @@ def add_light_grid(ax: plt.Axes, axis: str = "y") -> None:
 
 def encoder_point_color(model_id: str) -> str:
     """Per-encoder colour from the fixed study palette."""
+    model_id = {"biomedbert_base": "bluebert_base"}.get(model_id, model_id)
     return ENCODER_COLORS.get(model_id, COLORS["neutral"])
 
 

@@ -1,0 +1,17 @@
+=== Recipe sweep and training 2026-06-29T11:00:59.845976 ===
+[run] mode=matrix-report
+
+=== Step-2 matrix final report ===
+  Recipe: lr=5e-06, warmup=none
+  Completion: 72/72
+  Collapsed runs: 0
+  Footprint: 177.60 GiB
+  DeBERTa gate: PASS
+
+  Wrote /lus/lfs1aip2/projects/b5ac/project_1/outputs/10_recipe_sweep_and_training/matrix/matrix_per_run.csv
+  Wrote /lus/lfs1aip2/projects/b5ac/project_1/outputs/10_recipe_sweep_and_training/matrix/matrix_encoder_summary.csv
+  Wrote /lus/lfs1aip2/projects/b5ac/project_1/figures/10_recipe_sweep_and_training/matrix/matrix_benchmark_f1_heatmap.png
+  Wrote /lus/lfs1aip2/projects/b5ac/project_1/reports/10_recipe_sweep_and_training/matrix_report.md
+
+DeBERTa stable across all 8 seeds (no collapse, no systematic suppression) -> 5e-06/none confirmed, cleared to proceed to folder 11 (your decision).
+End: Mon Jun 29 11:01:33 UTC 2026

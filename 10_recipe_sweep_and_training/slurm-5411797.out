@@ -1,0 +1,7 @@
+=== Round 2 epoch scoring (GPU) ===
+TMPDIR=/home/b5ac/freddieyu.b5ac/project_1/../projects/project_1/runs/20_round2_diagnostic/tmp/5411797
+usage: run.py [-h] [--sweep-only] [--sweep-advisory-only] [--decide-recipe]
+              [--train-only] [--preflight-sweep] [--preflight-train]
+              [--accept-matrix] [--matrix-report] [--force]
+              [--models MODELS [MODELS ...]] [--seeds SEEDS [SEEDS ...]]
+run.py: error: unrecognized arguments: --score-epochs-only --model-id pubmedbert_base --force-rescore

@@ -28,11 +28,11 @@ ENCODER_PROPERTIES: list[EncoderProperty] = [
         "HF microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract; PubMed abstracts",
     ),
     EncoderProperty(
-        "biomedbert_base",
-        "BioMedBERT-base",
+        "bluebert_base",
+        "BlueBERT-base",
         110.0,
         True,
-        "HF microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract; PubMed-derived",
+        "HF bionlp/bluebert_pubmed_mimic_uncased_L-12_H-768_A-12; PubMed + MIMIC",
     ),
     EncoderProperty(
         "biolinkbert_base",

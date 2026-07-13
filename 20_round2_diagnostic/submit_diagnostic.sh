@@ -7,7 +7,7 @@ REPO="${REPO:-$(cd "${STEP_DIR}/.." && pwd)}"
 OUTPUT_ROOT="${OUTPUT_ROOT:-${REPO}/../projects/project_1}"
 
 ENCODERS=(
-  pubmedbert_base biomedbert_base biolinkbert_base biobert_base scibert_base
+  pubmedbert_base bluebert_base biolinkbert_base biobert_base scibert_base
   roberta_base bert_base distilbert_base deberta_base
 )
 

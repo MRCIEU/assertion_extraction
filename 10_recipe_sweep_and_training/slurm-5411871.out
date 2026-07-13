@@ -1,0 +1,125 @@
+=== 1e-5 supplementary side-matrix training ===
+Host: nid011131
+SLURM_JOB_ID=5411871
+SLURM_JOB_NAME=lr1e5_scibert_46-47-48-49
+Start: Sun Jun 28 19:30:07 UTC 2026
+REPO=/home/b5ac/freddieyu.b5ac/project_1
+OUTPUT_ROOT=/home/b5ac/freddieyu.b5ac/project_1/../projects/project_1
+STEP_ARGS=--models scibert_base --seeds 46 47 48 49
+Side output: /home/b5ac/freddieyu.b5ac/project_1/../projects/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/
+Main matrix (untouched): /home/b5ac/freddieyu.b5ac/project_1/../projects/project_1/data/10_recipe_sweep_and_training/matrix/
+
+=== 1e-5 side-matrix training ===
+Recipe: lr=1e-05, warmup=none
+Output: /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck
+
+
+=== Step-2 matrix training ===
+Recipe: lr=1e-05, warmup=none (checkpoint criterion=pooled_val_f1_micro)
+Encoders (1): ['scibert_base']
+Seeds (4): [46, 47, 48, 49]
+Planned runs this job: 4
+
+
+=== Estimated checkpoint footprint (rough) ===
+  Runs: 1 encoders x 4 seeds = 4
+  Assumed ~10 epochs/run; epoch ckpt ~220 MiB (fp16); best ckpt ~440 MiB (fp32)
+  Per run ~2640 MiB; total ~10.3 GiB
+  MAX_EPOCH_CHECKPOINTS_TO_KEEP=None (None = keep all epoch checkpoints)
+
+[benchmark] building BioRED test examples...
+[benchmark] built 14395 BioRED test examples (leaked PMIDs excluded)
+[benchmark] building DrugProt test examples...
+[benchmark] DrugProt: no labeled public test split in BigBio (splits=['train', 'validation', 'test_background']; test_background is unlabeled). Skipping DrugProt holdout benchmark; gene-drug combined uses BioRED test only.
+  RUN START SciBERT (scibert_base) seed=46 [1/4 in this job]
+[train] start scibert_base seed=46 lr=1e-05 warmup=none hf=allenai/scibert_scivocab_uncased train=24000 val=25311 (pooled BioRED+DrugProt) -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/scibert_base/seed_46
+[train] device=cuda batch_size=16 max_epochs=10
+Some weights of BertForSequenceClassification were not initialized from the model checkpoint at allenai/scibert_scivocab_uncased and are newly initialized: ['classifier.bias', 'classifier.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[train] epoch 1/10 train_loss=0.5321 val_loss=0.5294 pooled_val_f1_micro=0.7486
+[train] new best pooled_val_f1_micro=0.7486 at epoch 1 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/scibert_base/seed_46/best
+[train] epoch 2/10 train_loss=0.3591 val_loss=0.6173 pooled_val_f1_micro=0.7173
+[train] epoch 3/10 train_loss=0.2876 val_loss=0.6849 pooled_val_f1_micro=0.7719
+[train] new best pooled_val_f1_micro=0.7719 at epoch 3 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/scibert_base/seed_46/best
+[train] epoch 4/10 train_loss=0.2460 val_loss=0.7850 pooled_val_f1_micro=0.7277
+[train] epoch 5/10 train_loss=0.2190 val_loss=0.8481 pooled_val_f1_micro=0.7500
+[train] epoch 6/10 train_loss=0.1999 val_loss=0.8458 pooled_val_f1_micro=0.6763
+[train] epoch 7/10 train_loss=0.1852 val_loss=0.9512 pooled_val_f1_micro=0.7582
+[train] epoch 8/10 train_loss=0.1767 val_loss=0.9374 pooled_val_f1_micro=0.7624
+[train] epoch 9/10 train_loss=0.1662 val_loss=1.0317 pooled_val_f1_micro=0.7210
+[train] epoch 10/10 train_loss=0.1620 val_loss=0.8960 pooled_val_f1_micro=0.7261
+[train] done scibert_base seed=46 best_val_f1=0.7719 best_epoch=3 epochs_run=10
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/scibert_base/seed_46/best: BioRED=14395 DrugProt=0 gdis=9769 gd_combined=4626 (DrugProt holdout unavailable; combined=BioRED gene-drug only)
+[benchmark] done gdis=0.7870 gd_combined=0.6394 gd_biored=0.6394 gd_drugprot=nan overall=0.7476
+  COMPLETE SciBERT (scibert_base) seed=46: gd_combined=0.639 gdis=0.787 best_epoch=3 pooled_val_f1=0.772 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/results/scibert_base/seed_46/matrix_complete.json
+  RUN START SciBERT (scibert_base) seed=47 [2/4 in this job]
+[train] start scibert_base seed=47 lr=1e-05 warmup=none hf=allenai/scibert_scivocab_uncased train=24000 val=25311 (pooled BioRED+DrugProt) -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/scibert_base/seed_47
+[train] device=cuda batch_size=16 max_epochs=10
+Some weights of BertForSequenceClassification were not initialized from the model checkpoint at allenai/scibert_scivocab_uncased and are newly initialized: ['classifier.bias', 'classifier.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[train] epoch 1/10 train_loss=0.5239 val_loss=0.5608 pooled_val_f1_micro=0.7231
+[train] new best pooled_val_f1_micro=0.7231 at epoch 1 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/scibert_base/seed_47/best
+[train] epoch 2/10 train_loss=0.3690 val_loss=0.6612 pooled_val_f1_micro=0.6564
+[train] epoch 3/10 train_loss=0.2999 val_loss=0.6801 pooled_val_f1_micro=0.7525
+[train] new best pooled_val_f1_micro=0.7525 at epoch 3 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/scibert_base/seed_47/best
+[train] epoch 4/10 train_loss=0.2562 val_loss=0.7218 pooled_val_f1_micro=0.7635
+[train] new best pooled_val_f1_micro=0.7635 at epoch 4 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/scibert_base/seed_47/best
+[train] epoch 5/10 train_loss=0.2236 val_loss=0.8105 pooled_val_f1_micro=0.7497
+[train] epoch 6/10 train_loss=0.2061 val_loss=0.9293 pooled_val_f1_micro=0.7034
+[train] epoch 7/10 train_loss=0.1901 val_loss=0.8826 pooled_val_f1_micro=0.7057
+[train] epoch 8/10 train_loss=0.1754 val_loss=1.0289 pooled_val_f1_micro=0.7300
+[train] epoch 9/10 train_loss=0.1707 val_loss=1.0309 pooled_val_f1_micro=0.7100
+[train] epoch 10/10 train_loss=0.1608 val_loss=1.0982 pooled_val_f1_micro=0.7275
+[train] done scibert_base seed=47 best_val_f1=0.7635 best_epoch=4 epochs_run=10
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/scibert_base/seed_47/best: BioRED=14395 DrugProt=0 gdis=9769 gd_combined=4626 (DrugProt holdout unavailable; combined=BioRED gene-drug only)
+[benchmark] done gdis=0.7862 gd_combined=0.6103 gd_biored=0.6103 gd_drugprot=nan overall=0.7392
+  COMPLETE SciBERT (scibert_base) seed=47: gd_combined=0.610 gdis=0.786 best_epoch=4 pooled_val_f1=0.763 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/results/scibert_base/seed_47/matrix_complete.json
+  RUN START SciBERT (scibert_base) seed=48 [3/4 in this job]
+[train] start scibert_base seed=48 lr=1e-05 warmup=none hf=allenai/scibert_scivocab_uncased train=24000 val=25311 (pooled BioRED+DrugProt) -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/scibert_base/seed_48
+[train] device=cuda batch_size=16 max_epochs=10
+Some weights of BertForSequenceClassification were not initialized from the model checkpoint at allenai/scibert_scivocab_uncased and are newly initialized: ['classifier.bias', 'classifier.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[train] epoch 1/10 train_loss=0.5171 val_loss=0.5632 pooled_val_f1_micro=0.7326
+[train] new best pooled_val_f1_micro=0.7326 at epoch 1 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/scibert_base/seed_48/best
+[train] epoch 2/10 train_loss=0.3555 val_loss=0.5997 pooled_val_f1_micro=0.7435
+[train] new best pooled_val_f1_micro=0.7435 at epoch 2 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/scibert_base/seed_48/best
+[train] epoch 3/10 train_loss=0.2847 val_loss=0.6551 pooled_val_f1_micro=0.7585
+[train] new best pooled_val_f1_micro=0.7585 at epoch 3 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/scibert_base/seed_48/best
+[train] epoch 4/10 train_loss=0.2414 val_loss=0.7180 pooled_val_f1_micro=0.7640
+[train] new best pooled_val_f1_micro=0.7640 at epoch 4 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/scibert_base/seed_48/best
+[train] epoch 5/10 train_loss=0.2177 val_loss=0.8329 pooled_val_f1_micro=0.7506
+[train] epoch 6/10 train_loss=0.1975 val_loss=0.9234 pooled_val_f1_micro=0.7500
+[train] epoch 7/10 train_loss=0.1849 val_loss=0.9436 pooled_val_f1_micro=0.7379
+[train] epoch 8/10 train_loss=0.1729 val_loss=0.9905 pooled_val_f1_micro=0.7010
+[train] epoch 9/10 train_loss=0.1645 val_loss=1.0937 pooled_val_f1_micro=0.7253
+[train] epoch 10/10 train_loss=0.1600 val_loss=0.9811 pooled_val_f1_micro=0.7521
+[train] done scibert_base seed=48 best_val_f1=0.7640 best_epoch=4 epochs_run=10
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/scibert_base/seed_48/best: BioRED=14395 DrugProt=0 gdis=9769 gd_combined=4626 (DrugProt holdout unavailable; combined=BioRED gene-drug only)
+[benchmark] done gdis=0.7893 gd_combined=0.6444 gd_biored=0.6444 gd_drugprot=nan overall=0.7498
+  COMPLETE SciBERT (scibert_base) seed=48: gd_combined=0.644 gdis=0.789 best_epoch=4 pooled_val_f1=0.764 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/results/scibert_base/seed_48/matrix_complete.json
+  RUN START SciBERT (scibert_base) seed=49 [4/4 in this job]
+[train] start scibert_base seed=49 lr=1e-05 warmup=none hf=allenai/scibert_scivocab_uncased train=24000 val=25311 (pooled BioRED+DrugProt) -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/scibert_base/seed_49
+[train] device=cuda batch_size=16 max_epochs=10
+Some weights of BertForSequenceClassification were not initialized from the model checkpoint at allenai/scibert_scivocab_uncased and are newly initialized: ['classifier.bias', 'classifier.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[train] epoch 1/10 train_loss=0.5318 val_loss=0.5208 pooled_val_f1_micro=0.7642
+[train] new best pooled_val_f1_micro=0.7642 at epoch 1 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/scibert_base/seed_49/best
+[train] epoch 2/10 train_loss=0.3592 val_loss=0.6238 pooled_val_f1_micro=0.7194
+[train] epoch 3/10 train_loss=0.2918 val_loss=0.6515 pooled_val_f1_micro=0.7610
+[train] epoch 4/10 train_loss=0.2486 val_loss=0.8051 pooled_val_f1_micro=0.7017
+[train] epoch 5/10 train_loss=0.2206 val_loss=0.8252 pooled_val_f1_micro=0.7686
+[train] new best pooled_val_f1_micro=0.7686 at epoch 5 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/scibert_base/seed_49/best
+[train] epoch 6/10 train_loss=0.2044 val_loss=1.0013 pooled_val_f1_micro=0.7211
+[train] epoch 7/10 train_loss=0.1898 val_loss=0.9351 pooled_val_f1_micro=0.7267
+[train] epoch 8/10 train_loss=0.1787 val_loss=0.9001 pooled_val_f1_micro=0.7607
+[train] epoch 9/10 train_loss=0.1694 val_loss=1.0333 pooled_val_f1_micro=0.7525
+[train] epoch 10/10 train_loss=0.1636 val_loss=1.0302 pooled_val_f1_micro=0.7386
+[train] done scibert_base seed=49 best_val_f1=0.7686 best_epoch=5 epochs_run=10
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/scibert_base/seed_49/best: BioRED=14395 DrugProt=0 gdis=9769 gd_combined=4626 (DrugProt holdout unavailable; combined=BioRED gene-drug only)
+[benchmark] done gdis=0.7857 gd_combined=0.6299 gd_biored=0.6299 gd_drugprot=nan overall=0.7440
+  COMPLETE SciBERT (scibert_base) seed=49: gd_combined=0.630 gdis=0.786 best_epoch=5 pooled_val_f1=0.769 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/results/scibert_base/seed_49/matrix_complete.json
+
+=== Step-2 matrix training complete (this job) ===
+  Trained: 4, skipped (already done): 0, planned: 4
+
+End: Sun Jun 28 21:36:03 UTC 2026

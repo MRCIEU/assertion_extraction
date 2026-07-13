@@ -1,0 +1,12 @@
+=== Round 1 KB scoring (stage 1, GPU) ===
+Host: nid010899
+SLURM_JOB_ID=5411790
+Start: Sun Jun 28 22:28:57 UTC 2026
+REPO=/home/b5ac/freddieyu.b5ac/project_1
+OUTPUT_ROOT=/home/b5ac/freddieyu.b5ac/project_1/../projects/project_1
+STEP_ARGS=--model-id roberta_base
+usage: run.py [-h] [--sweep-only] [--sweep-advisory-only] [--decide-recipe]
+              [--train-only] [--preflight-sweep] [--preflight-train]
+              [--accept-matrix] [--matrix-report] [--force]
+              [--models MODELS [MODELS ...]] [--seeds SEEDS [SEEDS ...]]
+run.py: error: unrecognized arguments: --score-only --model-id roberta_base --force-score

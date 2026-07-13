@@ -5,7 +5,7 @@ set -euo pipefail
 STEP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 ENCODERS=(
-  pubmedbert_base biomedbert_base biolinkbert_base biobert_base scibert_base
+  pubmedbert_base bluebert_base biolinkbert_base biobert_base scibert_base
   roberta_base bert_base distilbert_base deberta_base
 )
 

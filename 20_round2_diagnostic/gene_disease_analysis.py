@@ -245,7 +245,7 @@ def _mixed_verdict_narrative(
         "or a few outlier seeds. "
         "There is no single uniform mechanism acting identically on every architecture. "
         "Instead the data show regular, predictable encoder heterogeneity. Biomedical-domain "
-        "encoders (PubMedBERT, BioMedBERT, BioLinkBERT, SciBERT) show systematic gene-disease "
+        "encoders (PubMedBERT, BlueBERT, BioLinkBERT, SciBERT) show systematic gene-disease "
         "decline during training, with every seed falling in three of those four families. "
         "General-purpose encoders show flat or rising hard-subset ranking. Erosion magnitude "
         f"increases monotonically with biomedical pretraining ({biomed_line}) "

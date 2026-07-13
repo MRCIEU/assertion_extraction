@@ -1,0 +1,137 @@
+TMPDIR=/home/b5ac/freddieyu.b5ac/projects/project_1/runs/manuscript_regenerate/tmp/5473617
+=== Manuscript regeneration (CPU) ===
+REPO=/home/b5ac/freddieyu.b5ac/project_1
+OUTPUT_ROOT=/home/b5ac/freddieyu.b5ac/projects/project_1
+/home/b5ac/freddieyu.b5ac/miniforge3/envs/hf-hpc/lib/python3.10/runpy.py:126: RuntimeWarning: 'manuscript_regenerate.run_all' found in sys.modules after import of package 'manuscript_regenerate', but prior to execution of 'manuscript_regenerate.run_all'; this may result in unpredictable behaviour
+  warn(RuntimeWarning(msg))
+=== Manuscript source regeneration ===
+Shared vocabulary: in-distribution benchmark (self-measured BioRED presence F1); out-of-distribution knowledge-base ranking (CIViC); evaluation-validity question
+Shared style module: /home/b5ac/freddieyu.b5ac/project_1/shared/plot_style.py OK
+  Palette: Okabe-Ito (8 colours)
+  Semantic roles: benchmark=#0072B2, kb=#D55E00, gene-drug=#009E73, gene-disease=#CC79A7, baseline=#999999, deberta=#E69F00
+  DPI=300, sans-serif, no top/right spines, light gridlines
+
+=== Pre-flight: source artifacts ===
+  step 00: OK (3 artifacts)
+  step 01: OK (5 artifacts)
+  step 02: OK (1 artifacts)
+  step 03: OK (3 artifacts)
+  step 04: OK (2 artifacts)
+  step 05: OK (2 artifacts)
+  step 10: OK (3 artifacts)
+  step 11: OK (7 artifacts)
+  step 20: OK (5 artifacts)
+
+=== Regenerating figures ===
+
+=== Within-seed paired change summary (epoch 1 -> best val F1) ===
+  Pairable seeds: 69 | erosion (bench up, KB hard down): 36 (52.2%)
+  Mean delta benchmark: +0.0219 | mean delta KB hard: -0.0083 | mean delta KB gene-disease: -0.0541
+
+=== Hard vs easy (KB MRR change) ===
+  hard_cross_sentence: mean delta -0.0083 [-0.0148, -0.0013], KB falls in 47/69 seeds
+  easy_co_sentence: mean delta -0.0027 [-0.0099, +0.0045], KB falls in 41/69 seeds
+
+=== Pair type (KB MRR change) ===
+  gene-drug: mean delta +0.0042 [-0.0059, +0.0152], KB falls in 41/69 seeds
+  gene-disease: mean delta -0.0541 [-0.0820, -0.0249], KB falls in 46/69 seeds
+
+=== Robustness across well-trained definitions (mean frac erosion per encoder) ===
+  best validation F1 checkpoint: 52.4%
+  last saved epoch: 40.3%
+  fixed epoch 5 (capped at last saved): 37.5%
+
+=== ADJUDICATION VERDICT (pooled hard subset): mixed ===
+Within-model paired changes are heterogeneous across seeds. Neither a robust training-dynamics erosion story nor a pure static-mismatch story is fully supported.
+Round 1 found KB gene-drug variance was about 64% within-encoder seed noise and 36% between encoders, so between-model comparisons had limited power. Within-seed paired changes across training remove between-seed noise and are the appropriate design for detecting a training-dynamics effect.
+
+=== Gene-disease erosion deepening (epoch 1 -> best validation F1) ===
+  gene-disease (all): mean -0.0541, median -0.0981 [-0.0820, -0.0249], falls 46/69 seeds
+  gene-disease hard: mean -0.0126, median -0.0148 [-0.0237, -0.0010], falls 39/69 seeds
+  gene-disease easy: mean -0.0126, median -0.0192 [-0.0196, -0.0053], falls 52/69 seeds
+  gene-drug (all): mean +0.0042, median -0.0089 [-0.0059, +0.0152], falls 41/69 seeds
+
+=== Gene-disease robustness across well-trained definitions ===
+  gene_disease:
+    best validation F1 checkpoint: mean -0.0541, falls 66.7%
+    last saved epoch: mean -0.0835, falls 76.4%
+    fixed epoch 5 (capped at last saved): mean -0.0529, falls 68.1%
+  gene_disease_hard:
+    best validation F1 checkpoint: mean -0.0126, falls 56.5%
+    last saved epoch: mean -0.0349, falls 77.8%
+    fixed epoch 5 (capped at last saved): mean -0.0269, falls 63.9%
+
+=== Per-encoder gene-disease-hard (mean delta, frac seeds falling) ===
+  SciBERT: mean -0.0776, falls 100% (7/7)
+  BioLinkBERT-base: mean -0.0637, falls 100% (8/8)
+  PubMedBERT-base: mean -0.0225, falls 88% (7/8)
+  BioBERT-base: mean -0.0056, falls 43% (3/7)
+  RoBERTa-base: mean -0.0016, falls 50% (4/8)
+  DeBERTa-base: mean +0.0062, falls 38% (3/8)
+  BioMedBERT-base: mean +0.0144, falls 14% (1/7)
+  BERT-base: mean +0.0161, falls 50% (4/8)
+  DistilBERT-base: mean +0.0164, falls 25% (2/8)
+
+=== GENE-DISEASE VERDICT: gene_disease_biomed_pretraining_erosion ===
+The three mundane checks rule out ordinary artefacts. Gene-disease ranking decline is stable across all three well-trained checkpoint definitions. In most seeds the knowledge-base peak precedes or coincides with the validation-best checkpoint, so simple post-optimum overfitting is not the main story. The decline persists in abstracts whose pool size matches the gene-drug range, and bootstrap over seeds puts the probability of a negative gene-disease-hard mean change at 98.2%. This is a non-trivial within-model effect, not an artefact of checkpoint choice, pool size, or a few outlier seeds. There is no single uniform mechanism acting identically on every architecture. Instead the data show regular, predictable encoder heterogeneity. Biomedical-domain encoders (PubMedBERT, BioMedBERT, BioLinkBERT, SciBERT) show systematic gene-disease decline during training, with every seed falling in three of those four families. General-purpose encoders show flat or rising hard-subset ranking. Erosion magnitude increases monotonically with biomedical pretraining (Spearman rho=+0.693, p=0.039) and with benchmark level (rho=+0.800, p=0.010) across nine encoders. That pattern is a descriptive finding, not noise or a failed uniformity check. With only nine correlated encoder families, this relationship is exploratory and needs a controlled encoder study before any causal claim. Gene-drug ranking stays flat or positive in the pooled average and fits the static pool and criterion differences on the between-model axis. Non-drug chemical inflation sits only on the gene-drug side, which is why gene-disease is the informative control. Overall: pushing a model to fit the in-distribution benchmark systematically erodes out-of-distribution gene-disease knowledge-base ranking for biomedically pretrained encoders. That effect is not explained by the static pool or criterion differences and is not present uniformly across architectures. This remains a descriptive diagnostic with the stated caveats; it does not establish a confirmed causal mechanism.
+
+=== Part 1a: KB peak timing vs best-validation epoch ===
+  gene_disease:
+    before_best_val: 58 seeds (80.6%)
+    coincident_best_val: 13 seeds (18.1%)
+    after_best_val: 1 seeds (1.4%)
+  gene_disease_hard:
+    before_best_val: 50 seeds (69.4%)
+    coincident_best_val: 18 seeds (25.0%)
+    after_best_val: 4 seeds (5.6%)
+  Interpretation: Most seeds show the gene-disease ranking peak at or before the validation-best checkpoint, so ranking is already falling or flat by the time the model reaches its validation optimum. That pattern is harder to explain as simple post-optimum overfitting alone.
+
+=== Part 1b: Pool-size stratified gene-disease paired change ===
+  small_pool: mean delta -0.0436 [-0.0705, -0.0153], falls 46/69
+  large_pool: mean delta -0.0729 [-0.1035, -0.0404], falls 47/69
+  comparable_to_gene_drug: mean delta -0.0349 [-0.0604, -0.0082], falls 46/69
+  Interpretation: Gene-disease ranking still falls when restricted to abstracts whose pool size matches the gene-drug range, so the erosion is not explained by large-pool difficulty alone.
+
+  Positive-count bootstrap (gene-disease-hard paired delta): mean -0.0126, P(negative)=98.2%
+
+=== Part 2: Encoder-property correlation (gene-disease-hard erosion, n=9) ===
+  mean benchmark F1: Spearman rho=+0.800 (p=0.010)
+  biomedical pretraining (binary): Spearman rho=+0.693 (p=0.039)
+  parameter count (millions): Spearman rho=+0.426 (p=0.253)
+  Note: nine encoders with correlated families; exploratory only. Strongest monotonic association: mean benchmark F1 (rho=+0.800).
+  Loaded enriched pool cache (enriched_primary_pool.parquet)
+
+=== Part 3b: Abstract-unsupported proportion (missed positives) ===
+  Missed positives (worst-ranked CIViC+ per abstract): 852
+  Abstract-unsupported: 34 (4.0%)
+  Genuine model errors (abstract-supported): 818
+
+=== Part 3c: Systematic failure modes (genuine errors only) ===
+  cross_sentence_hard: 47.8% of genuine errors
+  multiword_entity: 14.7% of genuine errors
+  publication_year_before_2010: 18.9% of genuine errors
+  gene_disease_pair: 30.9% of genuine errors
+
+  Flagged for manual reading: 24 cases -> 20_qualitative_errors_flagged_manual.csv
+
+=== Regenerating reports ===
+Traceback (most recent call last):
+  File "/home/b5ac/freddieyu.b5ac/miniforge3/envs/hf-hpc/lib/python3.10/runpy.py", line 196, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/home/b5ac/freddieyu.b5ac/miniforge3/envs/hf-hpc/lib/python3.10/runpy.py", line 86, in _run_code
+    exec(code, run_globals)
+  File "/home/b5ac/freddieyu.b5ac/project_1/manuscript_regenerate/run_all.py", line 171, in <module>
+    main()
+  File "/home/b5ac/freddieyu.b5ac/project_1/manuscript_regenerate/run_all.py", line 148, in main
+    reports = regenerate_reports()
+  File "/home/b5ac/freddieyu.b5ac/project_1/manuscript_regenerate/run_all.py", line 49, in regenerate_reports
+    path = REPORT_WRITERS[key](step_paths(STEPS[key]))
+  File "/home/b5ac/freddieyu.b5ac/project_1/manuscript_regenerate/reports_step11.py", line 41, in write_report_11
+    bench_boot = boot[boot["metric"] == "benchmark_f1"].iloc[0]
+  File "/home/b5ac/freddieyu.b5ac/miniforge3/envs/hf-hpc/lib/python3.10/site-packages/pandas/core/indexing.py", line 1192, in __getitem__
+    return self._getitem_axis(maybe_callable, axis=axis)
+  File "/home/b5ac/freddieyu.b5ac/miniforge3/envs/hf-hpc/lib/python3.10/site-packages/pandas/core/indexing.py", line 1753, in _getitem_axis
+    self._validate_integer(key, axis)
+  File "/home/b5ac/freddieyu.b5ac/miniforge3/envs/hf-hpc/lib/python3.10/site-packages/pandas/core/indexing.py", line 1686, in _validate_integer
+    raise IndexError("single positional indexer is out-of-bounds")
+IndexError: single positional indexer is out-of-bounds

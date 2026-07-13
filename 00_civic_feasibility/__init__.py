@@ -1,1 +1,0 @@
-"""CIViC feasibility analysis package."""

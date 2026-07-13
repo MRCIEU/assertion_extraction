@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from .config import MATRIX_CKPT_DIR, MATRIX_RESULTS_DIR
+from .config import MATRIX_CKPT_DIR, MATRIX_RESULTS_DIR, resolve_checkpoint_model_id
 
 
 def _has_model_weights(d: Path) -> bool:
@@ -13,7 +13,7 @@ def _has_model_weights(d: Path) -> bool:
 
 
 def run_checkpoint_root(model_id: str, seed: int) -> Path:
-    return MATRIX_CKPT_DIR / model_id / f"seed_{seed}"
+    return MATRIX_CKPT_DIR / resolve_checkpoint_model_id(model_id) / f"seed_{seed}"
 
 
 def epoch_checkpoint_dir(model_id: str, seed: int, epoch: int) -> Path:
@@ -31,7 +31,7 @@ def load_training_meta(model_id: str, seed: int) -> dict | None:
     if ckpt_log.exists():
         meta = json.loads(ckpt_log.read_text(encoding="utf-8"))
 
-    complete = MATRIX_RESULTS_DIR / model_id / f"seed_{seed}" / "matrix_complete.json"
+    complete = MATRIX_RESULTS_DIR / resolve_checkpoint_model_id(model_id) / f"seed_{seed}" / "matrix_complete.json"
     complete_meta = json.loads(complete.read_text(encoding="utf-8")) if complete.exists() else None
 
     if meta is None and complete_meta is not None:

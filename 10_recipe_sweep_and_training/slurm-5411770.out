@@ -1,0 +1,128 @@
+=== Step 2: full-matrix training ===
+Host: nid010669
+SLURM_JOB_ID=5411770
+SLURM_JOB_NAME=train_bluebert_46-47-48-49
+Start: Sun Jun 28 19:29:25 UTC 2026
+REPO=/home/b5ac/freddieyu.b5ac/project_1
+OUTPUT_ROOT=/home/b5ac/freddieyu.b5ac/project_1/../projects/project_1
+STEP_ARGS=--force --models bluebert_base --seeds 46 47 48 49
+Log: /home/b5ac/freddieyu.b5ac/project_1/../projects/project_1/runs/10_recipe_sweep_and_training/train_5411770.out
+Ensure CHOSEN_RECIPE is set in config.py (not None) before submitting.
+TMPDIR=/home/b5ac/freddieyu.b5ac/project_1/../projects/project_1/runs/10_recipe_sweep_and_training/tmp_5411770
+=== Recipe sweep and training 2026-06-28T19:29:29.126620 ===
+[run] mode=train-only (step 2)
+[run] model filter: ['bluebert_base']
+[run] seed filter: [46, 47, 48, 49]
+
+=== Step-2 matrix training ===
+Recipe: lr=5e-06, warmup=none (checkpoint criterion=pooled_val_f1_micro)
+Encoders (1): ['bluebert_base']
+Seeds (4): [46, 47, 48, 49]
+Planned runs this job: 4
+
+
+=== Estimated checkpoint footprint (rough) ===
+  Runs: 1 encoders x 4 seeds = 4
+  Assumed ~10 epochs/run; epoch ckpt ~220 MiB (fp16); best ckpt ~440 MiB (fp32)
+  Per run ~2640 MiB; total ~10.3 GiB
+  MAX_EPOCH_CHECKPOINTS_TO_KEEP=None (None = keep all epoch checkpoints)
+
+[benchmark] building BioRED test examples...
+[benchmark] built 14395 BioRED test examples (leaked PMIDs excluded)
+[benchmark] building DrugProt test examples...
+[benchmark] DrugProt: no labeled public test split in BigBio (splits=['train', 'validation', 'test_background']; test_background is unlabeled). Skipping DrugProt holdout benchmark; gene-drug combined uses BioRED test only.
+  RUN START BlueBERT-base (bluebert_base) seed=46 [1/4 in this job]
+[train] start bluebert_base seed=46 lr=5e-06 warmup=none hf=bionlp/bluebert_pubmed_mimic_uncased_L-12_H-768_A-12 train=24000 val=25311 (pooled BioRED+DrugProt) -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/bluebert_base/seed_46
+[train] device=cuda batch_size=16 max_epochs=10
+Some weights of BertForSequenceClassification were not initialized from the model checkpoint at bionlp/bluebert_pubmed_mimic_uncased_L-12_H-768_A-12 and are newly initialized: ['classifier.bias', 'classifier.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[train] epoch 1/10 train_loss=0.6493 val_loss=0.6675 pooled_val_f1_micro=0.6466
+[train] new best pooled_val_f1_micro=0.6466 at epoch 1 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/bluebert_base/seed_46/best
+[train] epoch 2/10 train_loss=0.5754 val_loss=0.6292 pooled_val_f1_micro=0.6276
+[train] epoch 3/10 train_loss=0.5139 val_loss=0.6719 pooled_val_f1_micro=0.6742
+[train] new best pooled_val_f1_micro=0.6742 at epoch 3 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/bluebert_base/seed_46/best
+[train] epoch 4/10 train_loss=0.4757 val_loss=0.7572 pooled_val_f1_micro=0.6381
+[train] epoch 5/10 train_loss=0.4498 val_loss=0.6669 pooled_val_f1_micro=0.6868
+[train] new best pooled_val_f1_micro=0.6868 at epoch 5 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/bluebert_base/seed_46/best
+[train] epoch 6/10 train_loss=0.4228 val_loss=0.7390 pooled_val_f1_micro=0.6085
+[train] epoch 7/10 train_loss=0.4025 val_loss=0.7970 pooled_val_f1_micro=0.6915
+[train] new best pooled_val_f1_micro=0.6915 at epoch 7 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/bluebert_base/seed_46/best
+[train] epoch 8/10 train_loss=0.3828 val_loss=0.7310 pooled_val_f1_micro=0.6895
+[train] epoch 9/10 train_loss=0.3631 val_loss=0.8102 pooled_val_f1_micro=0.6707
+[train] epoch 10/10 train_loss=0.3462 val_loss=0.8838 pooled_val_f1_micro=0.6433
+[train] done bluebert_base seed=46 best_val_f1=0.6915 best_epoch=7 epochs_run=10
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/bluebert_base/seed_46/best: BioRED=14395 DrugProt=0 gdis=9769 gd_combined=4626 (DrugProt holdout unavailable; combined=BioRED gene-drug only)
+[benchmark] done gdis=0.7575 gd_combined=0.5859 gd_biored=0.5859 gd_drugprot=nan overall=0.7122
+  COMPLETE BlueBERT-base (bluebert_base) seed=46: gd_combined=0.586 gdis=0.757 best_epoch=7 pooled_val_f1=0.692 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/results/bluebert_base/seed_46/matrix_complete.json
+  RUN START BlueBERT-base (bluebert_base) seed=47 [2/4 in this job]
+[train] start bluebert_base seed=47 lr=5e-06 warmup=none hf=bionlp/bluebert_pubmed_mimic_uncased_L-12_H-768_A-12 train=24000 val=25311 (pooled BioRED+DrugProt) -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/bluebert_base/seed_47
+[train] device=cuda batch_size=16 max_epochs=10
+Some weights of BertForSequenceClassification were not initialized from the model checkpoint at bionlp/bluebert_pubmed_mimic_uncased_L-12_H-768_A-12 and are newly initialized: ['classifier.bias', 'classifier.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[train] epoch 1/10 train_loss=0.6403 val_loss=0.6295 pooled_val_f1_micro=0.6808
+[train] new best pooled_val_f1_micro=0.6808 at epoch 1 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/bluebert_base/seed_47/best
+[train] epoch 2/10 train_loss=0.5581 val_loss=0.6343 pooled_val_f1_micro=0.5717
+[train] epoch 3/10 train_loss=0.5097 val_loss=0.7531 pooled_val_f1_micro=0.5966
+[train] epoch 4/10 train_loss=0.4714 val_loss=0.7137 pooled_val_f1_micro=0.6605
+[train] epoch 5/10 train_loss=0.4459 val_loss=0.7948 pooled_val_f1_micro=0.6039
+[train] epoch 6/10 train_loss=0.4206 val_loss=0.7557 pooled_val_f1_micro=0.6253
+[train] epoch 7/10 train_loss=0.4013 val_loss=0.7567 pooled_val_f1_micro=0.6676
+[train] epoch 8/10 train_loss=0.3817 val_loss=0.7395 pooled_val_f1_micro=0.6307
+[train] epoch 9/10 train_loss=0.3649 val_loss=0.9210 pooled_val_f1_micro=0.6337
+[train] epoch 10/10 train_loss=0.3493 val_loss=0.9352 pooled_val_f1_micro=0.6668
+[train] done bluebert_base seed=47 best_val_f1=0.6808 best_epoch=1 epochs_run=10
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/bluebert_base/seed_47/best: BioRED=14395 DrugProt=0 gdis=9769 gd_combined=4626 (DrugProt holdout unavailable; combined=BioRED gene-drug only)
+[benchmark] done gdis=0.7576 gd_combined=0.6191 gd_biored=0.6191 gd_drugprot=nan overall=0.7208
+  COMPLETE BlueBERT-base (bluebert_base) seed=47: gd_combined=0.619 gdis=0.758 best_epoch=1 pooled_val_f1=0.681 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/results/bluebert_base/seed_47/matrix_complete.json
+  RUN START BlueBERT-base (bluebert_base) seed=48 [3/4 in this job]
+[train] start bluebert_base seed=48 lr=5e-06 warmup=none hf=bionlp/bluebert_pubmed_mimic_uncased_L-12_H-768_A-12 train=24000 val=25311 (pooled BioRED+DrugProt) -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/bluebert_base/seed_48
+[train] device=cuda batch_size=16 max_epochs=10
+Some weights of BertForSequenceClassification were not initialized from the model checkpoint at bionlp/bluebert_pubmed_mimic_uncased_L-12_H-768_A-12 and are newly initialized: ['classifier.bias', 'classifier.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[train] epoch 1/10 train_loss=0.6494 val_loss=0.6698 pooled_val_f1_micro=0.4922
+[train] new best pooled_val_f1_micro=0.4922 at epoch 1 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/bluebert_base/seed_48/best
+[train] epoch 2/10 train_loss=0.5813 val_loss=0.6527 pooled_val_f1_micro=0.6806
+[train] new best pooled_val_f1_micro=0.6806 at epoch 2 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/bluebert_base/seed_48/best
+[train] epoch 3/10 train_loss=0.5228 val_loss=0.7010 pooled_val_f1_micro=0.5986
+[train] epoch 4/10 train_loss=0.4878 val_loss=0.7146 pooled_val_f1_micro=0.6293
+[train] epoch 5/10 train_loss=0.4561 val_loss=0.7595 pooled_val_f1_micro=0.6897
+[train] new best pooled_val_f1_micro=0.6897 at epoch 5 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/bluebert_base/seed_48/best
+[train] epoch 6/10 train_loss=0.4295 val_loss=0.7130 pooled_val_f1_micro=0.6752
+[train] epoch 7/10 train_loss=0.4115 val_loss=0.7205 pooled_val_f1_micro=0.7024
+[train] new best pooled_val_f1_micro=0.7024 at epoch 7 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/bluebert_base/seed_48/best
+[train] epoch 8/10 train_loss=0.3910 val_loss=0.8473 pooled_val_f1_micro=0.6498
+[train] epoch 9/10 train_loss=0.3705 val_loss=0.8428 pooled_val_f1_micro=0.6826
+[train] epoch 10/10 train_loss=0.3576 val_loss=0.8126 pooled_val_f1_micro=0.6780
+[train] done bluebert_base seed=48 best_val_f1=0.7024 best_epoch=7 epochs_run=10
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/bluebert_base/seed_48/best: BioRED=14395 DrugProt=0 gdis=9769 gd_combined=4626 (DrugProt holdout unavailable; combined=BioRED gene-drug only)
+[benchmark] done gdis=0.7686 gd_combined=0.6169 gd_biored=0.6169 gd_drugprot=nan overall=0.7278
+  COMPLETE BlueBERT-base (bluebert_base) seed=48: gd_combined=0.617 gdis=0.769 best_epoch=7 pooled_val_f1=0.702 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/results/bluebert_base/seed_48/matrix_complete.json
+  RUN START BlueBERT-base (bluebert_base) seed=49 [4/4 in this job]
+[train] start bluebert_base seed=49 lr=5e-06 warmup=none hf=bionlp/bluebert_pubmed_mimic_uncased_L-12_H-768_A-12 train=24000 val=25311 (pooled BioRED+DrugProt) -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/bluebert_base/seed_49
+[train] device=cuda batch_size=16 max_epochs=10
+Some weights of BertForSequenceClassification were not initialized from the model checkpoint at bionlp/bluebert_pubmed_mimic_uncased_L-12_H-768_A-12 and are newly initialized: ['classifier.bias', 'classifier.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[train] epoch 1/10 train_loss=0.6465 val_loss=0.6697 pooled_val_f1_micro=0.4701
+[train] new best pooled_val_f1_micro=0.4701 at epoch 1 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/bluebert_base/seed_49/best
+[train] epoch 2/10 train_loss=0.5640 val_loss=0.6501 pooled_val_f1_micro=0.5751
+[train] new best pooled_val_f1_micro=0.5751 at epoch 2 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/bluebert_base/seed_49/best
+[train] epoch 3/10 train_loss=0.5097 val_loss=0.6755 pooled_val_f1_micro=0.6563
+[train] new best pooled_val_f1_micro=0.6563 at epoch 3 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/bluebert_base/seed_49/best
+[train] epoch 4/10 train_loss=0.4738 val_loss=0.6825 pooled_val_f1_micro=0.5913
+[train] epoch 5/10 train_loss=0.4465 val_loss=0.6555 pooled_val_f1_micro=0.7167
+[train] new best pooled_val_f1_micro=0.7167 at epoch 5 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/bluebert_base/seed_49/best
+[train] epoch 6/10 train_loss=0.4274 val_loss=0.7886 pooled_val_f1_micro=0.6417
+[train] epoch 7/10 train_loss=0.4041 val_loss=0.8321 pooled_val_f1_micro=0.6696
+[train] epoch 8/10 train_loss=0.3848 val_loss=0.8539 pooled_val_f1_micro=0.6106
+[train] epoch 9/10 train_loss=0.3662 val_loss=0.9502 pooled_val_f1_micro=0.6471
+[train] epoch 10/10 train_loss=0.3492 val_loss=0.8509 pooled_val_f1_micro=0.6242
+[train] done bluebert_base seed=49 best_val_f1=0.7167 best_epoch=5 epochs_run=10
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/bluebert_base/seed_49/best: BioRED=14395 DrugProt=0 gdis=9769 gd_combined=4626 (DrugProt holdout unavailable; combined=BioRED gene-drug only)
+[benchmark] done gdis=0.7649 gd_combined=0.6615 gd_biored=0.6615 gd_drugprot=nan overall=0.7366
+  COMPLETE BlueBERT-base (bluebert_base) seed=49: gd_combined=0.661 gdis=0.765 best_epoch=5 pooled_val_f1=0.717 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/results/bluebert_base/seed_49/matrix_complete.json
+
+=== Step-2 matrix training complete (this job) ===
+  Trained: 4, skipped (already done): 0, planned: 4
+
+=== Done ===
+End: Sun Jun 28 21:37:40 UTC 2026

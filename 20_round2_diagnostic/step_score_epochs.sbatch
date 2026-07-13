@@ -25,6 +25,9 @@ REPO="$(cd "${STEP_DIR}/.." && pwd)"
 OUTPUT_ROOT="${OUTPUT_ROOT:-${REPO}/../projects/project_1}"
 RUNS="${OUTPUT_ROOT}/runs/${STEP}"
 mkdir -p "${RUNS}"
+# shellcheck source=/dev/null
+source "${REPO}/_slurm_env.sh"
+setup_slurm_tmpdir "${RUNS}"
 
 JOB_TAG="${SLURM_JOB_ID:-local}"
 exec > >(tee "${RUNS}/score_epochs_${JOB_TAG}.out") 2> >(tee "${RUNS}/score_epochs_${JOB_TAG}.err" >&2)
@@ -37,13 +40,6 @@ export OUTPUT_ROOT
 export PYTHONUNBUFFERED=1
 export HF_HOME="${HF_HOME:-${HOME}/.cache/huggingface}"
 export TOKENIZERS_PARALLELISM=false
-# SLURM_TMPDIR often points at /local/user/<uid> which may not exist on the node.
-# Use a Lustre-backed job temp dir so torch import (distributed.nn jit) succeeds.
-export TMPDIR="${RUNS}/tmp/${JOB_TAG}"
-mkdir -p "${TMPDIR}"
-export TEMP="${TMPDIR}"
-export TMP="${TMPDIR}"
-echo "TMPDIR=${TMPDIR}"
 
 cd "${STEP_DIR}"
 python run.py --score-epochs-only ${STEP_ARGS:-} ${FORCE_RESCORE:+--force-rescore}

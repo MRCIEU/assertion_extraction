@@ -1,0 +1,3 @@
+=== Round 2 epoch scoring (GPU) ===
+TMPDIR=/home/b5ac/freddieyu.b5ac/project_1/../projects/project_1/runs/20_round2_diagnostic/tmp/5419927
+python: can't open file '/var/spool/slurmd/job5419927/run.py': [Errno 2] No such file or directory

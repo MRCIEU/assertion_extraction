@@ -1,0 +1,81 @@
+=== Round 2 epoch scoring (GPU) ===
+TMPDIR=/home/b5ac/freddieyu.b5ac/project_1/../projects/project_1/runs/20_round2_diagnostic/tmp/5419989
+
+=== Per-epoch scoring (5e-6/none matrix) ===
+Encoders: ['biobert_base']
+Seeds: [44, 45]
+Expected epoch checkpoints: 80 (9 encoders x 8 seeds x 10 epochs = 720)
+Already scored: 0
+
+  Loaded enriched pool cache (enriched_primary_pool.parquet)
+[benchmark] building BioRED test examples...
+[benchmark] built 14395 BioRED test examples (leaked PMIDs excluded)
+[benchmark] building DrugProt test examples...
+[benchmark] DrugProt: no labeled public test split in BigBio (splits=['train', 'validation', 'test_background']; test_background is unlabeled). Skipping DrugProt holdout benchmark; gene-drug combined uses BioRED test only.
+  SCORE BioBERT-base seed=44 epoch=1
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_44/epochs/epoch_01: BioRED=14395 DrugProt=0 gdis=9769 gd_combined=4626 (DrugProt holdout unavailable; combined=BioRED gene-drug only)
+[benchmark] done gdis=0.7514 gd_combined=0.5458 gd_biored=0.5458 gd_drugprot=nan overall=0.6981
+  SCORE BioBERT-base seed=44 epoch=2
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_44/epochs/epoch_02: BioRED=14395 DrugProt=0 gdis=9769 gd_combined=4626 (DrugProt holdout unavailable; combined=BioRED gene-drug only)
+[benchmark] done gdis=0.7724 gd_combined=0.5923 gd_biored=0.5923 gd_drugprot=nan overall=0.7238
+  SCORE BioBERT-base seed=44 epoch=3
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_44/epochs/epoch_03: BioRED=14395 DrugProt=0 gdis=9769 gd_combined=4626 (DrugProt holdout unavailable; combined=BioRED gene-drug only)
+[benchmark] done gdis=0.7688 gd_combined=0.6223 gd_biored=0.6223 gd_drugprot=nan overall=0.7292
+  SCORE BioBERT-base seed=44 epoch=4
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_44/epochs/epoch_04: BioRED=14395 DrugProt=0 gdis=9769 gd_combined=4626 (DrugProt holdout unavailable; combined=BioRED gene-drug only)
+[benchmark] done gdis=0.7515 gd_combined=0.5600 gd_biored=0.5600 gd_drugprot=nan overall=0.6999
+  SCORE BioBERT-base seed=44 epoch=5
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_44/epochs/epoch_05: BioRED=14395 DrugProt=0 gdis=9769 gd_combined=4626 (DrugProt holdout unavailable; combined=BioRED gene-drug only)
+[benchmark] done gdis=0.7619 gd_combined=0.5918 gd_biored=0.5918 gd_drugprot=nan overall=0.7150
+  SCORE BioBERT-base seed=44 epoch=6
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_44/epochs/epoch_06: BioRED=14395 DrugProt=0 gdis=9769 gd_combined=4626 (DrugProt holdout unavailable; combined=BioRED gene-drug only)
+[benchmark] done gdis=0.7751 gd_combined=0.6425 gd_biored=0.6425 gd_drugprot=nan overall=0.7378
+  SCORE BioBERT-base seed=44 epoch=7
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_44/epochs/epoch_07: BioRED=14395 DrugProt=0 gdis=9769 gd_combined=4626 (DrugProt holdout unavailable; combined=BioRED gene-drug only)
+[benchmark] done gdis=0.7475 gd_combined=0.5852 gd_biored=0.5852 gd_drugprot=nan overall=0.7017
+  SCORE BioBERT-base seed=44 epoch=8
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_44/epochs/epoch_08: BioRED=14395 DrugProt=0 gdis=9769 gd_combined=4626 (DrugProt holdout unavailable; combined=BioRED gene-drug only)
+[benchmark] done gdis=0.7344 gd_combined=0.5488 gd_biored=0.5488 gd_drugprot=nan overall=0.6828
+  SCORE BioBERT-base seed=44 epoch=9
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_44/epochs/epoch_09: BioRED=14395 DrugProt=0 gdis=9769 gd_combined=4626 (DrugProt holdout unavailable; combined=BioRED gene-drug only)
+[benchmark] done gdis=0.7617 gd_combined=0.6241 gd_biored=0.6241 gd_drugprot=nan overall=0.7227
+  SCORE BioBERT-base seed=44 epoch=10
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_44/epochs/epoch_10: BioRED=14395 DrugProt=0 gdis=9769 gd_combined=4626 (DrugProt holdout unavailable; combined=BioRED gene-drug only)
+[benchmark] done gdis=0.7627 gd_combined=0.5435 gd_biored=0.5435 gd_drugprot=nan overall=0.7051
+  SCORE BioBERT-base seed=45 epoch=1
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_45/epochs/epoch_01: BioRED=14395 DrugProt=0 gdis=9769 gd_combined=4626 (DrugProt holdout unavailable; combined=BioRED gene-drug only)
+[benchmark] done gdis=0.7523 gd_combined=0.6135 gd_biored=0.6135 gd_drugprot=nan overall=0.7157
+  SCORE BioBERT-base seed=45 epoch=2
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_45/epochs/epoch_02: BioRED=14395 DrugProt=0 gdis=9769 gd_combined=4626 (DrugProt holdout unavailable; combined=BioRED gene-drug only)
+[benchmark] done gdis=0.7630 gd_combined=0.6298 gd_biored=0.6298 gd_drugprot=nan overall=0.7281
+  SCORE BioBERT-base seed=45 epoch=3
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_45/epochs/epoch_03: BioRED=14395 DrugProt=0 gdis=9769 gd_combined=4626 (DrugProt holdout unavailable; combined=BioRED gene-drug only)
+[benchmark] done gdis=0.7671 gd_combined=0.6551 gd_biored=0.6551 gd_drugprot=nan overall=0.7361
+  SCORE BioBERT-base seed=45 epoch=4
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_45/epochs/epoch_04: BioRED=14395 DrugProt=0 gdis=9769 gd_combined=4626 (DrugProt holdout unavailable; combined=BioRED gene-drug only)
+[benchmark] done gdis=0.7840 gd_combined=0.6644 gd_biored=0.6644 gd_drugprot=nan overall=0.7509
+  SCORE BioBERT-base seed=45 epoch=5
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_45/epochs/epoch_05: BioRED=14395 DrugProt=0 gdis=9769 gd_combined=4626 (DrugProt holdout unavailable; combined=BioRED gene-drug only)
+[benchmark] done gdis=0.7771 gd_combined=0.6205 gd_biored=0.6205 gd_drugprot=nan overall=0.7338
+  SCORE BioBERT-base seed=45 epoch=6
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_45/epochs/epoch_06: BioRED=14395 DrugProt=0 gdis=9769 gd_combined=4626 (DrugProt holdout unavailable; combined=BioRED gene-drug only)
+[benchmark] done gdis=0.7782 gd_combined=0.6015 gd_biored=0.6015 gd_drugprot=nan overall=0.7303
+  SCORE BioBERT-base seed=45 epoch=7
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_45/epochs/epoch_07: BioRED=14395 DrugProt=0 gdis=9769 gd_combined=4626 (DrugProt holdout unavailable; combined=BioRED gene-drug only)
+[benchmark] done gdis=0.7562 gd_combined=0.6431 gd_biored=0.6431 gd_drugprot=nan overall=0.7235
+  SCORE BioBERT-base seed=45 epoch=8
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_45/epochs/epoch_08: BioRED=14395 DrugProt=0 gdis=9769 gd_combined=4626 (DrugProt holdout unavailable; combined=BioRED gene-drug only)
+[benchmark] done gdis=0.7757 gd_combined=0.6253 gd_biored=0.6253 gd_drugprot=nan overall=0.7342
+  SCORE BioBERT-base seed=45 epoch=9
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_45/epochs/epoch_09: BioRED=14395 DrugProt=0 gdis=9769 gd_combined=4626 (DrugProt holdout unavailable; combined=BioRED gene-drug only)
+[benchmark] done gdis=0.7358 gd_combined=0.4826 gd_biored=0.4826 gd_drugprot=nan overall=0.6679
+  SCORE BioBERT-base seed=45 epoch=10
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/biobert_base/seed_45/epochs/epoch_10: BioRED=14395 DrugProt=0 gdis=9769 gd_combined=4626 (DrugProt holdout unavailable; combined=BioRED gene-drug only)
+[benchmark] done gdis=0.7829 gd_combined=0.6235 gd_biored=0.6235 gd_drugprot=nan overall=0.7392
+
+=== Epoch scoring batch done ===
+  Newly scored: 20, skipped: 0, on disk: 78/80
+
+End: Mon Jun 29 12:00:25 UTC 2026
+{'expected_epoch_checkpoints': 80, 'scored_epochs': 78, 'complete': False, 'completed_at': '2026-06-29T12:00:23.576686+00:00', 'encoders': ['biobert_base']}
+Epoch score files: 0

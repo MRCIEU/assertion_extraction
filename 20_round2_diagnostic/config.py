@@ -33,6 +33,13 @@ _T10 = step_dirs(TRAIN_STEP)
 MATRIX_CKPT_DIR = _T10["data"] / "matrix" / "checkpoints"
 MATRIX_RESULTS_DIR = _T10["data"] / "matrix" / "results"
 
+# Legacy scripts may still pass biomedbert_base; on-disk matrix folders use bluebert_base.
+_CHECKPOINT_MODEL_ALIASES = {"biomedbert_base": "bluebert_base"}
+
+
+def resolve_checkpoint_model_id(model_id: str) -> str:
+    return _CHECKPOINT_MODEL_ALIASES.get(model_id, model_id)
+
 R11_STEP = "11_round1_analysis"
 _R11 = step_dirs(R11_STEP)
 R11_VARIANCE_CSV = _R11["outputs"] / "11_variance_components.csv"

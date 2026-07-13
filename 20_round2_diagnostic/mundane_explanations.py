@@ -23,6 +23,7 @@ from .config import (
     TIMING_SUMMARY_CSV,
     POOL_STRATUM_CSV,
     POOL_STRATUM_SUMMARY_CSV,
+    resolve_checkpoint_model_id,
 )
 from .epoch_scoring import load_all_epoch_scores
 from .matrix_io import epoch_checkpoint_dir, load_training_meta
@@ -142,7 +143,7 @@ def _mrr_for_stratum(scores: pd.DataFrame, pmids: set[str]) -> float:
 
 
 def _best_val_scores(model_id: str, seed: int) -> pd.DataFrame:
-    path = R11_SCORES_DIR / model_id / f"seed_{seed}.jsonl"
+    path = R11_SCORES_DIR / resolve_checkpoint_model_id(model_id) / f"seed_{seed}.jsonl"
     return load_scores_jsonl(path)
 
 
@@ -176,7 +177,8 @@ def _load_cache() -> dict[str, pd.DataFrame]:
         if not line.strip():
             continue
         rec = json.loads(line)
-        cache[f"{rec['model_id']}|{rec['seed']}"] = pd.DataFrame(rec["scores"])
+        mid = resolve_checkpoint_model_id(rec["model_id"])
+        cache[f"{mid}|{rec['seed']}"] = pd.DataFrame(rec["scores"])
     return cache
 
 

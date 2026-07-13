@@ -1,0 +1,94 @@
+=== Round 1 untrained-floor scoring (stage 1b, GPU) ===
+Host: nid010136
+SLURM_JOB_ID=5420047
+Start: Mon Jun 29 11:02:45 UTC 2026
+REPO=/home/b5ac/freddieyu.b5ac/project_1
+OUTPUT_ROOT=/home/b5ac/freddieyu.b5ac/project_1/../projects/project_1
+STEP_ARGS=<all 9 encoders>
+TMPDIR=/home/b5ac/freddieyu.b5ac/project_1/../projects/project_1/runs/11_round1_analysis/tmp/5420047
+
+=== Round 1 untrained-floor scoring (stage 1b, GPU) ===
+Encoders: ['pubmedbert_base', 'bluebert_base', 'biolinkbert_base', 'biobert_base', 'scibert_base', 'roberta_base', 'bert_base', 'distilbert_base', 'deberta_base']
+Already scored: 0/9
+
+[benchmark] building BioRED test examples...
+[benchmark] built 14395 BioRED test examples (leaked PMIDs excluded)
+Frozen pool: 18911 candidates; BioRED test examples: 14395
+  UNTRAINED START pubmedbert_base hf=microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext
+Some weights of BertForSequenceClassification were not initialized from the model checkpoint at microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract-fulltext and are newly initialized: ['classifier.bias', 'classifier.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[benchmark] building DrugProt test examples...
+[benchmark] DrugProt: no labeled public test split in BigBio (splits=['train', 'validation', 'test_background']; test_background is unlabeled). Skipping DrugProt holdout benchmark; gene-drug combined uses BioRED test only.
+[benchmark] evaluating untrained_pubmedbert_base: BioRED=14395 DrugProt=0 gdis=9769 gd_combined=4626 (DrugProt holdout unavailable; combined=BioRED gene-drug only)
+[benchmark] done gdis=0.4639 gd_combined=0.5040 gd_biored=0.5040 gd_drugprot=nan overall=0.4768
+  UNTRAINED DONE pubmedbert_base: bench=0.477 KB gd=0.532 gdis=0.425
+  UNTRAINED START bluebert_base hf=bionlp/bluebert_pubmed_mimic_uncased_L-12_H-768_A-12
+Some weights of BertForSequenceClassification were not initialized from the model checkpoint at bionlp/bluebert_pubmed_mimic_uncased_L-12_H-768_A-12 and are newly initialized: ['classifier.bias', 'classifier.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[benchmark] building DrugProt test examples...
+[benchmark] DrugProt: no labeled public test split in BigBio (splits=['train', 'validation', 'test_background']; test_background is unlabeled). Skipping DrugProt holdout benchmark; gene-drug combined uses BioRED test only.
+[benchmark] evaluating untrained_bluebert_base: BioRED=14395 DrugProt=0 gdis=9769 gd_combined=4626 (DrugProt holdout unavailable; combined=BioRED gene-drug only)
+[benchmark] done gdis=0.7452 gd_combined=0.7412 gd_biored=0.7412 gd_drugprot=nan overall=0.7439
+  UNTRAINED DONE bluebert_base: bench=0.744 KB gd=0.540 gdis=0.455
+  UNTRAINED START biolinkbert_base hf=michiyasunaga/BioLinkBERT-base
+Some weights of BertForSequenceClassification were not initialized from the model checkpoint at michiyasunaga/BioLinkBERT-base and are newly initialized: ['classifier.bias', 'classifier.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[benchmark] building DrugProt test examples...
+[benchmark] DrugProt: no labeled public test split in BigBio (splits=['train', 'validation', 'test_background']; test_background is unlabeled). Skipping DrugProt holdout benchmark; gene-drug combined uses BioRED test only.
+[benchmark] evaluating untrained_biolinkbert_base: BioRED=14395 DrugProt=0 gdis=9769 gd_combined=4626 (DrugProt holdout unavailable; combined=BioRED gene-drug only)
+[benchmark] done gdis=0.2214 gd_combined=0.1098 gd_biored=0.1098 gd_drugprot=nan overall=0.1876
+  UNTRAINED DONE biolinkbert_base: bench=0.188 KB gd=0.490 gdis=0.381
+  UNTRAINED START biobert_base hf=dmis-lab/biobert-base-cased-v1.2
+Some weights of BertForSequenceClassification were not initialized from the model checkpoint at dmis-lab/biobert-base-cased-v1.2 and are newly initialized: ['classifier.bias', 'classifier.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[benchmark] building DrugProt test examples...
+[benchmark] DrugProt: no labeled public test split in BigBio (splits=['train', 'validation', 'test_background']; test_background is unlabeled). Skipping DrugProt holdout benchmark; gene-drug combined uses BioRED test only.
+[benchmark] evaluating untrained_biobert_base: BioRED=14395 DrugProt=0 gdis=9769 gd_combined=4626 (DrugProt holdout unavailable; combined=BioRED gene-drug only)
+[benchmark] done gdis=0.7638 gd_combined=0.7436 gd_biored=0.7436 gd_drugprot=nan overall=0.7574
+  UNTRAINED DONE biobert_base: bench=0.757 KB gd=0.569 gdis=0.456
+  UNTRAINED START scibert_base hf=allenai/scibert_scivocab_uncased
+Some weights of BertForSequenceClassification were not initialized from the model checkpoint at allenai/scibert_scivocab_uncased and are newly initialized: ['classifier.bias', 'classifier.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[benchmark] building DrugProt test examples...
+[benchmark] DrugProt: no labeled public test split in BigBio (splits=['train', 'validation', 'test_background']; test_background is unlabeled). Skipping DrugProt holdout benchmark; gene-drug combined uses BioRED test only.
+[benchmark] evaluating untrained_scibert_base: BioRED=14395 DrugProt=0 gdis=9769 gd_combined=4626 (DrugProt holdout unavailable; combined=BioRED gene-drug only)
+[benchmark] done gdis=0.7288 gd_combined=0.7230 gd_biored=0.7230 gd_drugprot=nan overall=0.7269
+  UNTRAINED DONE scibert_base: bench=0.727 KB gd=0.536 gdis=0.441
+  UNTRAINED START roberta_base hf=roberta-base
+Some weights of RobertaForSequenceClassification were not initialized from the model checkpoint at roberta-base and are newly initialized: ['classifier.dense.bias', 'classifier.dense.weight', 'classifier.out_proj.bias', 'classifier.out_proj.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[benchmark] building DrugProt test examples...
+[benchmark] DrugProt: no labeled public test split in BigBio (splits=['train', 'validation', 'test_background']; test_background is unlabeled). Skipping DrugProt holdout benchmark; gene-drug combined uses BioRED test only.
+[benchmark] evaluating untrained_roberta_base: BioRED=14395 DrugProt=0 gdis=9769 gd_combined=4626 (DrugProt holdout unavailable; combined=BioRED gene-drug only)
+[benchmark] done gdis=0.7693 gd_combined=0.7489 gd_biored=0.7489 gd_drugprot=nan overall=0.7628
+  UNTRAINED DONE roberta_base: bench=0.763 KB gd=0.529 gdis=0.418
+  UNTRAINED START bert_base hf=bert-base-uncased
+Some weights of BertForSequenceClassification were not initialized from the model checkpoint at bert-base-uncased and are newly initialized: ['classifier.bias', 'classifier.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[benchmark] building DrugProt test examples...
+[benchmark] DrugProt: no labeled public test split in BigBio (splits=['train', 'validation', 'test_background']; test_background is unlabeled). Skipping DrugProt holdout benchmark; gene-drug combined uses BioRED test only.
+[benchmark] evaluating untrained_bert_base: BioRED=14395 DrugProt=0 gdis=9769 gd_combined=4626 (DrugProt holdout unavailable; combined=BioRED gene-drug only)
+[benchmark] done gdis=0.4985 gd_combined=0.4091 gd_biored=0.4091 gd_drugprot=nan overall=0.4716
+  UNTRAINED DONE bert_base: bench=0.472 KB gd=0.552 gdis=0.417
+  UNTRAINED START distilbert_base hf=distilbert-base-uncased
+Some weights of DistilBertForSequenceClassification were not initialized from the model checkpoint at distilbert-base-uncased and are newly initialized: ['classifier.bias', 'classifier.weight', 'pre_classifier.bias', 'pre_classifier.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[benchmark] building DrugProt test examples...
+[benchmark] DrugProt: no labeled public test split in BigBio (splits=['train', 'validation', 'test_background']; test_background is unlabeled). Skipping DrugProt holdout benchmark; gene-drug combined uses BioRED test only.
+[benchmark] evaluating untrained_distilbert_base: BioRED=14395 DrugProt=0 gdis=9769 gd_combined=4626 (DrugProt holdout unavailable; combined=BioRED gene-drug only)
+[benchmark] done gdis=0.0000 gd_combined=0.0000 gd_biored=0.0000 gd_drugprot=nan overall=0.0000
+  UNTRAINED DONE distilbert_base: bench=0.000 KB gd=0.589 gdis=0.486
+  UNTRAINED START deberta_base hf=microsoft/deberta-base
+Some weights of DebertaForSequenceClassification were not initialized from the model checkpoint at microsoft/deberta-base and are newly initialized: ['classifier.bias', 'classifier.weight', 'pooler.dense.bias', 'pooler.dense.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[benchmark] building DrugProt test examples...
+[benchmark] DrugProt: no labeled public test split in BigBio (splits=['train', 'validation', 'test_background']; test_background is unlabeled). Skipping DrugProt holdout benchmark; gene-drug combined uses BioRED test only.
+[benchmark] evaluating untrained_deberta_base: BioRED=14395 DrugProt=0 gdis=9769 gd_combined=4626 (DrugProt holdout unavailable; combined=BioRED gene-drug only)
+[benchmark] done gdis=0.0000 gd_combined=0.0000 gd_biored=0.0000 gd_drugprot=nan overall=0.0000
+  UNTRAINED DONE deberta_base: bench=0.000 KB gd=0.606 gdis=0.536
+
+=== Untrained-floor scoring complete ===
+  Newly scored: 9, skipped: 0, markers on disk: 9/9
+
+End: Mon Jun 29 11:27:15 UTC 2026
+Untrained markers: 9/9

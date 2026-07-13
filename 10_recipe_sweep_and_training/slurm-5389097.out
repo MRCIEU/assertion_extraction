@@ -1,0 +1,44 @@
+=== Step 2: full-matrix training ===
+Host: nid010262
+SLURM_JOB_ID=5389097
+SLURM_JOB_NAME=train_biolinkbert_42-43-44-45
+Start: Fri Jun 26 19:51:31 UTC 2026
+REPO=/home/b5ac/freddieyu.b5ac/project_1
+OUTPUT_ROOT=/home/b5ac/freddieyu.b5ac/projects/project_1
+STEP_ARGS=--force --models biolinkbert_base --seeds 42 43 44 45
+Log: /home/b5ac/freddieyu.b5ac/projects/project_1/runs/10_recipe_sweep_and_training/train_5389097.out
+Ensure CHOSEN_RECIPE is set in config.py (not None) before submitting.
+TMPDIR=/home/b5ac/freddieyu.b5ac/projects/project_1/runs/10_recipe_sweep_and_training/tmp_5389097
+=== Recipe sweep and training 2026-06-26T19:51:34.312818 ===
+[run] mode=train-only (step 2)
+[run] model filter: ['biolinkbert_base']
+[run] seed filter: [42, 43, 44, 45]
+
+=== Step-2 matrix training ===
+Recipe: lr=5e-06, warmup=none (checkpoint criterion=pooled_val_f1_micro)
+Encoders (1): ['biolinkbert_base']
+Seeds (4): [42, 43, 44, 45]
+Planned runs this job: 4
+
+
+=== Estimated checkpoint footprint (rough) ===
+  Runs: 1 encoders x 4 seeds = 4
+  Assumed ~10 epochs/run; epoch ckpt ~220 MiB (fp16); best ckpt ~440 MiB (fp32)
+  Per run ~2640 MiB; total ~10.3 GiB
+  MAX_EPOCH_CHECKPOINTS_TO_KEEP=None (None = keep all epoch checkpoints)
+
+[benchmark] building BioRED test examples...
+[benchmark] built 14395 BioRED test examples (leaked PMIDs excluded)
+[benchmark] building DrugProt test examples...
+Traceback (most recent call last):
+  File "/home/b5ac/freddieyu.b5ac/project_1/10_recipe_sweep_and_training/run.py", line 117, in <module>
+    main()
+  File "/home/b5ac/freddieyu.b5ac/project_1/10_recipe_sweep_and_training/run.py", line 109, in main
+    import_module("10_recipe_sweep_and_training.step2_train").run_matrix_training(
+  File "/home/b5ac/freddieyu.b5ac/project_1/10_recipe_sweep_and_training/step2_train.py", line 95, in run_matrix_training
+    drugprot_test = build_drugprot_test_examples()
+  File "/home/b5ac/freddieyu.b5ac/project_1/shared/benchmark_eval.py", line 109, in build_drugprot_test_examples
+    for doc in drugprot["test"]:
+  File "/home/b5ac/freddieyu.b5ac/miniforge3/envs/hf-hpc/lib/python3.10/site-packages/datasets/dataset_dict.py", line 75, in __getitem__
+    return super().__getitem__(k)
+KeyError: 'test'

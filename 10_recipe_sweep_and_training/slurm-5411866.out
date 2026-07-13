@@ -1,0 +1,128 @@
+=== 1e-5 supplementary side-matrix training ===
+Host: nid011101
+SLURM_JOB_ID=5411866
+SLURM_JOB_NAME=lr1e5_biolinkbert_42-43-44-45
+Start: Sun Jun 28 19:30:06 UTC 2026
+REPO=/home/b5ac/freddieyu.b5ac/project_1
+OUTPUT_ROOT=/home/b5ac/freddieyu.b5ac/project_1/../projects/project_1
+STEP_ARGS=--models biolinkbert_base --seeds 42 43 44 45
+Side output: /home/b5ac/freddieyu.b5ac/project_1/../projects/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/
+Main matrix (untouched): /home/b5ac/freddieyu.b5ac/project_1/../projects/project_1/data/10_recipe_sweep_and_training/matrix/
+
+=== 1e-5 side-matrix training ===
+Recipe: lr=1e-05, warmup=none
+Output: /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck
+
+
+=== Step-2 matrix training ===
+Recipe: lr=1e-05, warmup=none (checkpoint criterion=pooled_val_f1_micro)
+Encoders (1): ['biolinkbert_base']
+Seeds (4): [42, 43, 44, 45]
+Planned runs this job: 4
+
+
+=== Estimated checkpoint footprint (rough) ===
+  Runs: 1 encoders x 4 seeds = 4
+  Assumed ~10 epochs/run; epoch ckpt ~220 MiB (fp16); best ckpt ~440 MiB (fp32)
+  Per run ~2640 MiB; total ~10.3 GiB
+  MAX_EPOCH_CHECKPOINTS_TO_KEEP=None (None = keep all epoch checkpoints)
+
+[benchmark] building BioRED test examples...
+[benchmark] built 14395 BioRED test examples (leaked PMIDs excluded)
+[benchmark] building DrugProt test examples...
+[benchmark] DrugProt: no labeled public test split in BigBio (splits=['train', 'validation', 'test_background']; test_background is unlabeled). Skipping DrugProt holdout benchmark; gene-drug combined uses BioRED test only.
+  RUN START BioLinkBERT-base (biolinkbert_base) seed=42 [1/4 in this job]
+[train] start biolinkbert_base seed=42 lr=1e-05 warmup=none hf=michiyasunaga/BioLinkBERT-base train=24000 val=25311 (pooled BioRED+DrugProt) -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/biolinkbert_base/seed_42
+[train] device=cuda batch_size=16 max_epochs=10
+Some weights of BertForSequenceClassification were not initialized from the model checkpoint at michiyasunaga/BioLinkBERT-base and are newly initialized: ['classifier.bias', 'classifier.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[train] epoch 1/10 train_loss=0.5018 val_loss=0.5580 pooled_val_f1_micro=0.7717
+[train] new best pooled_val_f1_micro=0.7717 at epoch 1 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/biolinkbert_base/seed_42/best
+[train] epoch 2/10 train_loss=0.3332 val_loss=0.6376 pooled_val_f1_micro=0.7363
+[train] epoch 3/10 train_loss=0.2606 val_loss=0.7016 pooled_val_f1_micro=0.7846
+[train] new best pooled_val_f1_micro=0.7846 at epoch 3 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/biolinkbert_base/seed_42/best
+[train] epoch 4/10 train_loss=0.2237 val_loss=0.6460 pooled_val_f1_micro=0.7852
+[train] new best pooled_val_f1_micro=0.7852 at epoch 4 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/biolinkbert_base/seed_42/best
+[train] epoch 5/10 train_loss=0.1962 val_loss=0.7236 pooled_val_f1_micro=0.7906
+[train] new best pooled_val_f1_micro=0.7906 at epoch 5 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/biolinkbert_base/seed_42/best
+[train] epoch 6/10 train_loss=0.1761 val_loss=0.7976 pooled_val_f1_micro=0.7696
+[train] epoch 7/10 train_loss=0.1701 val_loss=0.8370 pooled_val_f1_micro=0.7706
+[train] epoch 8/10 train_loss=0.1585 val_loss=0.8374 pooled_val_f1_micro=0.7837
+[train] epoch 9/10 train_loss=0.1511 val_loss=0.9032 pooled_val_f1_micro=0.7832
+[train] epoch 10/10 train_loss=0.1450 val_loss=1.0137 pooled_val_f1_micro=0.7846
+[train] done biolinkbert_base seed=42 best_val_f1=0.7906 best_epoch=5 epochs_run=10
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/biolinkbert_base/seed_42/best: BioRED=14395 DrugProt=0 gdis=9769 gd_combined=4626 (DrugProt holdout unavailable; combined=BioRED gene-drug only)
+[benchmark] done gdis=0.7865 gd_combined=0.6404 gd_biored=0.6404 gd_drugprot=nan overall=0.7472
+  COMPLETE BioLinkBERT-base (biolinkbert_base) seed=42: gd_combined=0.640 gdis=0.786 best_epoch=5 pooled_val_f1=0.791 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/results/biolinkbert_base/seed_42/matrix_complete.json
+  RUN START BioLinkBERT-base (biolinkbert_base) seed=43 [2/4 in this job]
+[train] start biolinkbert_base seed=43 lr=1e-05 warmup=none hf=michiyasunaga/BioLinkBERT-base train=24000 val=25311 (pooled BioRED+DrugProt) -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/biolinkbert_base/seed_43
+[train] device=cuda batch_size=16 max_epochs=10
+Some weights of BertForSequenceClassification were not initialized from the model checkpoint at michiyasunaga/BioLinkBERT-base and are newly initialized: ['classifier.bias', 'classifier.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[train] epoch 1/10 train_loss=0.4799 val_loss=0.5106 pooled_val_f1_micro=0.7577
+[train] new best pooled_val_f1_micro=0.7577 at epoch 1 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/biolinkbert_base/seed_43/best
+[train] epoch 2/10 train_loss=0.3302 val_loss=0.5794 pooled_val_f1_micro=0.7575
+[train] epoch 3/10 train_loss=0.2640 val_loss=0.6362 pooled_val_f1_micro=0.7598
+[train] new best pooled_val_f1_micro=0.7598 at epoch 3 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/biolinkbert_base/seed_43/best
+[train] epoch 4/10 train_loss=0.2264 val_loss=0.7484 pooled_val_f1_micro=0.7592
+[train] epoch 5/10 train_loss=0.2003 val_loss=0.9556 pooled_val_f1_micro=0.7399
+[train] epoch 6/10 train_loss=0.1867 val_loss=0.7294 pooled_val_f1_micro=0.7790
+[train] new best pooled_val_f1_micro=0.7790 at epoch 6 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/biolinkbert_base/seed_43/best
+[train] epoch 7/10 train_loss=0.1699 val_loss=0.9108 pooled_val_f1_micro=0.7483
+[train] epoch 8/10 train_loss=0.1601 val_loss=0.9654 pooled_val_f1_micro=0.7400
+[train] epoch 9/10 train_loss=0.1538 val_loss=0.8261 pooled_val_f1_micro=0.7664
+[train] epoch 10/10 train_loss=0.1466 val_loss=0.9721 pooled_val_f1_micro=0.7629
+[train] done biolinkbert_base seed=43 best_val_f1=0.7790 best_epoch=6 epochs_run=10
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/biolinkbert_base/seed_43/best: BioRED=14395 DrugProt=0 gdis=9769 gd_combined=4626 (DrugProt holdout unavailable; combined=BioRED gene-drug only)
+[benchmark] done gdis=0.8035 gd_combined=0.5907 gd_biored=0.5907 gd_drugprot=nan overall=0.7480
+  COMPLETE BioLinkBERT-base (biolinkbert_base) seed=43: gd_combined=0.591 gdis=0.803 best_epoch=6 pooled_val_f1=0.779 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/results/biolinkbert_base/seed_43/matrix_complete.json
+  RUN START BioLinkBERT-base (biolinkbert_base) seed=44 [3/4 in this job]
+[train] start biolinkbert_base seed=44 lr=1e-05 warmup=none hf=michiyasunaga/BioLinkBERT-base train=24000 val=25311 (pooled BioRED+DrugProt) -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/biolinkbert_base/seed_44
+[train] device=cuda batch_size=16 max_epochs=10
+Some weights of BertForSequenceClassification were not initialized from the model checkpoint at michiyasunaga/BioLinkBERT-base and are newly initialized: ['classifier.bias', 'classifier.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[train] epoch 1/10 train_loss=0.4906 val_loss=0.5151 pooled_val_f1_micro=0.7759
+[train] new best pooled_val_f1_micro=0.7759 at epoch 1 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/biolinkbert_base/seed_44/best
+[train] epoch 2/10 train_loss=0.3308 val_loss=0.5592 pooled_val_f1_micro=0.7518
+[train] epoch 3/10 train_loss=0.2644 val_loss=0.6951 pooled_val_f1_micro=0.7764
+[train] new best pooled_val_f1_micro=0.7764 at epoch 3 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/biolinkbert_base/seed_44/best
+[train] epoch 4/10 train_loss=0.2277 val_loss=0.7277 pooled_val_f1_micro=0.7635
+[train] epoch 5/10 train_loss=0.2015 val_loss=0.7748 pooled_val_f1_micro=0.7414
+[train] epoch 6/10 train_loss=0.1842 val_loss=0.7557 pooled_val_f1_micro=0.7858
+[train] new best pooled_val_f1_micro=0.7858 at epoch 6 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/biolinkbert_base/seed_44/best
+[train] epoch 7/10 train_loss=0.1702 val_loss=0.8526 pooled_val_f1_micro=0.7570
+[train] epoch 8/10 train_loss=0.1617 val_loss=0.8830 pooled_val_f1_micro=0.7742
+[train] epoch 9/10 train_loss=0.1553 val_loss=0.9440 pooled_val_f1_micro=0.7633
+[train] epoch 10/10 train_loss=0.1466 val_loss=0.9799 pooled_val_f1_micro=0.7508
+[train] done biolinkbert_base seed=44 best_val_f1=0.7858 best_epoch=6 epochs_run=10
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/biolinkbert_base/seed_44/best: BioRED=14395 DrugProt=0 gdis=9769 gd_combined=4626 (DrugProt holdout unavailable; combined=BioRED gene-drug only)
+[benchmark] done gdis=0.7865 gd_combined=0.6453 gd_biored=0.6453 gd_drugprot=nan overall=0.7490
+  COMPLETE BioLinkBERT-base (biolinkbert_base) seed=44: gd_combined=0.645 gdis=0.787 best_epoch=6 pooled_val_f1=0.786 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/results/biolinkbert_base/seed_44/matrix_complete.json
+  RUN START BioLinkBERT-base (biolinkbert_base) seed=45 [4/4 in this job]
+[train] start biolinkbert_base seed=45 lr=1e-05 warmup=none hf=michiyasunaga/BioLinkBERT-base train=24000 val=25311 (pooled BioRED+DrugProt) -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/biolinkbert_base/seed_45
+[train] device=cuda batch_size=16 max_epochs=10
+Some weights of BertForSequenceClassification were not initialized from the model checkpoint at michiyasunaga/BioLinkBERT-base and are newly initialized: ['classifier.bias', 'classifier.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[train] epoch 1/10 train_loss=0.4886 val_loss=0.5550 pooled_val_f1_micro=0.7554
+[train] new best pooled_val_f1_micro=0.7554 at epoch 1 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/biolinkbert_base/seed_45/best
+[train] epoch 2/10 train_loss=0.3278 val_loss=0.5622 pooled_val_f1_micro=0.7836
+[train] new best pooled_val_f1_micro=0.7836 at epoch 2 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/biolinkbert_base/seed_45/best
+[train] epoch 3/10 train_loss=0.2590 val_loss=0.6447 pooled_val_f1_micro=0.7915
+[train] new best pooled_val_f1_micro=0.7915 at epoch 3 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/biolinkbert_base/seed_45/best
+[train] epoch 4/10 train_loss=0.2203 val_loss=0.6377 pooled_val_f1_micro=0.7964
+[train] new best pooled_val_f1_micro=0.7964 at epoch 4 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/biolinkbert_base/seed_45/best
+[train] epoch 5/10 train_loss=0.1942 val_loss=0.7221 pooled_val_f1_micro=0.7915
+[train] epoch 6/10 train_loss=0.1754 val_loss=0.9566 pooled_val_f1_micro=0.7680
+[train] epoch 7/10 train_loss=0.1638 val_loss=0.9005 pooled_val_f1_micro=0.7909
+[train] epoch 8/10 train_loss=0.1544 val_loss=0.9325 pooled_val_f1_micro=0.7759
+[train] epoch 9/10 train_loss=0.1516 val_loss=1.0008 pooled_val_f1_micro=0.7391
+[train] epoch 10/10 train_loss=0.1449 val_loss=0.8948 pooled_val_f1_micro=0.7766
+[train] done biolinkbert_base seed=45 best_val_f1=0.7964 best_epoch=4 epochs_run=10
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/biolinkbert_base/seed_45/best: BioRED=14395 DrugProt=0 gdis=9769 gd_combined=4626 (DrugProt holdout unavailable; combined=BioRED gene-drug only)
+[benchmark] done gdis=0.7994 gd_combined=0.6415 gd_biored=0.6415 gd_drugprot=nan overall=0.7580
+  COMPLETE BioLinkBERT-base (biolinkbert_base) seed=45: gd_combined=0.641 gdis=0.799 best_epoch=4 pooled_val_f1=0.796 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/results/biolinkbert_base/seed_45/matrix_complete.json
+
+=== Step-2 matrix training complete (this job) ===
+  Trained: 4, skipped (already done): 0, planned: 4
+
+End: Sun Jun 28 21:39:32 UTC 2026

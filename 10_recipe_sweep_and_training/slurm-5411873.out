@@ -1,0 +1,124 @@
+=== 1e-5 supplementary side-matrix training ===
+Host: nid011142
+SLURM_JOB_ID=5411873
+SLURM_JOB_NAME=lr1e5_roberta_46-47-48-49
+Start: Sun Jun 28 19:30:07 UTC 2026
+REPO=/home/b5ac/freddieyu.b5ac/project_1
+OUTPUT_ROOT=/home/b5ac/freddieyu.b5ac/project_1/../projects/project_1
+STEP_ARGS=--models roberta_base --seeds 46 47 48 49
+Side output: /home/b5ac/freddieyu.b5ac/project_1/../projects/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/
+Main matrix (untouched): /home/b5ac/freddieyu.b5ac/project_1/../projects/project_1/data/10_recipe_sweep_and_training/matrix/
+
+=== 1e-5 side-matrix training ===
+Recipe: lr=1e-05, warmup=none
+Output: /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck
+
+
+=== Step-2 matrix training ===
+Recipe: lr=1e-05, warmup=none (checkpoint criterion=pooled_val_f1_micro)
+Encoders (1): ['roberta_base']
+Seeds (4): [46, 47, 48, 49]
+Planned runs this job: 4
+
+
+=== Estimated checkpoint footprint (rough) ===
+  Runs: 1 encoders x 4 seeds = 4
+  Assumed ~10 epochs/run; epoch ckpt ~220 MiB (fp16); best ckpt ~440 MiB (fp32)
+  Per run ~2640 MiB; total ~10.3 GiB
+  MAX_EPOCH_CHECKPOINTS_TO_KEEP=None (None = keep all epoch checkpoints)
+
+[benchmark] building BioRED test examples...
+[benchmark] built 14395 BioRED test examples (leaked PMIDs excluded)
+[benchmark] building DrugProt test examples...
+[benchmark] DrugProt: no labeled public test split in BigBio (splits=['train', 'validation', 'test_background']; test_background is unlabeled). Skipping DrugProt holdout benchmark; gene-drug combined uses BioRED test only.
+  RUN START RoBERTa-base (roberta_base) seed=46 [1/4 in this job]
+[train] start roberta_base seed=46 lr=1e-05 warmup=none hf=roberta-base train=24000 val=25311 (pooled BioRED+DrugProt) -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/roberta_base/seed_46
+[train] device=cuda batch_size=16 max_epochs=10
+Some weights of RobertaForSequenceClassification were not initialized from the model checkpoint at roberta-base and are newly initialized: ['classifier.dense.bias', 'classifier.dense.weight', 'classifier.out_proj.bias', 'classifier.out_proj.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[train] epoch 1/10 train_loss=0.5703 val_loss=0.5592 pooled_val_f1_micro=0.7413
+[train] new best pooled_val_f1_micro=0.7413 at epoch 1 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/roberta_base/seed_46/best
+[train] epoch 2/10 train_loss=0.4236 val_loss=0.6810 pooled_val_f1_micro=0.7205
+[train] epoch 3/10 train_loss=0.3720 val_loss=0.6700 pooled_val_f1_micro=0.7535
+[train] new best pooled_val_f1_micro=0.7535 at epoch 3 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/roberta_base/seed_46/best
+[train] epoch 4/10 train_loss=0.3345 val_loss=0.7406 pooled_val_f1_micro=0.7400
+[train] epoch 5/10 train_loss=0.3085 val_loss=0.7814 pooled_val_f1_micro=0.7617
+[train] new best pooled_val_f1_micro=0.7617 at epoch 5 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/roberta_base/seed_46/best
+[train] epoch 6/10 train_loss=0.2878 val_loss=0.9188 pooled_val_f1_micro=0.7252
+[train] epoch 7/10 train_loss=0.2693 val_loss=0.8374 pooled_val_f1_micro=0.7615
+[train] epoch 8/10 train_loss=0.2572 val_loss=0.8369 pooled_val_f1_micro=0.7544
+[train] epoch 9/10 train_loss=0.2477 val_loss=0.9293 pooled_val_f1_micro=0.7165
+[train] epoch 10/10 train_loss=0.2355 val_loss=0.8994 pooled_val_f1_micro=0.7593
+[train] done roberta_base seed=46 best_val_f1=0.7617 best_epoch=5 epochs_run=10
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/roberta_base/seed_46/best: BioRED=14395 DrugProt=0 gdis=9769 gd_combined=4626 (DrugProt holdout unavailable; combined=BioRED gene-drug only)
+[benchmark] done gdis=0.7850 gd_combined=0.5878 gd_biored=0.5878 gd_drugprot=nan overall=0.7315
+  COMPLETE RoBERTa-base (roberta_base) seed=46: gd_combined=0.588 gdis=0.785 best_epoch=5 pooled_val_f1=0.762 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/results/roberta_base/seed_46/matrix_complete.json
+  RUN START RoBERTa-base (roberta_base) seed=47 [2/4 in this job]
+[train] start roberta_base seed=47 lr=1e-05 warmup=none hf=roberta-base train=24000 val=25311 (pooled BioRED+DrugProt) -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/roberta_base/seed_47
+[train] device=cuda batch_size=16 max_epochs=10
+Some weights of RobertaForSequenceClassification were not initialized from the model checkpoint at roberta-base and are newly initialized: ['classifier.dense.bias', 'classifier.dense.weight', 'classifier.out_proj.bias', 'classifier.out_proj.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[train] epoch 1/10 train_loss=0.5643 val_loss=0.5870 pooled_val_f1_micro=0.6986
+[train] new best pooled_val_f1_micro=0.6986 at epoch 1 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/roberta_base/seed_47/best
+[train] epoch 2/10 train_loss=0.4293 val_loss=0.6455 pooled_val_f1_micro=0.7630
+[train] new best pooled_val_f1_micro=0.7630 at epoch 2 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/roberta_base/seed_47/best
+[train] epoch 3/10 train_loss=0.3753 val_loss=0.7352 pooled_val_f1_micro=0.7178
+[train] epoch 4/10 train_loss=0.3399 val_loss=0.8545 pooled_val_f1_micro=0.6865
+[train] epoch 5/10 train_loss=0.3097 val_loss=0.7818 pooled_val_f1_micro=0.6949
+[train] epoch 6/10 train_loss=0.2900 val_loss=0.7956 pooled_val_f1_micro=0.7504
+[train] epoch 7/10 train_loss=0.2710 val_loss=0.9161 pooled_val_f1_micro=0.7050
+[train] epoch 8/10 train_loss=0.2551 val_loss=1.0897 pooled_val_f1_micro=0.7159
+[train] epoch 9/10 train_loss=0.2484 val_loss=0.8279 pooled_val_f1_micro=0.7081
+[train] epoch 10/10 train_loss=0.2354 val_loss=0.9448 pooled_val_f1_micro=0.7478
+[train] done roberta_base seed=47 best_val_f1=0.7630 best_epoch=2 epochs_run=10
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/roberta_base/seed_47/best: BioRED=14395 DrugProt=0 gdis=9769 gd_combined=4626 (DrugProt holdout unavailable; combined=BioRED gene-drug only)
+[benchmark] done gdis=0.7804 gd_combined=0.6086 gd_biored=0.6086 gd_drugprot=nan overall=0.7347
+  COMPLETE RoBERTa-base (roberta_base) seed=47: gd_combined=0.609 gdis=0.780 best_epoch=2 pooled_val_f1=0.763 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/results/roberta_base/seed_47/matrix_complete.json
+  RUN START RoBERTa-base (roberta_base) seed=48 [3/4 in this job]
+[train] start roberta_base seed=48 lr=1e-05 warmup=none hf=roberta-base train=24000 val=25311 (pooled BioRED+DrugProt) -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/roberta_base/seed_48
+[train] device=cuda batch_size=16 max_epochs=10
+Some weights of RobertaForSequenceClassification were not initialized from the model checkpoint at roberta-base and are newly initialized: ['classifier.dense.bias', 'classifier.dense.weight', 'classifier.out_proj.bias', 'classifier.out_proj.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[train] epoch 1/10 train_loss=0.6088 val_loss=0.5571 pooled_val_f1_micro=0.7330
+[train] new best pooled_val_f1_micro=0.7330 at epoch 1 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/roberta_base/seed_48/best
+[train] epoch 2/10 train_loss=0.4477 val_loss=0.6029 pooled_val_f1_micro=0.6528
+[train] epoch 3/10 train_loss=0.3850 val_loss=0.6311 pooled_val_f1_micro=0.7302
+[train] epoch 4/10 train_loss=0.3497 val_loss=0.7537 pooled_val_f1_micro=0.7422
+[train] new best pooled_val_f1_micro=0.7422 at epoch 4 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/roberta_base/seed_48/best
+[train] epoch 5/10 train_loss=0.3210 val_loss=0.7706 pooled_val_f1_micro=0.7548
+[train] new best pooled_val_f1_micro=0.7548 at epoch 5 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/roberta_base/seed_48/best
+[train] epoch 6/10 train_loss=0.2997 val_loss=0.7704 pooled_val_f1_micro=0.7193
+[train] epoch 7/10 train_loss=0.2816 val_loss=0.8365 pooled_val_f1_micro=0.7486
+[train] epoch 8/10 train_loss=0.2665 val_loss=0.8258 pooled_val_f1_micro=0.7448
+[train] epoch 9/10 train_loss=0.2519 val_loss=0.8600 pooled_val_f1_micro=0.7255
+[train] epoch 10/10 train_loss=0.2378 val_loss=0.9160 pooled_val_f1_micro=0.7417
+[train] done roberta_base seed=48 best_val_f1=0.7548 best_epoch=5 epochs_run=10
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/roberta_base/seed_48/best: BioRED=14395 DrugProt=0 gdis=9769 gd_combined=4626 (DrugProt holdout unavailable; combined=BioRED gene-drug only)
+[benchmark] done gdis=0.7842 gd_combined=0.5883 gd_biored=0.5883 gd_drugprot=nan overall=0.7326
+  COMPLETE RoBERTa-base (roberta_base) seed=48: gd_combined=0.588 gdis=0.784 best_epoch=5 pooled_val_f1=0.755 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/results/roberta_base/seed_48/matrix_complete.json
+  RUN START RoBERTa-base (roberta_base) seed=49 [4/4 in this job]
+[train] start roberta_base seed=49 lr=1e-05 warmup=none hf=roberta-base train=24000 val=25311 (pooled BioRED+DrugProt) -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/roberta_base/seed_49
+[train] device=cuda batch_size=16 max_epochs=10
+Some weights of RobertaForSequenceClassification were not initialized from the model checkpoint at roberta-base and are newly initialized: ['classifier.dense.bias', 'classifier.dense.weight', 'classifier.out_proj.bias', 'classifier.out_proj.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[train] epoch 1/10 train_loss=0.5913 val_loss=0.6231 pooled_val_f1_micro=0.7291
+[train] new best pooled_val_f1_micro=0.7291 at epoch 1 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/roberta_base/seed_49/best
+[train] epoch 2/10 train_loss=0.4399 val_loss=0.7580 pooled_val_f1_micro=0.6965
+[train] epoch 3/10 train_loss=0.3829 val_loss=0.6260 pooled_val_f1_micro=0.7549
+[train] new best pooled_val_f1_micro=0.7549 at epoch 3 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/roberta_base/seed_49/best
+[train] epoch 4/10 train_loss=0.3409 val_loss=0.7269 pooled_val_f1_micro=0.7124
+[train] epoch 5/10 train_loss=0.3149 val_loss=0.7617 pooled_val_f1_micro=0.7448
+[train] epoch 6/10 train_loss=0.2877 val_loss=0.8339 pooled_val_f1_micro=0.7491
+[train] epoch 7/10 train_loss=0.2705 val_loss=0.9078 pooled_val_f1_micro=0.7298
+[train] epoch 8/10 train_loss=0.2538 val_loss=0.8737 pooled_val_f1_micro=0.6896
+[train] epoch 9/10 train_loss=0.2429 val_loss=0.8800 pooled_val_f1_micro=0.7461
+[train] epoch 10/10 train_loss=0.2308 val_loss=0.8127 pooled_val_f1_micro=0.7440
+[train] done roberta_base seed=49 best_val_f1=0.7549 best_epoch=3 epochs_run=10
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/roberta_base/seed_49/best: BioRED=14395 DrugProt=0 gdis=9769 gd_combined=4626 (DrugProt holdout unavailable; combined=BioRED gene-drug only)
+[benchmark] done gdis=0.7848 gd_combined=0.6007 gd_biored=0.6007 gd_drugprot=nan overall=0.7380
+  COMPLETE RoBERTa-base (roberta_base) seed=49: gd_combined=0.601 gdis=0.785 best_epoch=3 pooled_val_f1=0.755 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/results/roberta_base/seed_49/matrix_complete.json
+
+=== Step-2 matrix training complete (this job) ===
+  Trained: 4, skipped (already done): 0, planned: 4
+
+End: Sun Jun 28 21:36:52 UTC 2026

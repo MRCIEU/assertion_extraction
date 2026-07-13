@@ -1,0 +1,8 @@
+=== Round 1 untrained-floor scoring (stage 1b, GPU) ===
+Host: nid010870
+SLURM_JOB_ID=5419868
+Start: Mon Jun 29 10:58:31 UTC 2026
+REPO=/var/spool/slurmd
+OUTPUT_ROOT=/home/b5ac/freddieyu.b5ac/project_1/../projects/project_1
+STEP_ARGS=<all 9 encoders>
+python: can't open file '/var/spool/slurmd/job5419868/run.py': [Errno 2] No such file or directory

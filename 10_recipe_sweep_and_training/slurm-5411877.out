@@ -1,0 +1,133 @@
+=== 1e-5 supplementary side-matrix training ===
+Host: nid011154
+SLURM_JOB_ID=5411877
+SLURM_JOB_NAME=lr1e5_distilbert_46-47-48-49
+Start: Sun Jun 28 19:30:06 UTC 2026
+REPO=/home/b5ac/freddieyu.b5ac/project_1
+OUTPUT_ROOT=/home/b5ac/freddieyu.b5ac/project_1/../projects/project_1
+STEP_ARGS=--models distilbert_base --seeds 46 47 48 49
+Side output: /home/b5ac/freddieyu.b5ac/project_1/../projects/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/
+Main matrix (untouched): /home/b5ac/freddieyu.b5ac/project_1/../projects/project_1/data/10_recipe_sweep_and_training/matrix/
+
+=== 1e-5 side-matrix training ===
+Recipe: lr=1e-05, warmup=none
+Output: /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck
+
+
+=== Step-2 matrix training ===
+Recipe: lr=1e-05, warmup=none (checkpoint criterion=pooled_val_f1_micro)
+Encoders (1): ['distilbert_base']
+Seeds (4): [46, 47, 48, 49]
+Planned runs this job: 4
+
+
+=== Estimated checkpoint footprint (rough) ===
+  Runs: 1 encoders x 4 seeds = 4
+  Assumed ~10 epochs/run; epoch ckpt ~220 MiB (fp16); best ckpt ~440 MiB (fp32)
+  Per run ~2640 MiB; total ~10.3 GiB
+  MAX_EPOCH_CHECKPOINTS_TO_KEEP=None (None = keep all epoch checkpoints)
+
+[benchmark] building BioRED test examples...
+[benchmark] built 14395 BioRED test examples (leaked PMIDs excluded)
+[benchmark] building DrugProt test examples...
+[benchmark] DrugProt: no labeled public test split in BigBio (splits=['train', 'validation', 'test_background']; test_background is unlabeled). Skipping DrugProt holdout benchmark; gene-drug combined uses BioRED test only.
+  RUN START DistilBERT-base (distilbert_base) seed=46 [1/4 in this job]
+[train] start distilbert_base seed=46 lr=1e-05 warmup=none hf=distilbert-base-uncased train=24000 val=25311 (pooled BioRED+DrugProt) -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/distilbert_base/seed_46
+[train] device=cuda batch_size=16 max_epochs=10
+Some weights of DistilBertForSequenceClassification were not initialized from the model checkpoint at distilbert-base-uncased and are newly initialized: ['classifier.bias', 'classifier.weight', 'pre_classifier.bias', 'pre_classifier.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[train] epoch 1/10 train_loss=0.6445 val_loss=0.6677 pooled_val_f1_micro=0.6073
+[train] new best pooled_val_f1_micro=0.6073 at epoch 1 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/distilbert_base/seed_46/best
+[train] epoch 2/10 train_loss=0.5591 val_loss=0.5719 pooled_val_f1_micro=0.6752
+[train] new best pooled_val_f1_micro=0.6752 at epoch 2 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/distilbert_base/seed_46/best
+[train] epoch 3/10 train_loss=0.4358 val_loss=0.5919 pooled_val_f1_micro=0.7140
+[train] new best pooled_val_f1_micro=0.7140 at epoch 3 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/distilbert_base/seed_46/best
+[train] epoch 4/10 train_loss=0.3807 val_loss=0.6939 pooled_val_f1_micro=0.6898
+[train] epoch 5/10 train_loss=0.3437 val_loss=0.7804 pooled_val_f1_micro=0.7035
+[train] epoch 6/10 train_loss=0.3168 val_loss=0.9104 pooled_val_f1_micro=0.6814
+[train] epoch 7/10 train_loss=0.2965 val_loss=0.7858 pooled_val_f1_micro=0.7219
+[train] new best pooled_val_f1_micro=0.7219 at epoch 7 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/distilbert_base/seed_46/best
+[train] epoch 8/10 train_loss=0.2776 val_loss=0.8377 pooled_val_f1_micro=0.7270
+[train] new best pooled_val_f1_micro=0.7270 at epoch 8 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/distilbert_base/seed_46/best
+[train] epoch 9/10 train_loss=0.2599 val_loss=1.0671 pooled_val_f1_micro=0.6892
+[train] epoch 10/10 train_loss=0.2475 val_loss=1.0074 pooled_val_f1_micro=0.7160
+[train] done distilbert_base seed=46 best_val_f1=0.7270 best_epoch=8 epochs_run=10
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/distilbert_base/seed_46/best: BioRED=14395 DrugProt=0 gdis=9769 gd_combined=4626 (DrugProt holdout unavailable; combined=BioRED gene-drug only)
+[benchmark] done gdis=0.7484 gd_combined=0.6006 gd_biored=0.6006 gd_drugprot=nan overall=0.7079
+  COMPLETE DistilBERT-base (distilbert_base) seed=46: gd_combined=0.601 gdis=0.748 best_epoch=8 pooled_val_f1=0.727 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/results/distilbert_base/seed_46/matrix_complete.json
+  RUN START DistilBERT-base (distilbert_base) seed=47 [2/4 in this job]
+[train] start distilbert_base seed=47 lr=1e-05 warmup=none hf=distilbert-base-uncased train=24000 val=25311 (pooled BioRED+DrugProt) -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/distilbert_base/seed_47
+[train] device=cuda batch_size=16 max_epochs=10
+Some weights of DistilBertForSequenceClassification were not initialized from the model checkpoint at distilbert-base-uncased and are newly initialized: ['classifier.bias', 'classifier.weight', 'pre_classifier.bias', 'pre_classifier.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[train] epoch 1/10 train_loss=0.6445 val_loss=0.6665 pooled_val_f1_micro=0.3970
+[train] new best pooled_val_f1_micro=0.3970 at epoch 1 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/distilbert_base/seed_47/best
+[train] epoch 2/10 train_loss=0.6074 val_loss=0.6618 pooled_val_f1_micro=0.6324
+[train] new best pooled_val_f1_micro=0.6324 at epoch 2 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/distilbert_base/seed_47/best
+[train] epoch 3/10 train_loss=0.5398 val_loss=0.6656 pooled_val_f1_micro=0.6705
+[train] new best pooled_val_f1_micro=0.6705 at epoch 3 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/distilbert_base/seed_47/best
+[train] epoch 4/10 train_loss=0.4099 val_loss=0.6309 pooled_val_f1_micro=0.6768
+[train] new best pooled_val_f1_micro=0.6768 at epoch 4 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/distilbert_base/seed_47/best
+[train] epoch 5/10 train_loss=0.3594 val_loss=0.7904 pooled_val_f1_micro=0.6662
+[train] epoch 6/10 train_loss=0.3280 val_loss=0.7972 pooled_val_f1_micro=0.7072
+[train] new best pooled_val_f1_micro=0.7072 at epoch 6 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/distilbert_base/seed_47/best
+[train] epoch 7/10 train_loss=0.3029 val_loss=0.8770 pooled_val_f1_micro=0.6810
+[train] epoch 8/10 train_loss=0.2840 val_loss=0.9140 pooled_val_f1_micro=0.6805
+[train] epoch 9/10 train_loss=0.2668 val_loss=0.9673 pooled_val_f1_micro=0.6973
+[train] epoch 10/10 train_loss=0.2549 val_loss=1.1043 pooled_val_f1_micro=0.7009
+[train] done distilbert_base seed=47 best_val_f1=0.7072 best_epoch=6 epochs_run=10
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/distilbert_base/seed_47/best: BioRED=14395 DrugProt=0 gdis=9769 gd_combined=4626 (DrugProt holdout unavailable; combined=BioRED gene-drug only)
+[benchmark] done gdis=0.7514 gd_combined=0.5765 gd_biored=0.5765 gd_drugprot=nan overall=0.7059
+  COMPLETE DistilBERT-base (distilbert_base) seed=47: gd_combined=0.576 gdis=0.751 best_epoch=6 pooled_val_f1=0.707 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/results/distilbert_base/seed_47/matrix_complete.json
+  RUN START DistilBERT-base (distilbert_base) seed=48 [3/4 in this job]
+[train] start distilbert_base seed=48 lr=1e-05 warmup=none hf=distilbert-base-uncased train=24000 val=25311 (pooled BioRED+DrugProt) -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/distilbert_base/seed_48
+[train] device=cuda batch_size=16 max_epochs=10
+Some weights of DistilBertForSequenceClassification were not initialized from the model checkpoint at distilbert-base-uncased and are newly initialized: ['classifier.bias', 'classifier.weight', 'pre_classifier.bias', 'pre_classifier.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[train] epoch 1/10 train_loss=0.6462 val_loss=0.6659 pooled_val_f1_micro=0.4829
+[train] new best pooled_val_f1_micro=0.4829 at epoch 1 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/distilbert_base/seed_48/best
+[train] epoch 2/10 train_loss=0.6030 val_loss=0.6121 pooled_val_f1_micro=0.6429
+[train] new best pooled_val_f1_micro=0.6429 at epoch 2 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/distilbert_base/seed_48/best
+[train] epoch 3/10 train_loss=0.4546 val_loss=0.6370 pooled_val_f1_micro=0.6844
+[train] new best pooled_val_f1_micro=0.6844 at epoch 3 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/distilbert_base/seed_48/best
+[train] epoch 4/10 train_loss=0.3844 val_loss=0.7176 pooled_val_f1_micro=0.7253
+[train] new best pooled_val_f1_micro=0.7253 at epoch 4 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/distilbert_base/seed_48/best
+[train] epoch 5/10 train_loss=0.3480 val_loss=0.6928 pooled_val_f1_micro=0.7265
+[train] new best pooled_val_f1_micro=0.7265 at epoch 5 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/distilbert_base/seed_48/best
+[train] epoch 6/10 train_loss=0.3203 val_loss=0.7286 pooled_val_f1_micro=0.7050
+[train] epoch 7/10 train_loss=0.2974 val_loss=0.7600 pooled_val_f1_micro=0.7341
+[train] new best pooled_val_f1_micro=0.7341 at epoch 7 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/distilbert_base/seed_48/best
+[train] epoch 8/10 train_loss=0.2761 val_loss=0.8866 pooled_val_f1_micro=0.7146
+[train] epoch 9/10 train_loss=0.2602 val_loss=0.8825 pooled_val_f1_micro=0.7127
+[train] epoch 10/10 train_loss=0.2483 val_loss=1.0401 pooled_val_f1_micro=0.7051
+[train] done distilbert_base seed=48 best_val_f1=0.7341 best_epoch=7 epochs_run=10
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/distilbert_base/seed_48/best: BioRED=14395 DrugProt=0 gdis=9769 gd_combined=4626 (DrugProt holdout unavailable; combined=BioRED gene-drug only)
+[benchmark] done gdis=0.7737 gd_combined=0.5973 gd_biored=0.5973 gd_drugprot=nan overall=0.7281
+  COMPLETE DistilBERT-base (distilbert_base) seed=48: gd_combined=0.597 gdis=0.774 best_epoch=7 pooled_val_f1=0.734 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/results/distilbert_base/seed_48/matrix_complete.json
+  RUN START DistilBERT-base (distilbert_base) seed=49 [4/4 in this job]
+[train] start distilbert_base seed=49 lr=1e-05 warmup=none hf=distilbert-base-uncased train=24000 val=25311 (pooled BioRED+DrugProt) -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/distilbert_base/seed_49
+[train] device=cuda batch_size=16 max_epochs=10
+Some weights of DistilBertForSequenceClassification were not initialized from the model checkpoint at distilbert-base-uncased and are newly initialized: ['classifier.bias', 'classifier.weight', 'pre_classifier.bias', 'pre_classifier.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+[train] epoch 1/10 train_loss=0.6456 val_loss=0.6639 pooled_val_f1_micro=0.4904
+[train] new best pooled_val_f1_micro=0.4904 at epoch 1 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/distilbert_base/seed_49/best
+[train] epoch 2/10 train_loss=0.5513 val_loss=0.6833 pooled_val_f1_micro=0.6226
+[train] new best pooled_val_f1_micro=0.6226 at epoch 2 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/distilbert_base/seed_49/best
+[train] epoch 3/10 train_loss=0.4276 val_loss=0.6162 pooled_val_f1_micro=0.7334
+[train] new best pooled_val_f1_micro=0.7334 at epoch 3 -> /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/distilbert_base/seed_49/best
+[train] epoch 4/10 train_loss=0.3769 val_loss=0.7534 pooled_val_f1_micro=0.6981
+[train] epoch 5/10 train_loss=0.3388 val_loss=0.7783 pooled_val_f1_micro=0.7039
+[train] epoch 6/10 train_loss=0.3104 val_loss=0.8879 pooled_val_f1_micro=0.6665
+[train] epoch 7/10 train_loss=0.2903 val_loss=0.8214 pooled_val_f1_micro=0.6881
+[train] epoch 8/10 train_loss=0.2740 val_loss=0.9791 pooled_val_f1_micro=0.6769
+[train] epoch 9/10 train_loss=0.2581 val_loss=0.8926 pooled_val_f1_micro=0.7015
+[train] epoch 10/10 train_loss=0.2466 val_loss=0.9115 pooled_val_f1_micro=0.6871
+[train] done distilbert_base seed=49 best_val_f1=0.7334 best_epoch=3 epochs_run=10
+[benchmark] evaluating /lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/checkpoints/distilbert_base/seed_49/best: BioRED=14395 DrugProt=0 gdis=9769 gd_combined=4626 (DrugProt holdout unavailable; combined=BioRED gene-drug only)
+[benchmark] done gdis=0.7734 gd_combined=0.6172 gd_biored=0.6172 gd_drugprot=nan overall=0.7326
+  COMPLETE DistilBERT-base (distilbert_base) seed=49: gd_combined=0.617 gdis=0.773 best_epoch=3 pooled_val_f1=0.733 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/lr1e5_sidecheck/results/distilbert_base/seed_49/matrix_complete.json
+
+=== Step-2 matrix training complete (this job) ===
+  Trained: 4, skipped (already done): 0, planned: 4
+
+End: Sun Jun 28 20:50:50 UTC 2026

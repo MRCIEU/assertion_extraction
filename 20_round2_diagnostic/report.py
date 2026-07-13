@@ -295,7 +295,7 @@ def write_report(
         n_neg = int((enc_h["mean_delta_kb_mrr"] < 0).sum())
         lines.append(
             f"Across encoders, {n_neg} of {len(enc_h)} show negative mean gene-disease-hard "
-            "paired change. Biomedical-domain encoders (PubMedBERT, BioMedBERT, BioLinkBERT, SciBERT) "
+            "paired change. Biomedical-domain encoders (PubMedBERT, BlueBERT, BioLinkBERT, SciBERT) "
             "show the largest declines, with every seed falling in three of those four families. "
             "General-purpose encoders (BERT-base, DistilBERT-base, DeBERTa-base) show flat or positive "
             f"mean changes (range {float(enc_h['mean_delta_kb_mrr'].min()):+.4f} to "

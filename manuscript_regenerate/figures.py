@@ -24,6 +24,20 @@ from shared.plot_style import (
 
 from .paths import OUTPUT_ROOT, STEPS, step_paths
 
+# Legacy on-disk id (folder-10/11) vs canonical id in MODELS.
+_LEGACY_MODEL_IDS = {"biomedbert_base": "bluebert_base"}
+
+
+def _canonical_model_id(model_id: str) -> str:
+    return _LEGACY_MODEL_IDS.get(model_id, model_id)
+
+
+def _encoder_label(model_id: str) -> str:
+    mid = _canonical_model_id(model_id)
+    if mid in MODEL_BY_ID:
+        return _short_name(MODEL_BY_ID[mid].short_name)
+    return _short_name(model_id)
+
 
 def _fig_dir(step_key: str) -> Path:
     return step_paths(STEPS[step_key])["figures"]
@@ -385,14 +399,22 @@ def regenerate_step11() -> list[str]:
     ]
     labels, shares, err_lo, err_hi, seed_txt = [], [], [], [], []
     for key, lab in metrics:
-        row = var[var["metric"] == key].iloc[0]
-        b = boot[boot["metric"] == key].iloc[0]
+        row = var[var["metric"] == key]
+        if row.empty:
+            continue
+        row = row.iloc[0]
+        boot_rows = boot[boot["metric"] == key]
         enc_share = float(row["encoder_variance_share"])
         seed_share = float(row["seed_variance_share"])
         labels.append(lab)
         shares.append(enc_share)
-        err_lo.append(enc_share - float(b["encoder_share_ci_lo"]))
-        err_hi.append(float(b["encoder_share_ci_hi"]) - enc_share)
+        if boot_rows.empty:
+            err_lo.append(0.0)
+            err_hi.append(0.0)
+        else:
+            b = boot_rows.iloc[0]
+            err_lo.append(enc_share - float(b["encoder_share_ci_lo"]))
+            err_hi.append(float(b["encoder_share_ci_hi"]) - enc_share)
         seed_txt.append(f"seed {100 * seed_share:.0f}%")
 
     fig, ax = plt.subplots(figsize=FIG_SINGLE)
@@ -447,7 +469,7 @@ def regenerate_step11() -> list[str]:
                         capsize=2, markersize=7, zorder=3)
         ax.axvline(dr, color=COLORS["baseline"], linestyle="--", linewidth=1.4, zorder=1)
         ax.set_yticks(y)
-        ax.set_yticklabels([_short_name(MODEL_BY_ID[m].short_name) for m in edf["model_id"]], fontsize=8)
+        ax.set_yticklabels([_encoder_label(m) for m in edf["model_id"]], fontsize=8)
         mrr_vals = edf["mrr"].tolist() + [dr]
         xmin = max(0.0, min(mrr_vals) - 0.05)
         xmax = min(1.0, max(mrr_vals) + 0.08)

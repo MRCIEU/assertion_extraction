@@ -27,10 +27,23 @@ def run_supplement_cross(*, force: bool = False, model_ids: list[str] | None = N
 
 
 def run_stratum_epoch1_cache(*, model_ids: list[str] | None = None) -> None:
+    from shared.constants import TRAIN_SEEDS
+    from shared.models import MODELS
+
     cfg = import_module("20_round2_diagnostic.config")
     mundane = import_module("20_round2_diagnostic.mundane_explanations")
 
-    paired = pd.read_csv(cfg.PAIRED_CHANGES_CSV)
+    if cfg.PAIRED_CHANGES_CSV.exists():
+        paired = pd.read_csv(cfg.PAIRED_CHANGES_CSV)
+    else:
+        specs = MODELS if not model_ids else [import_module("shared.models").MODEL_BY_ID[m] for m in model_ids]
+        paired = pd.DataFrame(
+            [
+                {"model_id": s.model_id, "seed": seed, "pairable_val_f1_best": True}
+                for s in specs
+                for seed in TRAIN_SEEDS
+            ]
+        )
     if model_ids:
         paired = paired[paired["model_id"].isin(model_ids)]
     mundane.build_epoch1_stratum_cache(paired)

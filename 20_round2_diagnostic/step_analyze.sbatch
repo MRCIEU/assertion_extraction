@@ -25,6 +25,9 @@ REPO="$(cd "${STEP_DIR}/.." && pwd)"
 OUTPUT_ROOT="${OUTPUT_ROOT:-${REPO}/../projects/project_1}"
 RUNS="${OUTPUT_ROOT}/runs/${STEP}"
 mkdir -p "${RUNS}"
+# shellcheck source=/dev/null
+source "${REPO}/_slurm_env.sh"
+setup_slurm_tmpdir "${RUNS}"
 
 JOB_TAG="${SLURM_JOB_ID:-local}"
 exec > >(tee "${RUNS}/analyze_${JOB_TAG}.out") 2> >(tee "${RUNS}/analyze_${JOB_TAG}.err" >&2)

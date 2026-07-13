@@ -22,7 +22,7 @@ class ModelSpec:
 
 MODELS: list[ModelSpec] = [
     ModelSpec("pubmedbert_base", "PubMedBERT-base", "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract", "domain BERT"),
-    ModelSpec("biomedbert_base", "BioMedBERT-base", "microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract", "domain BERT"),
+    ModelSpec("bluebert_base", "BlueBERT-base", "bionlp/bluebert_pubmed_mimic_uncased_L-12_H-768_A-12", "domain BERT"),
     ModelSpec("biolinkbert_base", "BioLinkBERT-base", "michiyasunaga/BioLinkBERT-base", "domain BERT"),
     ModelSpec("biobert_base", "BioBERT-base", "dmis-lab/biobert-base-cased-v1.2", "domain BERT"),
     ModelSpec("scibert_base", "SciBERT", "allenai/scibert_scivocab_uncased", "domain BERT"),

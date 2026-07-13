@@ -21,6 +21,7 @@ from .config import (
     POOL_SIZE_BY_ABSTRACT_CSV,
     PUBMED_RECALL_CSV,
     R11_SCORES_DIR,
+    resolve_checkpoint_model_id,
 )
 from .pool_cache import load_enriched_pool
 
@@ -70,7 +71,7 @@ def _load_merged_scores(seed: int = REPRESENTATIVE_SEED) -> pd.DataFrame:
     """Median score across nine encoders at one seed (stated representative design)."""
     parts: list[pd.DataFrame] = []
     for spec in MODELS:
-        path = R11_SCORES_DIR / spec.model_id / f"seed_{seed}.jsonl"
+        path = R11_SCORES_DIR / resolve_checkpoint_model_id(spec.model_id) / f"seed_{seed}.jsonl"
         if not path.exists():
             raise FileNotFoundError(f"Missing folder-11 scores: {path}")
         parts.append(load_scores_jsonl(path))

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 import sys
@@ -162,7 +163,8 @@ def main() -> None:
     for p in readmes:
         print(f"  readme: {p}")
 
-    commit_changes()
+    if os.environ.get("SKIP_GIT_COMMIT", "") != "1":
+        commit_changes()
 
 
 if __name__ == "__main__":

@@ -1,0 +1,8 @@
+=== Round 1 KB scoring (stage 1, GPU) ===
+Host: nid010136
+SLURM_JOB_ID=5419865
+Start: Mon Jun 29 10:58:29 UTC 2026
+REPO=/var/spool/slurmd
+OUTPUT_ROOT=/home/b5ac/freddieyu.b5ac/project_1/../projects/project_1
+STEP_ARGS=--model-id bert_base
+python: can't open file '/var/spool/slurmd/job5419865/run.py': [Errno 2] No such file or directory

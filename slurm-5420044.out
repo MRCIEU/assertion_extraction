@@ -1,0 +1,38 @@
+=== Round 1 KB scoring (stage 1, GPU) ===
+Host: nid010899
+SLURM_JOB_ID=5420044
+Start: Mon Jun 29 11:02:45 UTC 2026
+REPO=/home/b5ac/freddieyu.b5ac/project_1
+OUTPUT_ROOT=/home/b5ac/freddieyu.b5ac/project_1/../projects/project_1
+STEP_ARGS=--model-id roberta_base
+TMPDIR=/home/b5ac/freddieyu.b5ac/project_1/../projects/project_1/runs/11_round1_analysis/tmp/5420044
+
+=== Round 1 KB scoring ===
+Encoders: ['roberta_base']
+Seeds: [42, 43, 44, 45, 46, 47, 48, 49]
+Planned runs this job: 8
+Already scored: 0
+
+Frozen pool: 18911 candidates, 1047 abstracts
+  SCORE START roberta_base seed=42 checkpoint=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/roberta_base/seed_42/best
+  SCORE DONE roberta_base seed=42: gd_combined=0.585 gdis=0.795 KB gd=0.625 gdis=0.507 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/11_round1_analysis/scores/roberta_base/seed_42/scoring_complete.json
+  SCORE START roberta_base seed=43 checkpoint=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/roberta_base/seed_43/best
+  SCORE DONE roberta_base seed=43: gd_combined=0.610 gdis=0.785 KB gd=0.678 gdis=0.535 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/11_round1_analysis/scores/roberta_base/seed_43/scoring_complete.json
+  SCORE START roberta_base seed=44 checkpoint=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/roberta_base/seed_44/best
+  SCORE DONE roberta_base seed=44: gd_combined=0.587 gdis=0.783 KB gd=0.636 gdis=0.518 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/11_round1_analysis/scores/roberta_base/seed_44/scoring_complete.json
+  SCORE START roberta_base seed=45 checkpoint=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/roberta_base/seed_45/best
+  SCORE DONE roberta_base seed=45: gd_combined=0.585 gdis=0.787 KB gd=0.690 gdis=0.556 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/11_round1_analysis/scores/roberta_base/seed_45/scoring_complete.json
+  SCORE START roberta_base seed=46 checkpoint=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/roberta_base/seed_46/best
+  SCORE DONE roberta_base seed=46: gd_combined=0.607 gdis=0.778 KB gd=0.641 gdis=0.523 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/11_round1_analysis/scores/roberta_base/seed_46/scoring_complete.json
+  SCORE START roberta_base seed=47 checkpoint=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/roberta_base/seed_47/best
+  SCORE DONE roberta_base seed=47: gd_combined=0.567 gdis=0.785 KB gd=0.670 gdis=0.615 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/11_round1_analysis/scores/roberta_base/seed_47/scoring_complete.json
+  SCORE START roberta_base seed=48 checkpoint=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/roberta_base/seed_48/best
+  SCORE DONE roberta_base seed=48: gd_combined=0.577 gdis=0.791 KB gd=0.679 gdis=0.549 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/11_round1_analysis/scores/roberta_base/seed_48/scoring_complete.json
+  SCORE START roberta_base seed=49 checkpoint=/lus/lfs1aip2/projects/b5ac/project_1/data/10_recipe_sweep_and_training/matrix/checkpoints/roberta_base/seed_49/best
+  SCORE DONE roberta_base seed=49: gd_combined=0.584 gdis=0.779 KB gd=0.669 gdis=0.586 marker=/lus/lfs1aip2/projects/b5ac/project_1/data/11_round1_analysis/scores/roberta_base/seed_49/scoring_complete.json
+
+=== KB scoring complete (this job) ===
+  Newly scored: 8, skipped (already done): 0, total markers on disk: 68/72
+
+End: Mon Jun 29 11:09:37 UTC 2026
+Scoring markers: 68/72
