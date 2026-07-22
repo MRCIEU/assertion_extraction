@@ -312,11 +312,15 @@ def generate_fig9_encoder_heterogeneity() -> tuple[Path, Path, Path]:
     enc = enc[enc["slug"] == "gene_disease_hard"].copy()
     enc["erosion"] = enc["erosion_magnitude"].astype(float)
     enc["bio"] = enc["biomedical_pretrain"].astype(int)
-    rho, pval = stats.spearmanr(enc["bio"], enc["erosion"])
+    enc["bench"] = enc["mean_benchmark_f1"].astype(float)
+    rho_bio, pval_bio = stats.spearmanr(enc["bio"], enc["erosion"])
+    rho_bench, pval_bench = stats.spearmanr(enc["bench"], enc["erosion"])
 
     _apply_rs2_style()
-    fig, ax = plt.subplots(figsize=(3.5, 3.4))
+    fig, axes = plt.subplots(1, 2, figsize=(7.0, 3.4), sharey=True)
 
+    # Left: biomedical pretraining (unchanged panel)
+    ax = axes[0]
     for bio_val, center in ((0, 0.0), (1, 1.0)):
         sub = enc[enc["bio"] == bio_val].sort_values("erosion")
         xs = _strip_x_positions(sub, center)
@@ -331,7 +335,6 @@ def generate_fig9_encoder_heterogeneity() -> tuple[Path, Path, Path]:
                 linewidths=0.45,
                 zorder=3,
             )
-
     ax.axhline(0, color=COLORS["baseline"], lw=0.7, linestyle=":", zorder=1)
     ax.set_xticks([0, 1])
     ax.set_xticklabels(["General-purpose", "Biomedical"])
@@ -339,11 +342,10 @@ def generate_fig9_encoder_heterogeneity() -> tuple[Path, Path, Path]:
     ax.set_ylabel("Erosion magnitude (−Δ MRR)")
     ax.set_xlim(-0.35, 1.35)
     add_light_grid(ax, "y")
-
     ax.text(
         0.97,
         0.05,
-        f"Spearman ρ = {rho:.2f}\np = {pval:.3f}",
+        f"Spearman ρ = {rho_bio:.2f}\np = {pval_bio:.3f}",
         transform=ax.transAxes,
         ha="right",
         va="bottom",
@@ -353,7 +355,37 @@ def generate_fig9_encoder_heterogeneity() -> tuple[Path, Path, Path]:
         zorder=5,
     )
 
-    fig.subplots_adjust(left=0.20, right=0.98, top=0.90, bottom=0.28)
+    # Right: erosion vs benchmark F1
+    ax = axes[1]
+    for _, row in enc.iterrows():
+        mid = row["model_id"]
+        ax.scatter(
+            row["bench"],
+            row["erosion"],
+            s=58,
+            c=encoder_point_color(mid),
+            edgecolors=COLORS["neutral"],
+            linewidths=0.45,
+            zorder=3,
+        )
+    ax.axhline(0, color=COLORS["baseline"], lw=0.7, linestyle=":", zorder=1)
+    ax.set_xlabel("Benchmark F1 (encoder mean)")
+    ax.set_ylabel("")
+    add_light_grid(ax, "y")
+    ax.text(
+        0.03,
+        0.95,
+        f"Spearman ρ = {rho_bench:.2f}\np = {pval_bench:.3f}",
+        transform=ax.transAxes,
+        ha="left",
+        va="top",
+        fontsize=_RS2_FONT["annot"],
+        color=COLORS["neutral"],
+        bbox=dict(boxstyle="round,pad=0.25", facecolor="white", edgecolor="none", alpha=0.9),
+        zorder=5,
+    )
+
+    fig.subplots_adjust(left=0.10, right=0.98, top=0.90, bottom=0.28, wspace=0.18)
     _encoder_legend(fig, enc["model_id"].tolist(), y_anchor=0.02)
 
     stem = _fig_dir("20") / "fig9_encoder_heterogeneity"

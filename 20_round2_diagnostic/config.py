@@ -11,7 +11,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from _paths import step_dirs
 from shared.constants import RECALL_K_VALUES, TRAIN_SEEDS
-from shared.models import MODELS, MODEL_BY_ID
+from shared.models import MODELS, MODEL_BY_ID, require_model_id as resolve_checkpoint_model_id
 
 STEP = "20_round2_diagnostic"
 _D = step_dirs(STEP)
@@ -33,12 +33,7 @@ _T10 = step_dirs(TRAIN_STEP)
 MATRIX_CKPT_DIR = _T10["data"] / "matrix" / "checkpoints"
 MATRIX_RESULTS_DIR = _T10["data"] / "matrix" / "results"
 
-# Legacy scripts may still pass biomedbert_base; on-disk matrix folders use bluebert_base.
-_CHECKPOINT_MODEL_ALIASES = {"biomedbert_base": "bluebert_base"}
-
-
-def resolve_checkpoint_model_id(model_id: str) -> str:
-    return _CHECKPOINT_MODEL_ALIASES.get(model_id, model_id)
+# resolve_checkpoint_model_id: strict alias (biomedbert_base → bluebert_base); unknown ids raise.
 
 R11_STEP = "11_round1_analysis"
 _R11 = step_dirs(R11_STEP)

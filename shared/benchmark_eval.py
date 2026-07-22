@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+import json
 import random
 import sys
 from pathlib import Path
 from typing import Any
 
 import torch
+import numpy as np
 from datasets import load_dataset
-from sklearn.metrics import f1_score, precision_recall_fscore_support
+from sklearn.metrics import average_precision_score, f1_score, precision_recall_fscore_support, roc_auc_score
 from torch.utils.data import DataLoader
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
@@ -81,7 +83,7 @@ def _examples_from_doc(doc: dict[str, Any], rng: random.Random) -> list[dict[str
                 continue
             asserted.add(key)
             marked, _method, _meta = format_marked_pair(text, head_ent, tail_ent)
-            negatives.append({"text": marked, "label": 0})
+            negatives.append({"text": marked, "label": 0, "pair_type": pt})
             added += 1
 
     return positives + negatives
@@ -108,6 +110,7 @@ def evaluate_model_benchmark_f1(
     *,
     label: str = "model",
     device=None,
+    save_probs_path: Path | str | None = None,
 ) -> dict:
     """BioRED test presence F1 for an in-memory sequence-classification model."""
     if device is None:
@@ -126,13 +129,30 @@ def evaluate_model_benchmark_f1(
 
     preds: list[int] = []
     labels: list[int] = []
+    probs_pos: list[float] = []
+    prob_rows: list[dict[str, Any]] = []
     with torch.no_grad():
         for batch_idx, batch in enumerate(loader, start=1):
             batch = {k: v.to(device) for k, v in batch.items()}
             logits = model(**batch).logits
+            prob = torch.softmax(logits, dim=-1)[:, 1].cpu().numpy()
             pred = logits.argmax(dim=-1).cpu().numpy()
             preds.extend(pred.tolist())
             labels.extend(batch["labels"].cpu().numpy().tolist())
+            probs_pos.extend(prob.tolist())
+            if save_probs_path is not None:
+                start = len(preds) - len(pred)
+                for i, ex_idx in enumerate(range(start, len(preds))):
+                    ex = test_examples[ex_idx]
+                    prob_rows.append(
+                        {
+                            "example_idx": ex_idx,
+                            "label": int(labels[ex_idx]),
+                            "pred": int(preds[ex_idx]),
+                            "prob_positive": float(probs_pos[ex_idx]),
+                            "pair_type": ex.get("pair_type"),
+                        }
+                    )
             if batch_idx == 1 or batch_idx == n_batches or batch_idx % log_every == 0:
                 print(
                     f"[benchmark] batch {batch_idx}/{n_batches} "
@@ -142,17 +162,28 @@ def evaluate_model_benchmark_f1(
 
     f1 = float(f1_score(labels, preds, average="binary", zero_division=0))
     prec, rec, _, _ = precision_recall_fscore_support(labels, preds, average="binary", zero_division=0)
+    y = np.array(labels, dtype=int)
+    p = np.array(probs_pos, dtype=float)
+    auc_pr = float(average_precision_score(y, p)) if len(np.unique(y)) > 1 else float(y.mean())
+    auc_roc = float(roc_auc_score(y, p)) if len(np.unique(y)) > 1 else float("nan")
+    if save_probs_path is not None:
+        out = Path(save_probs_path)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text("\n".join(json.dumps(r) for r in prob_rows) + "\n", encoding="utf-8")
     print(
         f"[benchmark] done f1={f1:.4f} precision={float(prec):.4f} recall={float(rec):.4f} "
-        f"n_positives={int(sum(labels))}",
+        f"auc_pr={auc_pr:.4f} auc_roc={auc_roc:.4f} n_positives={int(sum(labels))}",
         flush=True,
     )
     return {
         "benchmark_f1": f1,
         "benchmark_precision": float(prec),
         "benchmark_recall": float(rec),
+        "benchmark_auc_pr": auc_pr,
+        "benchmark_auc_roc": auc_roc,
         "n_test_examples": len(test_examples),
         "n_positives": int(sum(labels)),
+        "probs_path": str(save_probs_path) if save_probs_path else None,
     }
 
 

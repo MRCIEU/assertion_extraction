@@ -334,9 +334,6 @@ def figure6_pair_type_subset_contrast(pair_subset: pd.DataFrame) -> None:
     _save(fig, "fig6_pair_type_subset_contrast.png")
 
 
-    _save(fig, "fig6_pair_type_subset_contrast.png")
-
-
 def figure7_kb_peak_timing(timing_summary: pd.DataFrame) -> None:
     _apply_style()
     sub = timing_summary[
@@ -349,12 +346,22 @@ def figure7_kb_peak_timing(timing_summary: pd.DataFrame) -> None:
     keys = ["before_best_val", "coincident_best_val", "after_best_val"]
     vals = [float(sub.loc[sub["timing_class"] == k, "frac_seeds"].iloc[0]) if k in sub["timing_class"].values else 0 for k in keys]
     fig, ax = plt.subplots(figsize=(7, 4.8))
-    ax.bar(range(3), vals, color=[PALETTE["accent"], PALETTE["neutral"], PALETTE["neutral_light"]], width=0.55)
+    bars = ax.bar(range(3), vals, color=[PALETTE["accent"], PALETTE["neutral"], PALETTE["neutral_light"]], width=0.55)
     ax.set_xticks(range(3))
     ax.set_xticklabels(labels)
     ax.set_ylabel("Fraction of seeds")
     ax.set_ylim(0, 1.05)
     ax.set_title("When gene-disease KB ranking peaks relative to validation-best epoch")
+    for bar, v in zip(bars, vals):
+        ax.text(
+            bar.get_x() + bar.get_width() / 2,
+            v + 0.02,
+            f"{100 * v:.1f}%",
+            ha="center",
+            va="bottom",
+            fontsize=10,
+            color=PALETTE["text"],
+        )
     fig.tight_layout()
     _save(fig, "fig7_kb_peak_timing.png")
 
@@ -377,12 +384,26 @@ def figure8_pool_stratum(stratum_summary: pd.DataFrame) -> None:
         los.append(float(r["mean_delta_mrr"]) - float(r["ci_lo"]))
         his.append(float(r["ci_hi"]) - float(r["mean_delta_mrr"]))
     x = np.arange(len(means))
-    ax.bar(x, means, color=PALETTE["accent"], yerr=[los, his], capsize=4, width=0.55)
+    bars = ax.bar(x, means, color=PALETTE["accent"], yerr=[los, his], capsize=4, width=0.55)
     ax.axhline(0, color=PALETTE["text"], lw=0.8, alpha=0.5)
     ax.set_xticks(x)
     ax.set_xticklabels(labels[: len(means)])
     ax.set_ylabel("Mean gene-disease MRR change (epoch 1 to best val)")
     ax.set_title("Gene-disease paired change by abstract pool-size stratum")
+    ymin = min(m - lo for m, lo in zip(means, los)) - 0.006
+    ax.set_ylim(ymin, 0.038)
+    for bar, m in zip(bars, means):
+        # Above the zero line: clear of downward bars, CI whiskers, and x-tick labels.
+        ax.text(
+            bar.get_x() + bar.get_width() / 2,
+            0.008,
+            f"{m:.3f}",
+            ha="center",
+            va="bottom",
+            fontsize=10,
+            color=PALETTE["text"],
+            zorder=5,
+        )
     fig.tight_layout()
     _save(fig, "fig8_pool_stratum_gene_disease.png")
 

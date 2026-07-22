@@ -1,5 +1,0 @@
-TMPDIR=/home/b5ac/freddieyu.b5ac/projects/project_1/runs/20_round2_diagnostic/tmp/5472851
-=== Round 2 diagnostic analysis (CPU) ===
-STEP_DIR=/home/b5ac/freddieyu.b5ac/project_1/20_round2_diagnostic
-OUTPUT_ROOT=/home/b5ac/freddieyu.b5ac/projects/project_1
-Epoch scoring incomplete: 640/720. Run --score-epochs-only first or use --allow-partial-analysis.

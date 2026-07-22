@@ -1,5 +1,0 @@
-TMPDIR=/home/b5ac/freddieyu.b5ac/project_1/../projects/project_1/runs/20_round2_diagnostic/tmp/5472716
-=== Round 2 epoch-1 stratum cache (GPU) ===
-STEP_DIR=/home/b5ac/freddieyu.b5ac/project_1/20_round2_diagnostic
-OUTPUT_ROOT=/home/b5ac/freddieyu.b5ac/project_1/../projects/project_1
-slurmstepd: error: *** JOB 5472716 ON nid010121 CANCELLED AT 2026-07-02T15:52:06 ***

@@ -1,0 +1,38 @@
+# Non-code outputs (live under projects/project_1/)
+../projects/project_1/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.ipynb_checkpoints/
+.pytest_cache/
+
+# Models / checkpoints / dumps
+*.pt
+*.bin
+*.safetensors
+checkpoints/
+core
+
+# SLURM / job logs
+slurm-*.out
+slurm-*.err
+*.slurm.out
+*.slurm.err
+*.out
+*.err
+
+# Local experiment notes (not source)
+EXPERIMENT_RECORD.md
+
+# Environment / OS
+.env
+.venv/
+venv/
+.DS_Store
+
+# One-off audit / scratch scripts (keep pipeline code only)
+scripts/slurm-*
+scripts/__pycache__/

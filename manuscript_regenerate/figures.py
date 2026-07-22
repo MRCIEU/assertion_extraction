@@ -307,27 +307,100 @@ def regenerate_step10() -> list[str]:
     return kept
 
 
-def _plot_scatter_panel(ax, encoder_df, ymean, ylo, yhi, title) -> None:
-    mids = encoder_df["model_id"].tolist()
-    x = encoder_df["benchmark_f1_mean"].astype(float).values
-    y = encoder_df[ymean].astype(float).values
-    xerr = np.array([
-        x - encoder_df["benchmark_f1_ci_lo"].astype(float).values,
-        encoder_df["benchmark_f1_ci_hi"].astype(float).values - x,
-    ])
-    yerr = np.array([
-        y - encoder_df[ylo].astype(float).values,
-        encoder_df[yhi].astype(float).values - y,
-    ])
-    for i, mid in enumerate(mids):
-        c = encoder_point_color(mid)
-        ax.errorbar(
-            x[i], y[i], xerr=xerr[:, i : i + 1], yerr=yerr[:, i : i + 1],
-            fmt="o", color=c, ecolor=c, elinewidth=0.7, capsize=2,
-            markersize=7, alpha=0.92, zorder=3,
+def _plot_seed_benchmark_kb_panel(
+    ax,
+    per_run: pd.DataFrame,
+    encoder_df: pd.DataFrame,
+    *,
+    xcol_run: str,
+    ycol_run: str,
+    xmean: str,
+    xlo: str,
+    xhi: str,
+    ymean: str,
+    ylo: str,
+    yhi: str,
+    title: str,
+    spearman: float | None = None,
+    spearman_ci_lo: float | None = None,
+    spearman_ci_hi: float | None = None,
+) -> None:
+    """Layered panel: faint seed cloud, seed-level trend, encoder means ± bootstrap CI."""
+    x = per_run[xcol_run].astype(float).values
+    y = per_run[ycol_run].astype(float).values
+
+    # Background: individual seeds (reproducibility), de-emphasised
+    for mid in per_run["model_id"].unique():
+        sub = per_run[per_run["model_id"] == mid]
+        c = encoder_point_color(str(mid))
+        ax.scatter(
+            sub[xcol_run],
+            sub[ycol_run],
+            s=16,
+            color=c,
+            alpha=0.28,
+            edgecolors="none",
+            zorder=1,
         )
-    ax.set_xlabel("In-distribution benchmark F1")
-    ax.set_ylabel("Out-of-distribution KB MRR")
+
+    # Seed-level linear trend (same 72 runs as association test)
+    if len(x) >= 2 and np.unique(x).size >= 2:
+        xs = np.linspace(float(np.min(x)), float(np.max(x)), 100)
+        coef = np.polyfit(x, y, 1)
+        ax.plot(
+            xs,
+            np.polyval(coef, xs),
+            linestyle="--",
+            color=COLORS["baseline"],
+            linewidth=1.0,
+            zorder=2,
+        )
+
+    # Foreground: encoder means with seed-bootstrap CIs
+    for _, row in encoder_df.iterrows():
+        mid = str(row["model_id"])
+        c = encoder_point_color(mid)
+        xm = float(row[xmean])
+        ym = float(row[ymean])
+        xerr = np.array([[xm - float(row[xlo])], [float(row[xhi]) - xm]])
+        yerr = np.array([[ym - float(row[ylo])], [float(row[yhi]) - ym]])
+        ax.errorbar(
+            xm,
+            ym,
+            xerr=xerr,
+            yerr=yerr,
+            fmt="o",
+            color=c,
+            ecolor=c,
+            elinewidth=1.0,
+            capsize=2.5,
+            markersize=8,
+            markeredgecolor=COLORS["neutral"],
+            markeredgewidth=0.5,
+            alpha=0.98,
+            zorder=4,
+        )
+
+    if spearman is not None and not np.isnan(spearman):
+        rho_txt = f"Seed-level Spearman ρ = {spearman:.2f}"
+        if (
+            spearman_ci_lo is not None
+            and spearman_ci_hi is not None
+            and not (np.isnan(spearman_ci_lo) or np.isnan(spearman_ci_hi))
+        ):
+            rho_txt += f" [{spearman_ci_lo:.2f}, {spearman_ci_hi:.2f}]"
+        ax.text(
+            0.03,
+            0.97,
+            rho_txt,
+            transform=ax.transAxes,
+            va="top",
+            ha="left",
+            fontsize=8,
+            color=COLORS["neutral"],
+        )
+    ax.set_xlabel("Benchmark presence F1 (matched relation type)")
+    ax.set_ylabel("KB mean reciprocal rank\n(within relation type)")
     ax.set_title(title)
 
 
@@ -354,41 +427,87 @@ def _encoder_legend(fig, model_ids: list[str], y_anchor: float = 0.02) -> None:
     )
 
 
+def regenerate_fig1_benchmark_kb_scatter() -> Path:
+    """Regenerate fig1 only (Prompt P)."""
+    apply_style()
+    out = _out_dir("11")
+    fig_dir = _fig_dir("11")
+
+    per_run = pd.read_csv(out / "11_per_run_scores.csv")
+    assoc = pd.read_csv(out / "11_benchmark_kb_seed_association.csv")
+    enc = pd.read_csv(out / "11_encoder_summary.csv")
+    enc = enc.sort_values("benchmark_f1_mean", ascending=False).reset_index(drop=True)
+    model_ids = enc["model_id"].tolist()
+
+    panels = [
+        {
+            "title": "Gene-drug",
+            "pair_type": "gene-drug",
+            "xcol_run": "benchmark_f1_gene_drug_combined",
+            "ycol_run": "kb_mrr_gene_drug",
+            "xmean": "benchmark_f1_gene_drug_combined_mean",
+            "xlo": "benchmark_f1_gene_drug_combined_ci_lo",
+            "xhi": "benchmark_f1_gene_drug_combined_ci_hi",
+            "ymean": "kb_mrr_gene_drug_mean",
+            "ylo": "kb_mrr_gene_drug_ci_lo",
+            "yhi": "kb_mrr_gene_drug_ci_hi",
+        },
+        {
+            "title": "Gene-disease",
+            "pair_type": "gene-disease",
+            "xcol_run": "benchmark_f1_gene_disease",
+            "ycol_run": "kb_mrr_gene_disease",
+            "xmean": "benchmark_f1_gene_disease_mean",
+            "xlo": "benchmark_f1_gene_disease_ci_lo",
+            "xhi": "benchmark_f1_gene_disease_ci_hi",
+            "ymean": "kb_mrr_gene_disease_mean",
+            "ylo": "kb_mrr_gene_disease_ci_lo",
+            "yhi": "kb_mrr_gene_disease_ci_hi",
+        },
+    ]
+
+    fig, axes = plt.subplots(1, 2, figsize=(9.2, 4.2))
+    for ax, panel in zip(axes, panels):
+        ar = assoc.loc[assoc["pair_type"] == panel["pair_type"]].iloc[0]
+        _plot_seed_benchmark_kb_panel(
+            ax,
+            per_run,
+            enc,
+            xcol_run=panel["xcol_run"],
+            ycol_run=panel["ycol_run"],
+            xmean=panel["xmean"],
+            xlo=panel["xlo"],
+            xhi=panel["xhi"],
+            ymean=panel["ymean"],
+            ylo=panel["ylo"],
+            yhi=panel["yhi"],
+            title=panel["title"],
+            spearman=float(ar["spearman"]),
+            spearman_ci_lo=float(ar["ci_lo"]),
+            spearman_ci_hi=float(ar["ci_hi"]),
+        )
+        add_light_grid(ax, "y")
+
+    fig.suptitle(
+        "Benchmark F1 against knowledge-base ranking by relation type\n"
+        "(encoder means ± seed bootstrap CI; faint points = individual seeds)",
+        y=0.98,
+        fontsize=11,
+    )
+    fig.subplots_adjust(wspace=0.28, bottom=0.26, top=0.82, left=0.10, right=0.98)
+    _encoder_legend(fig, model_ids, y_anchor=0.02)
+    name = "fig1_benchmark_kb_scatter.png"
+    return save_figure(fig, fig_dir / name)
+
+
 def regenerate_step11() -> list[str]:
     apply_style()
     out = _out_dir("11")
     fig_dir = _fig_dir("11")
     kept: list[str] = []
 
-    enc = pd.read_csv(out / "11_encoder_summary.csv")
-    enc = enc.sort_values("benchmark_f1_mean", ascending=False).reset_index(drop=True)
-    model_ids = enc["model_id"].tolist()
-
-    xlo = float(enc["benchmark_f1_mean"].min()) - 0.018
-    xhi = float(enc["benchmark_f1_mean"].max()) + 0.018
-
-    fig, axes = plt.subplots(1, 2, figsize=(9.2, 4.2), sharex=True)
-    _plot_scatter_panel(
-        axes[0], enc, "kb_mrr_gene_drug_mean",
-        "kb_mrr_gene_drug_ci_lo", "kb_mrr_gene_drug_ci_hi", "Gene-drug",
-    )
-    _plot_scatter_panel(
-        axes[1], enc, "kb_mrr_gene_disease_mean",
-        "kb_mrr_gene_disease_ci_lo", "kb_mrr_gene_disease_ci_hi", "Gene-disease",
-    )
-    for ax in axes:
-        ax.set_xlim(xlo, xhi)
-        add_light_grid(ax, "y")
-
-    fig.suptitle(
-        "Benchmark vs knowledge-base ranking by pair type\n(encoder means; seed uncertainty bars)",
-        y=0.98, fontsize=11,
-    )
-    fig.subplots_adjust(wspace=0.22, bottom=0.26, top=0.82, left=0.10, right=0.98)
-    _encoder_legend(fig, model_ids, y_anchor=0.02)
-    n1 = "fig1_benchmark_kb_scatter.png"
-    save_figure(fig, fig_dir / n1)
-    kept.append(n1)
+    regenerate_fig1_benchmark_kb_scatter()
+    kept.append("fig1_benchmark_kb_scatter.png")
 
     var = pd.read_csv(out / "11_variance_components.csv")
     boot = pd.read_csv(out / "11_variance_components_bootstrap.csv")
@@ -426,7 +545,7 @@ def regenerate_step11() -> list[str]:
     )
     for i, (xi, yi, txt) in enumerate(zip(x, shares, seed_txt)):
         ax.text(
-            xi, yi + err_hi[i] + 0.02, f"{100 * yi:.0f}%",
+            xi, yi + err_hi[i] + 0.02, f"{100 * yi:.1f}%",
             ha="center", va="bottom", fontsize=8, color=COLORS["benchmark"],
         )
         ax.text(xi, -0.14, txt, ha="center", va="top", fontsize=7, color=COLORS["neutral"],
@@ -443,7 +562,8 @@ def regenerate_step11() -> list[str]:
     kept.append(n2)
 
     easy_hard = pd.read_csv(out / "11_easy_hard_ranking.csv")
-    encoder_order = model_ids
+    enc_summary = pd.read_csv(out / "11_encoder_summary.csv")
+    encoder_order = enc_summary.sort_values("benchmark_f1_mean", ascending=False)["model_id"].tolist()
     subsets = [("easy_co_sentence", "Co-sentence (easy)"), ("hard_cross_sentence", "Cross-sentence (hard)")]
     dr_by_subset: dict[str, float] = {}
     fig, axes = plt.subplots(1, 2, figsize=(9.2, 4.8))

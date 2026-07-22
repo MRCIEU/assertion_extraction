@@ -33,5 +33,25 @@ MODELS: list[ModelSpec] = [
 ]
 
 MODEL_BY_ID = {m.model_id: m for m in MODELS}
+KNOWN_MODEL_IDS = frozenset(MODEL_BY_ID)
 SWEEP_MODEL_IDS = ("pubmedbert_base", "roberta_base", "distilbert_base", "deberta_base")
 SWEEP_MODELS = [MODEL_BY_ID[m] for m in SWEEP_MODEL_IDS]
+
+# Legacy on-disk / cache keys. Only aliases listed here are accepted; unknown ids raise.
+_CHECKPOINT_MODEL_ALIASES = {"biomedbert_base": "bluebert_base"}
+
+
+def require_model_id(model_id: str) -> str:
+    """Resolve a model_id and fail loudly on anything outside the nine-encoder set.
+
+    ``biomedbert_base`` is accepted only as a legacy alias for ``bluebert_base``.
+    Returning the input unchanged for unknown ids is forbidden — that path silently
+    dropped BlueBERT from AUROC / B3.1 when cache keys and score dirs disagreed.
+    """
+    resolved = _CHECKPOINT_MODEL_ALIASES.get(model_id, model_id)
+    if resolved not in KNOWN_MODEL_IDS:
+        raise ValueError(
+            f"Unknown model_id {model_id!r} (resolved to {resolved!r}); "
+            f"known={sorted(KNOWN_MODEL_IDS)}"
+        )
+    return resolved

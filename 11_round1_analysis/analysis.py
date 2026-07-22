@@ -416,17 +416,36 @@ def load_pool_baselines() -> tuple[float, float]:
     return rand, dist
 
 
+PAIR_MATCHED_BENCHMARK_X: dict[str, str] = {
+    "gene-drug": "benchmark_f1_gene_drug_combined",
+    "gene-disease": "benchmark_f1_gene_disease",
+}
+
+
 def cluster_bootstrap_benchmark_kb(
     per_run: pd.DataFrame,
     kb_col: str,
     pair_type: str,
     n_boot: int = BOOTSTRAP_N,
     seed: int = 42,
+    benchmark_x_col: str | None = None,
 ) -> dict[str, Any]:
-    """Seed-level Spearman with cluster bootstrap over encoders."""
+    """Seed-level Spearman with cluster bootstrap over encoders.
+
+    Default x column is pair-type-matched benchmark F1, matching the published
+    ``11_benchmark_kb_seed_association.csv``. Pass ``benchmark_x_col='benchmark_f1'``
+    only for legacy pooled-overall estimand checks.
+    """
+    if benchmark_x_col is None:
+        benchmark_x_col = PAIR_MATCHED_BENCHMARK_X.get(pair_type, "benchmark_f1")
+    if benchmark_x_col not in per_run.columns:
+        raise KeyError(
+            f"benchmark_x_col={benchmark_x_col!r} not in per_run columns; "
+            f"available: {list(per_run.columns)}"
+        )
     rng = np.random.default_rng(seed)
     encoders = per_run["model_id"].unique()
-    x = per_run["benchmark_f1"].astype(float).values
+    x = per_run[benchmark_x_col].astype(float).values
     y = per_run[kb_col].astype(float).values
     r_obs, _ = spearmanr(x, y)
 
@@ -435,9 +454,9 @@ def cluster_bootstrap_benchmark_kb(
         chosen = rng.choice(encoders, size=len(encoders), replace=True)
         parts = [per_run[per_run["model_id"] == e] for e in chosen]
         bdf = pd.concat(parts, ignore_index=True)
-        if bdf["benchmark_f1"].nunique() < 2 or bdf[kb_col].nunique() < 2:
+        if bdf[benchmark_x_col].nunique() < 2 or bdf[kb_col].nunique() < 2:
             continue
-        r, _ = spearmanr(bdf["benchmark_f1"], bdf[kb_col])
+        r, _ = spearmanr(bdf[benchmark_x_col], bdf[kb_col])
         if not np.isnan(r):
             boots.append(float(r))
 
