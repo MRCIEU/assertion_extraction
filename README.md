@@ -1,29 +1,3 @@
 # assertion_extraction
 
-Code for a descriptive study: does public relation-extraction **benchmark** performance predict **CIViC** curation ranking utility?
-
-Outputs (data, tables, figures, reports) live outside this repo under `../projects/project_1/` (`OUTPUT_ROOT`).
-
-## Layout
-
-| Path | Role |
-|------|------|
-| `00_`–`06_` | Preparation / feasibility |
-| `10_recipe_sweep_and_training/` | Recipe sweep + 72-run training matrix |
-| `11_round1_analysis/` | Benchmark vs KB analysis |
-| `20_round2_diagnostic/` | Training-dynamics diagnostic |
-| `shared/` | Models, metrics, training helpers |
-| `manuscript_regenerate/` | Figure / table regeneration |
-
-Each step folder has a short `README.md` and its own sbatch entry point.
-
-## Setup
-
-```bash
-conda activate hf-hpc   # or: pip install -r requirements.txt
-export REPO=/path/to/assertion_extraction
-export OUTPUT_ROOT=$REPO/../projects/project_1
-export PYTHONPATH=$REPO
-```
-
-Run stages separately via the step sbatch scripts; nothing auto-chains.
+Cancer knowledge bases such as CIViC are curated by hand from the published literature, and curation cannot keep pace. Relation extraction is the step that could take on part of that work. Annotating training data for each knowledge base is expensive, so the cheap route is to fine-tune a model on a general relation-extraction benchmark and apply it. We asked whether a benchmark score predicts how useful such a model will be for curation. Nine pre-trained encoders, four general and five biomedical, were fine-tuned on the BioRED and DrugProt benchmarks across eight seeds, 72 runs in total. Without further training, each encoder was then applied to rank the relation a curator recorded above the other co-occurring entity pairs in the same abstract, across 1812 curated relations in 915 abstracts. Each model was followed across training on both the benchmark score and the curation ranking. On the ranking task the fine-tuned encoders do no better than a distance ranker, a mean reciprocal rank of 0.482 against 0.487. Benchmark F1 barely separates the encoders, a spread of 0.035 across their means. Scoring the benchmark without a threshold, using the area under the precision-recall curve, does separate the encoders. On that score the association with curation ranking is negative for both relation types. Across training the benchmark score rises while curation ranking falls, steeply for gene-disease and more slowly for gene-drug, and their step-by-step changes do not track each other. In 65.8% of the abstracts that contain a curated relation, the top-ranked candidate is one that CIViC did not record. These displacing candidates are real relations, often on the same gene as the curated one. The training labels do not separate a relation a study asserts from one it only mentions, and that is the difference curation depends on. A benchmark score is not a safe basis for choosing a model to curate a knowledge base of this kind. The most direct fix is to train on the distinction BioRED already marks between a study's own findings and background, which requires no new annotation.

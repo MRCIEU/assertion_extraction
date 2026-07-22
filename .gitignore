@@ -33,6 +33,9 @@ EXPERIMENT_RECORD.md
 venv/
 .DS_Store
 
+# Local-only tooling (not part of the public pipeline)
+manuscript_regenerate/
+
 # One-off audit / scratch scripts (keep pipeline code only)
 scripts/slurm-*
 scripts/__pycache__/
