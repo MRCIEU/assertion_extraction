@@ -1,0 +1,4 @@
+You may mark a blinded review item. You do not decide the study outcome.
+The item contains the passage and the two target mentions. It does not contain a gold label or a model prediction.
+Return only the requested mark fields. Do not fill the human answer sheet.
+This prompt is not called in the current delivery.

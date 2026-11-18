@@ -1,0 +1,17 @@
+corpus: drugprot
+release_id: zenodo-5119892
+record_url: https://zenodo.org/records/5119892
+concept_doi: 10.5281/zenodo.4955410
+guideline_concept_doi: 10.5281/zenodo.4957137
+license: CC-BY-4.0
+data_version: drugprot_candidates_v1
+study_splits:
+  train: 2800
+  dev: 700
+  eval: 750
+  unlabeled: 10750
+split_seed: 42
+prior_tuning_use_confirmed: false
+unlabeled_used_for_scoring: false
+input_version: not_built_for_full_candidate_table
+input_sample: tmp/input_timing/drugprot

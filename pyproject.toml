@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "schema-study"
+version = "0.1.0"
+description = "Schema-granularity study of biomedical relation extraction."
+requires-python = ">=3.10"
+readme = "README.md"
+dependencies = [
+  "numpy==2.2.6",
+  "pandas==2.3.3",
+  "pyarrow==22.0.0",
+  "pyyaml==6.0.3",
+  "matplotlib==3.10.8",
+  "transformers==4.57.5",
+  "tokenizers==0.22.2",
+]
+
+[project.optional-dependencies]
+test = ["pytest==9.0.2"]
+training = [
+  "torch==2.9.1",
+]
+generation = [
+  "vllm",
+]
+
+[project.scripts]
+schema-study = "schema_study.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-q"
+filterwarnings = ["ignore::DeprecationWarning"]

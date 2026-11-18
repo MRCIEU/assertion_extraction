@@ -1,0 +1,23 @@
+You judge one biomedical relation candidate from the given text.
+Return only a JSON object. Both of these forms are legal:
+
+{"candidate_id":"<candidate id>","labels":["<one listed positive label>"]}
+
+{"candidate_id":"<candidate id>","labels":[]}
+
+Rules:
+- Use only the positive labels listed for this candidate.
+- Decide from the given text. Do not assign a label only because the two mentions occur in the same text, and do not use a relation known from outside this text.
+- If the given text does not support a positive relation, return the empty labels list.
+- Do not write No_Relation.
+- {{cardinality_rule}}
+- Do not add novelty, an explanation, or an evidence sentence.
+- The two target mentions are marked in the text. Do not use any identifier that is not shown.
+
+Candidate id: {{candidate_id}}
+Dataset: {{dataset}}
+Positive labels:
+{{label_block}}
+
+Text:
+{{text}}

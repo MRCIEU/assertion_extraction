@@ -1,0 +1,13 @@
+seed: 20261115
+development_cases: 50
+check_cases: 50
+development_quotas: {association: 25, other_positive: 15, no_relation: 10}
+main_per_dataset: {association: 100, other_positive: 60, no_relation: 40}
+fallback_per_dataset: {association: 60, other_positive: 36, no_relation: 24}
+fallback_is_prefix: true
+fallback_decision: before_answers_are_seen
+double_review_fraction: 0.25
+same_person_repeat_is_not_double_review: true
+first_package_hides_gold_and_predictions: true
+answers_filled_in_this_delivery: false
+gpt_called_in_this_delivery: false

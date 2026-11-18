@@ -1,0 +1,34 @@
+entity_levels:
+  E0:
+    expose_type: false
+    description: Mention text, context, and target role only.
+  E1:
+    expose_type: true
+    description: >
+      GeneOrGeneProduct, ChemicalEntity, and SequenceVariant are shown as
+      Molecular_Entity. The other original types keep their names.
+    merge:
+      GeneOrGeneProduct: Molecular_Entity
+      ChemicalEntity: Molecular_Entity
+      SequenceVariant: Molecular_Entity
+  E2:
+    expose_type: true
+    description: The original six BioRED types.
+    merge: {}
+original_types:
+  - GeneOrGeneProduct
+  - DiseaseOrPhenotypicFeature
+  - ChemicalEntity
+  - SequenceVariant
+  - OrganismTaxon
+  - CellLine
+database_ids_given_to_model: false
+note: >
+  E0 does not mean the model cannot infer a type from the mention text.
+  Organism is not silently renamed to OrganismTaxon. An unexpected type is
+  recorded and does not enter the legal pair inventory.
+drugprot_input_type:
+  entity_level: native
+  chemical: CHEMICAL
+  gene: GENE
+  unify_gene_annotations: [GENE-Y, GENE-N, GENE]

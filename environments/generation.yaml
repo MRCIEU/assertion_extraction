@@ -1,0 +1,11 @@
+name: generation
+purpose: Qwen3 prompting with vLLM
+status: dependency_definition_only
+not_installed_in_this_delivery: true
+model_measured: false
+vllm_present_in_hf_hpc: false
+packages_required_later:
+  - vllm
+  - transformers
+quantization: unresolved
+weights_downloaded: false

@@ -1,0 +1,17 @@
+name: pilot
+purpose: configuration_check_only
+execute_model: false
+learning_rate: 2.0e-5
+max_epochs: 10
+effective_batch_size: 16
+micro_batch_size: 16
+warmup_ratio: 0.1
+betas: [0.9, 0.999]
+epsilon: 1.0e-8
+weight_decay: 0.01
+gradient_clip_norm: 1.0
+classifier_dropout: 0.1
+class_weights: false
+novelty_head: false
+extra_negative_sampling: false
+note: This file selects no GPU and does not authorize training or generation.

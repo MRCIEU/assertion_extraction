@@ -1,0 +1,20 @@
+You extract one biomedical relation candidate from the text below.
+Return only a JSON object with this shape:
+{"candidate_id":"<candidate id>","labels":["<positive label>"]}
+
+Rules:
+- Use only the positive labels listed for this candidate.
+- If there is no positive relation, return an empty labels list.
+- Do not write No_Relation.
+- BioRED allows at most one positive label.
+- DrugProt may include more than one positive label.
+- Do not add novelty, an explanation, or an evidence sentence.
+- The two target mentions are marked in the text. Do not use any identifier that is not shown.
+
+Candidate id: {{candidate_id}}
+Dataset: {{dataset}}
+Positive labels:
+{{label_block}}
+
+Text:
+{{text}}

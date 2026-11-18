@@ -1,0 +1,26 @@
+models:
+  - model_id: Qwen/Qwen3-8B
+    revision: b968826d9c46dd6066d109eabc6255188de91218
+    license: apache-2.0
+    parameters_bf16: 8190735360
+  - model_id: Qwen/Qwen3-32B
+    revision: 9216db5781bf21249d130ec9da846c4624c16137
+    license: apache-2.0
+    parameters_bf16: 32762123264
+revision_status: proposed_not_frozen
+weights_downloaded: false
+tokenizer_downloaded: false
+generation:
+  enable_thinking: false
+  temperature: 0
+  top_p: 1
+  max_new_tokens: 256
+  published_sampling_not_used:
+    temperature: 0.6
+    top_p: 0.95
+    top_k: 20
+generation_precision: bf16
+quantization: none
+precision_status: candidate_pending_gpu_smoke_test
+compatibility_tested: false
+vllm_installed: false

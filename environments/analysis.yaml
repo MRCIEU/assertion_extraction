@@ -1,0 +1,17 @@
+name: analysis
+purpose: data, evaluation, figures, and review tables
+installer: venv
+prefix: /home/b5ac/freddieyu.b5ac/projects/project_1/environments/analysis
+python: "3.12"
+packages:
+  numpy: 2.2.6
+  pandas: 2.3.3
+  pyarrow: 22.0.0
+  pyyaml: 6.0.3
+  pytest: 9.0.2
+  matplotlib: 3.10.8
+  transformers: 4.57.5
+  tokenizers: 0.22.2
+torch_installed: false
+vllm_installed: false
+shared_hf_hpc_modified: false

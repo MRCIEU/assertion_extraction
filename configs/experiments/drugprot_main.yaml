@@ -1,0 +1,12 @@
+name: drugprot_main
+dataset: drugprot
+entity_level: native
+predicate_levels: [P1, P2, P3, P4]
+seeds: [13, 42, 2026]
+routes: [direct_train, direct_prompt, rollup]
+finetune_model: microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext
+prompt_models:
+  - Qwen/Qwen3-8B
+  - Qwen/Qwen3-32B
+execute_model: false
+prior_tuning_use_confirmed: false

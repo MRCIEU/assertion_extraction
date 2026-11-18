@@ -1,0 +1,12 @@
+name: sample_size_control
+status: reserved_not_launched
+corpus: biored
+groups:
+  - full
+  - coarse_class_cap
+  - proportional_to_capped_positive_total
+cap_rule: floor_of_mean_of_eight_fine_training_counts
+no_relation: unchanged
+update_budget: matched_to_full_data
+coarse_level: undecided_until_after_main_results
+causal_claim: false

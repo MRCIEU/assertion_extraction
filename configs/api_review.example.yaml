@@ -1,0 +1,7 @@
+enabled: false
+provider: unresolved
+model: unresolved
+endpoint: unresolved
+budget_gbp_upper_bound: 150
+requests_made: 0
+note: Copy to a local ignored file only after the endpoint and data-release conditions are approved. Do not put a key in this file.

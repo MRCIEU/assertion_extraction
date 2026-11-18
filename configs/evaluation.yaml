@@ -1,0 +1,21 @@
+bootstrap:
+  draws: 2000
+  seed: 100
+  previous_round_seed: 20261115
+  interval: percentile_95
+  unit: document
+  resample_training_seeds: false
+aggregation: mean_of_seed_metrics
+pooled_seed_predictions: false
+significance_test: false
+f1_when_denominator_is_zero: 0
+precision_when_denominator_is_zero: null
+macro_f1_keeps_zero_support_classes: true
+information:
+  smoothing: add_one_on_fine_training_counts
+  log_base: natural
+  p1_distinction_retention: 0
+  decomposition: "1-R = (1-C) + (C-R)"
+polarity:
+  bidirectional_gold: separate_set_comparison
+  causal_survival_without_gold: false

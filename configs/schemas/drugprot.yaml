@@ -1,0 +1,113 @@
+schema_id: drugprot
+corpus: drugprot
+status: study_contract
+no_relation:
+  stable_id: DP00_NO_RELATION
+  display_name: No_Relation
+  note: Independent of the positive predicate hierarchy. Not the same relation semantic as BioRED No_Relation.
+fine_labels:
+  - {stable_id: DP01_ACTIVATOR, display_name: ACTIVATOR, direction: positive}
+  - {stable_id: DP02_AGONIST, display_name: AGONIST, direction: nonpolar}
+  - {stable_id: DP03_AGONIST_ACTIVATOR, display_name: AGONIST-ACTIVATOR, direction: nonpolar}
+  - {stable_id: DP04_AGONIST_INHIBITOR, display_name: AGONIST-INHIBITOR, direction: nonpolar}
+  - {stable_id: DP05_ANTAGONIST, display_name: ANTAGONIST, direction: nonpolar}
+  - {stable_id: DP06_DIRECT_REGULATOR, display_name: DIRECT-REGULATOR, direction: nonpolar}
+  - {stable_id: DP07_INDIRECT_DOWNREGULATOR, display_name: INDIRECT-DOWNREGULATOR, direction: negative}
+  - {stable_id: DP08_INDIRECT_UPREGULATOR, display_name: INDIRECT-UPREGULATOR, direction: positive}
+  - {stable_id: DP09_INHIBITOR, display_name: INHIBITOR, direction: negative}
+  - {stable_id: DP10_PART_OF, display_name: PART-OF, direction: nonpolar}
+  - {stable_id: DP11_PRODUCT_OF, display_name: PRODUCT-OF, direction: nonpolar}
+  - {stable_id: DP12_SUBSTRATE, display_name: SUBSTRATE, direction: nonpolar}
+  - {stable_id: DP13_SUBSTRATE_PRODUCT_OF, display_name: SUBSTRATE_PRODUCT-OF, direction: nonpolar}
+definition_source:
+  corpus: https://doi.org/10.5281/zenodo.5119892
+  guideline_concept_doi: https://doi.org/10.5281/zenodo.4957137
+  guideline_file: CHEMPROT_guidelines_v6.pdf
+  note: >
+    Agonist labels are not mapped to upregulation, and ANTAGONIST is not mapped
+    to general downregulation. Only ACTIVATOR and INDIRECT-UPREGULATOR are the
+    explicit upregulation/activation group. Only INHIBITOR and
+    INDIRECT-DOWNREGULATOR are the explicit downregulation/inhibition group.
+levels:
+  P4:
+    labels:
+      - {stable_id: DP01_ACTIVATOR, display_name: ACTIVATOR, members: [DP01_ACTIVATOR]}
+      - {stable_id: DP02_AGONIST, display_name: AGONIST, members: [DP02_AGONIST]}
+      - {stable_id: DP03_AGONIST_ACTIVATOR, display_name: AGONIST-ACTIVATOR, members: [DP03_AGONIST_ACTIVATOR]}
+      - {stable_id: DP04_AGONIST_INHIBITOR, display_name: AGONIST-INHIBITOR, members: [DP04_AGONIST_INHIBITOR]}
+      - {stable_id: DP05_ANTAGONIST, display_name: ANTAGONIST, members: [DP05_ANTAGONIST]}
+      - {stable_id: DP06_DIRECT_REGULATOR, display_name: DIRECT-REGULATOR, members: [DP06_DIRECT_REGULATOR]}
+      - {stable_id: DP07_INDIRECT_DOWNREGULATOR, display_name: INDIRECT-DOWNREGULATOR, members: [DP07_INDIRECT_DOWNREGULATOR]}
+      - {stable_id: DP08_INDIRECT_UPREGULATOR, display_name: INDIRECT-UPREGULATOR, members: [DP08_INDIRECT_UPREGULATOR]}
+      - {stable_id: DP09_INHIBITOR, display_name: INHIBITOR, members: [DP09_INHIBITOR]}
+      - {stable_id: DP10_PART_OF, display_name: PART-OF, members: [DP10_PART_OF]}
+      - {stable_id: DP11_PRODUCT_OF, display_name: PRODUCT-OF, members: [DP11_PRODUCT_OF]}
+      - {stable_id: DP12_SUBSTRATE, display_name: SUBSTRATE, members: [DP12_SUBSTRATE]}
+      - {stable_id: DP13_SUBSTRATE_PRODUCT_OF, display_name: SUBSTRATE_PRODUCT-OF, members: [DP13_SUBSTRATE_PRODUCT_OF]}
+  P3:
+    labels:
+      - stable_id: DP_P3_UP
+        display_name: Upregulation_or_activation
+        members: [DP01_ACTIVATOR, DP08_INDIRECT_UPREGULATOR]
+      - stable_id: DP_P3_DOWN
+        display_name: Downregulation_or_inhibition
+        members: [DP09_INHIBITOR, DP07_INDIRECT_DOWNREGULATOR]
+      - stable_id: DP_P3_DIRECT
+        display_name: Direct_regulation_unspecified
+        members: [DP06_DIRECT_REGULATOR]
+      - stable_id: DP_P3_AGONISM
+        display_name: Agonism
+        members: [DP02_AGONIST, DP03_AGONIST_ACTIVATOR, DP04_AGONIST_INHIBITOR]
+      - stable_id: DP_P3_ANTAGONISM
+        display_name: Antagonism
+        members: [DP05_ANTAGONIST]
+      - stable_id: DP_P3_METABOLIC
+        display_name: Metabolic_relation
+        members: [DP12_SUBSTRATE, DP11_PRODUCT_OF, DP13_SUBSTRATE_PRODUCT_OF]
+      - stable_id: DP_P3_PART
+        display_name: Part_of
+        members: [DP10_PART_OF]
+  P2:
+    labels:
+      - stable_id: DP_P2_UP
+        display_name: Upregulation_or_activation
+        members: [DP01_ACTIVATOR, DP08_INDIRECT_UPREGULATOR]
+      - stable_id: DP_P2_DOWN
+        display_name: Downregulation_or_inhibition
+        members: [DP09_INHIBITOR, DP07_INDIRECT_DOWNREGULATOR]
+      - stable_id: DP_P2_OTHER
+        display_name: Other_Relation
+        members:
+          - DP02_AGONIST
+          - DP03_AGONIST_ACTIVATOR
+          - DP04_AGONIST_INHIBITOR
+          - DP05_ANTAGONIST
+          - DP06_DIRECT_REGULATOR
+          - DP10_PART_OF
+          - DP11_PRODUCT_OF
+          - DP12_SUBSTRATE
+          - DP13_SUBSTRATE_PRODUCT_OF
+  P1:
+    labels:
+      - stable_id: DP_P1_ANY
+        display_name: Any_Relation
+        members:
+          - DP01_ACTIVATOR
+          - DP02_AGONIST
+          - DP03_AGONIST_ACTIVATOR
+          - DP04_AGONIST_INHIBITOR
+          - DP05_ANTAGONIST
+          - DP06_DIRECT_REGULATOR
+          - DP07_INDIRECT_DOWNREGULATOR
+          - DP08_INDIRECT_UPREGULATOR
+          - DP09_INHIBITOR
+          - DP10_PART_OF
+          - DP11_PRODUCT_OF
+          - DP12_SUBSTRATE
+          - DP13_SUBSTRATE_PRODUCT_OF
+label_cardinality: multi
+pair_order: chemical_mention_then_gene_mention
+cross_corpus_note: >
+  BioRED positive/negative correlation and DrugProt explicit up/down regulation
+  are reported separately. They are not treated as the same relation semantic
+  and are not pooled into one accuracy.

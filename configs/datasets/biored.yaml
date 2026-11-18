@@ -1,0 +1,12 @@
+corpus: biored
+release_id: BIORED_2022-04-07_sha256-c3032230bd89
+source: https://ftp.ncbi.nlm.nih.gov/pub/lu/BioRED/BIORED.zip
+data_version: biored_candidates_v2
+splits: [train, dev, test]
+official_sizes: {train: 400, dev: 100, test: 100}
+held_out_first_contact: false
+formally_trainable: false
+separator: " "
+composite_identifiers: split_on_comma_keep_every_component
+input_version: target_anchored_v1__biomedbert_e1354b7a_proposed
+input_status: proposed_not_frozen

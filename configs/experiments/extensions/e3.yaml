@@ -1,0 +1,12 @@
+name: e3_feasibility
+status: not_started
+position: after_biored_main_and_before_drugprot
+included_in_main_matrix: false
+automatic_start: false
+if_later_approved:
+  biomedbert: "2 by 3 seeds on P2 and P4"
+  qwen: "two models, two groups each"
+forbidden_rules:
+  - pharmacologic_action_implies_drug
+  - gene_database_class_implies_molecular_form
+  - variant_id_format_implies_full_variant_type

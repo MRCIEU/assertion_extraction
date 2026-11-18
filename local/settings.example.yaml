@@ -1,0 +1,11 @@
+storage_root: /home/b5ac/freddieyu.b5ac/projects/project_1
+biomedbert_tokenizer_dir: /home/b5ac/freddieyu.b5ac/projects/project_1/models/microsoft__BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext/e1354b7a3a09615f6aba48dfad4b7a613eef7062/tokenizer
+analysis_python: /home/b5ac/freddieyu.b5ac/projects/project_1/environments/analysis/bin/python
+slurm:
+  partition: workq
+  account: brics.b5ac
+  qos: normal
+  cpus: 8
+  memory_gb: 16
+  time: "00:30:00"
+  gpus: 0

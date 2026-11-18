@@ -1,0 +1,128 @@
+schema_id: biored
+corpus: biored
+status: study_contract
+no_relation:
+  stable_id: BR00_NO_RELATION
+  display_name: No_Relation
+  note: Independent of the positive predicate hierarchy.
+fine_labels:
+  - stable_id: BR01_POSITIVE_CORRELATION
+    display_name: Positive_Correlation
+    direction: positive
+    source: BioRED annotation guideline and Luo et al. 2022, doi:10.1093/bib/bbac282
+  - stable_id: BR02_NEGATIVE_CORRELATION
+    display_name: Negative_Correlation
+    direction: negative
+    source: BioRED annotation guideline and Luo et al. 2022, doi:10.1093/bib/bbac282
+  - stable_id: BR03_ASSOCIATION
+    display_name: Association
+    direction: nonpolar
+    source: BioRED annotation guideline and Luo et al. 2022, doi:10.1093/bib/bbac282
+  - stable_id: BR04_BIND
+    display_name: Bind
+    direction: nonpolar
+    source: BioRED annotation guideline and Luo et al. 2022, doi:10.1093/bib/bbac282
+  - stable_id: BR05_COMPARISON
+    display_name: Comparison
+    direction: nonpolar
+    source: BioRED annotation guideline and Luo et al. 2022, doi:10.1093/bib/bbac282
+  - stable_id: BR06_COTREATMENT
+    display_name: Cotreatment
+    direction: nonpolar
+    source: BioRED annotation guideline and Luo et al. 2022, doi:10.1093/bib/bbac282
+  - stable_id: BR07_DRUG_INTERACTION
+    display_name: Drug_Interaction
+    direction: nonpolar
+    source: BioRED annotation guideline and Luo et al. 2022, doi:10.1093/bib/bbac282
+  - stable_id: BR08_CONVERSION
+    display_name: Conversion
+    direction: nonpolar
+    source: BioRED annotation guideline and Luo et al. 2022, doi:10.1093/bib/bbac282
+levels:
+  P4:
+    labels:
+      - stable_id: BR01_POSITIVE_CORRELATION
+        display_name: Positive_Correlation
+        members: [BR01_POSITIVE_CORRELATION]
+      - stable_id: BR02_NEGATIVE_CORRELATION
+        display_name: Negative_Correlation
+        members: [BR02_NEGATIVE_CORRELATION]
+      - stable_id: BR03_ASSOCIATION
+        display_name: Association
+        members: [BR03_ASSOCIATION]
+      - stable_id: BR04_BIND
+        display_name: Bind
+        members: [BR04_BIND]
+      - stable_id: BR05_COMPARISON
+        display_name: Comparison
+        members: [BR05_COMPARISON]
+      - stable_id: BR06_COTREATMENT
+        display_name: Cotreatment
+        members: [BR06_COTREATMENT]
+      - stable_id: BR07_DRUG_INTERACTION
+        display_name: Drug_Interaction
+        members: [BR07_DRUG_INTERACTION]
+      - stable_id: BR08_CONVERSION
+        display_name: Conversion
+        members: [BR08_CONVERSION]
+  P3:
+    labels:
+      - stable_id: BR_P3_POSITIVE_CORRELATION
+        display_name: Positive_Correlation
+        members: [BR01_POSITIVE_CORRELATION]
+      - stable_id: BR_P3_NEGATIVE_CORRELATION
+        display_name: Negative_Correlation
+        members: [BR02_NEGATIVE_CORRELATION]
+      - stable_id: BR_P3_ASSOCIATION
+        display_name: Association
+        members: [BR03_ASSOCIATION]
+      - stable_id: BR_P3_BIND
+        display_name: Bind
+        members: [BR04_BIND]
+      - stable_id: BR_P3_REMAINING
+        display_name: Remaining_Relation
+        members:
+          - BR05_COMPARISON
+          - BR06_COTREATMENT
+          - BR07_DRUG_INTERACTION
+          - BR08_CONVERSION
+  P2:
+    labels:
+      - stable_id: BR_P2_POSITIVE_CORRELATION
+        display_name: Positive_Correlation
+        members: [BR01_POSITIVE_CORRELATION]
+      - stable_id: BR_P2_NEGATIVE_CORRELATION
+        display_name: Negative_Correlation
+        members: [BR02_NEGATIVE_CORRELATION]
+      - stable_id: BR_P2_OTHER
+        display_name: Other_Relation
+        members:
+          - BR03_ASSOCIATION
+          - BR04_BIND
+          - BR05_COMPARISON
+          - BR06_COTREATMENT
+          - BR07_DRUG_INTERACTION
+          - BR08_CONVERSION
+  P1:
+    labels:
+      - stable_id: BR_P1_ANY
+        display_name: Any_Relation
+        members:
+          - BR01_POSITIVE_CORRELATION
+          - BR02_NEGATIVE_CORRELATION
+          - BR03_ASSOCIATION
+          - BR04_BIND
+          - BR05_COMPARISON
+          - BR06_COTREATMENT
+          - BR07_DRUG_INTERACTION
+          - BR08_CONVERSION
+legal_type_pairs:
+  - [DiseaseOrPhenotypicFeature, GeneOrGeneProduct]
+  - [DiseaseOrPhenotypicFeature, ChemicalEntity]
+  - [GeneOrGeneProduct, ChemicalEntity]
+  - [GeneOrGeneProduct, GeneOrGeneProduct]
+  - [DiseaseOrPhenotypicFeature, SequenceVariant]
+  - [ChemicalEntity, SequenceVariant]
+  - [ChemicalEntity, ChemicalEntity]
+  - [SequenceVariant, SequenceVariant]
+pair_order: undirected_concept_id_string_sort

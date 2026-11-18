@@ -1,0 +1,12 @@
+corpus: bc8
+release_id: BC8_BIOREDIRECT_2025-01-22_sha256-29aa0b2060f9
+source: https://ftp.ncbi.nlm.nih.gov/pub/lu/BioREDirect/datasets.zip
+gold_file: datasets/bioredirect/bioredirect_bc8_test.pubtator
+data_version: bc8_candidates_v2
+split: bc8
+n_documents: 400
+held_out_first_contact: false
+used_for_training: false
+subject_lines_are_relations: false
+input_version: target_anchored_v1__biomedbert_e1354b7a_proposed
+input_status: proposed_not_frozen

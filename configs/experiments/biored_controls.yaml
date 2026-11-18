@@ -1,0 +1,12 @@
+name: biored_controls
+dataset: biored
+entity_level: E2
+model: Qwen/Qwen3-32B
+status: draft_pending_confirmation
+controls:
+  - rename_p4
+  - rename_p2
+  - random_merge_1
+  - random_merge_2
+  - random_merge_3
+execute_model: false

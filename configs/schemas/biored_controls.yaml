@@ -1,0 +1,87 @@
+status: draft_pending_confirmation
+applies_to:
+  corpus: biored
+  entity_level: E2
+  model_id: Qwen/Qwen3-32B
+note: >
+  Rename strings are developer proposals. Members and definitions are unchanged.
+  Do not treat this file as a frozen control until the names are confirmed.
+  Random groups are named as random groups. They are not new medical mechanisms.
+rename:
+  - control_id: rename_p4
+    base_level: P4
+    display_names:
+      BR01_POSITIVE_CORRELATION: Positive_Association_Direction
+      BR02_NEGATIVE_CORRELATION: Negative_Association_Direction
+      BR03_ASSOCIATION: Association_Unspecified
+      BR04_BIND: Binding
+      BR05_COMPARISON: Comparison_Relation
+      BR06_COTREATMENT: Cotreatment_Relation
+      BR07_DRUG_INTERACTION: Drug_Interaction_Relation
+      BR08_CONVERSION: Conversion_Relation
+  - control_id: rename_p2
+    base_level: P2
+    display_names:
+      BR_P2_POSITIVE_CORRELATION: Positive_Association_Direction
+      BR_P2_NEGATIVE_CORRELATION: Negative_Association_Direction
+      BR_P2_OTHER: Other_Positive_Link
+random_merge:
+  procedure:
+    seed: 42
+    generator: random.Random.shuffle
+    sort_before_shuffle: stable_id
+    group_sizes: [1, 1, 6]
+    n_versions: 3
+    uniqueness: member_sets
+  versions:
+    - control_id: random_merge_1
+      groups:
+        - stable_id: BR_RM1_S1
+          display_name: RandomMerge1_Singleton_A
+          members: [BR04_BIND]
+        - stable_id: BR_RM1_S2
+          display_name: RandomMerge1_Singleton_B
+          members: [BR05_COMPARISON]
+        - stable_id: BR_RM1_G6
+          display_name: RandomMerge1_Group6
+          members:
+            - BR01_POSITIVE_CORRELATION
+            - BR02_NEGATIVE_CORRELATION
+            - BR03_ASSOCIATION
+            - BR06_COTREATMENT
+            - BR07_DRUG_INTERACTION
+            - BR08_CONVERSION
+    - control_id: random_merge_2
+      groups:
+        - stable_id: BR_RM2_S1
+          display_name: RandomMerge2_Singleton_A
+          members: [BR04_BIND]
+        - stable_id: BR_RM2_S2
+          display_name: RandomMerge2_Singleton_B
+          members: [BR08_CONVERSION]
+        - stable_id: BR_RM2_G6
+          display_name: RandomMerge2_Group6
+          members:
+            - BR01_POSITIVE_CORRELATION
+            - BR02_NEGATIVE_CORRELATION
+            - BR03_ASSOCIATION
+            - BR05_COMPARISON
+            - BR06_COTREATMENT
+            - BR07_DRUG_INTERACTION
+    - control_id: random_merge_3
+      groups:
+        - stable_id: BR_RM3_S1
+          display_name: RandomMerge3_Singleton_A
+          members: [BR04_BIND]
+        - stable_id: BR_RM3_S2
+          display_name: RandomMerge3_Singleton_B
+          members: [BR06_COTREATMENT]
+        - stable_id: BR_RM3_G6
+          display_name: RandomMerge3_Group6
+          members:
+            - BR01_POSITIVE_CORRELATION
+            - BR02_NEGATIVE_CORRELATION
+            - BR03_ASSOCIATION
+            - BR05_COMPARISON
+            - BR07_DRUG_INTERACTION
+            - BR08_CONVERSION

@@ -1,0 +1,26 @@
+model_id: microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext
+revision: e1354b7a3a09615f6aba48dfad4b7a613eef7062
+revision_status: accepted_for_input_tokenization
+weight_loading_authorized: false
+license: mit
+architecture:
+  hidden_size: 768
+  num_hidden_layers: 12
+  num_attention_heads: 12
+  max_position_embeddings: 512
+  vocab_size: 30522
+  hidden_dropout_prob: 0.1
+  attention_probs_dropout_prob: 0.1
+classifier:
+  pooled: cls
+  dropout: 0.1
+  biored_head: softmax
+  drugprot_head: sigmoid
+tokenizer:
+  do_lower_case: true
+  local_relative_dir: models/microsoft__BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext/e1354b7a3a09615f6aba48dfad4b7a613eef7062/tokenizer
+  augmented_tokenizer_from_previous_project_used: false
+weights_loaded_in_this_delivery: false
+training_precision: bf16
+biomedbert_prediction_precision: fp32
+precision_status: candidate_pending_gpu_smoke_test
