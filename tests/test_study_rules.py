@@ -418,13 +418,38 @@ def test_drugprot_split_and_sampling_and_plan(tmp_path: Path):
         plot_paired_differences(["x"], [0.1], [0.0], [0.2], tmp_path / "evaluation" / "diff", synthetic=True)
 
 
-def test_no_weight_loading_or_api_call_is_present():
-    source = "\n".join(path.read_text(encoding="utf-8") for path in (ROOT / "src" / "schema_study").glob("*.py"))
-    lowered = source.lower()
-    for banned in ("import torch", "automodel", "openai", "vllm", "api.openai.com"):
-        assert banned not in lowered
+def test_cpu_validation_does_not_load_model_libraries():
+    """CPU validation stays free of model libraries.
+
+    The original check scanned every top-level module. Authorised model
+    execution now lives in named modules and is not imported by the default
+    command line. Those modules may mention a model library. Every other
+    module remains under the original prohibition, and the default train
+    command stays blocked.
+    """
+    import sys
+
+    from schema_study.experiments import AUTHORISED_MODEL_EXECUTION_MODULES
+
+    package = ROOT / "src" / "schema_study"
+    authorised = set(AUTHORISED_MODEL_EXECUTION_MODULES)
+    # These are import and call forms. A sentence that names a library in
+    # order to say that the CPU package does not load it is not a call.
+    banned = ("import torch", "from torch", "automodel", "openai", "import vllm", "from vllm", "vllm.", "api.openai.com")
+    offenders = []
+    for path in package.rglob("*.py"):
+        relative = path.relative_to(package).as_posix()
+        lowered = path.read_text(encoding="utf-8").lower()
+        if any(token in lowered for token in banned) and relative not in authorised:
+            offenders.append(relative)
+    assert offenders == []
+    assert "torch" not in sys.modules
+    import schema_study.models as model_package
     from schema_study.cli import main
 
+    assert model_package.ModelExecutionBlocked is not None
+    assert "torch" not in sys.modules
+    assert "schema_study.models.torch_backend" not in sys.modules
     config = ROOT / "configs" / "experiments" / "pilot.yaml"
     if config.exists():
         assert main(["train", "--config", str(config)]) == 3

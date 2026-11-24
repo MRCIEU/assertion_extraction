@@ -75,14 +75,35 @@ def test_observation_counts_do_not_change_the_reference_probability():
 
 
 def test_zero_native_entropy_has_an_undefined_retained_fraction():
-    schema = drugprot()
-    # A one-label schema is not constructed. The guard is the P1 result above
-    # and the explicit None when native entropy is zero, exercised by equal
-    # probabilities only through the public ratio. A single observed label still
-    # has positive entropy after add-one smoothing across every native label.
-    measured = predicate_information(schema, {schema.fine_ids[0]: 10})
-    assert measured["native_entropy_nats"] > 0.0
-    assert measured["levels"]["P4"]["retained_fraction"] == 1.0
+    from schema_study.schemas import Label, Schema
+
+    label = Label("ONLY", "Only", ("ONLY",))
+    schema = Schema(
+        schema_id="one",
+        corpus="one",
+        no_relation_id="NO",
+        no_relation_name="No_Relation",
+        fine_ids=("ONLY",),
+        fine_names={"ONLY": "Only"},
+        directions={"ONLY": "nonpolar"},
+        levels={level: (label,) for level in ("P4", "P3", "P2", "P1")},
+        raw={"label_cardinality": "single"},
+    )
+    measured = predicate_information(schema, {"ONLY": 4})
+    assert measured["native_entropy_nats"] == 0.0
+    assert measured["levels"]["P4"]["retained_fraction"] is None
+    assert measured["levels"]["P1"]["retained_fraction"] is None
+    assert measured["schema_ceiling"]["P4"]["frequency_ceiling_C"] is None
+    assert measured["schema_ceiling"]["P1"]["uniform_ceiling_C"] is None
+
+
+def test_entity_mapping_comes_from_the_configuration_file():
+    from schema_study.contexts import load_entity_configuration
+
+    raw = load_entity_configuration(ROOT)
+    assert raw["entity_levels"]["E1"]["merge"]["GeneOrGeneProduct"] == "Molecular_Entity"
+    assert "DiseaseOrPhenotypicFeature" not in raw["entity_levels"]["E1"]["merge"]
+    assert tuple(raw["original_types"])[0] == "GeneOrGeneProduct"
 
 
 def test_e0_is_absence_and_e1_merges_only_three_types():
@@ -107,6 +128,25 @@ def test_identifier_coverage_rejects_a_matching_count_with_the_wrong_ids():
     assert result["n_missing"] == 1
     assert result["n_duplicate_ids"] == 1
     assert result["identity_complete"] is False
+
+
+def test_published_granularity_is_unchanged_by_the_entity_configuration():
+    import json
+
+    published_path = Path("/home/b5ac/freddieyu.b5ac/projects/project_1/studies/schema_granularity_v1/reports/representation_granularity/granularity_measurements.json")
+    published = json.loads(published_path.read_text(encoding="utf-8"))
+    for corpus, schema in (("biored", biored()), ("drugprot", drugprot())):
+        block = published["predicates"][corpus]
+        counts = {category["native_ids"][0]: category["reference_count"] for category in block["levels"]["P4"]["categories"]}
+        measured = predicate_information(schema, counts)
+        for level in ("P1", "P2", "P3", "P4"):
+            assert measured["levels"][level]["entropy_bits"] == block["levels"][level]["entropy_bits"]
+            assert measured["levels"][level]["retained_fraction"] == block["levels"][level]["retained_fraction"]
+    mentions = published["entities"]["biored"]["mentions"]
+    measured_entities = entity_type_information(mentions["native_counts"], unit="mention")
+    assert measured_entities["retained_fraction_e1"] == mentions["retained_fraction_e1"]
+    assert measured_entities["entropy_e2_bits"] == mentions["entropy_e2_bits"]
+    assert measured_entities["entropy_e1_bits"] == mentions["entropy_e1_bits"]
 
 
 def test_rejected_answer_stays_interpretable_and_a_second_biored_label_does_not():

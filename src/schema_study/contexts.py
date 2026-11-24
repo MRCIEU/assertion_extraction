@@ -27,11 +27,20 @@ INPUT_VERSION = "target_anchored_v1__biomedbert_e1354b7a_proposed"
 TOKENIZER_STATUS = "proposed_not_frozen"
 
 
+def load_entity_configuration(code_root: Path) -> dict:
+    """Return the entity-type configuration. This file is the only definition."""
+    path = Path(code_root) / "configs" / "schemas" / "entities.yaml"
+    with path.open(encoding="utf-8") as handle:
+        raw = yaml.safe_load(handle)
+    if not isinstance(raw, dict) or "original_types" not in raw:
+        raise ValueError(f"Entity configuration is missing original types: {path}")
+    return raw
+
+
 def entity_views(code_root: Path, corpus: str) -> dict:
     if corpus == "drugprot":
         return {"native": {"CHEMICAL": "CHEMICAL", "GENE": "GENE"}}
-    path = code_root / "configs" / "schemas" / "entities.yaml"
-    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    raw = load_entity_configuration(code_root)
     return {
         "E0": None,
         "E1": dict(raw["entity_levels"]["E1"]["merge"]),

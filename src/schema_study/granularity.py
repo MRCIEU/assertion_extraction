@@ -12,8 +12,10 @@ import math
 from collections import Counter
 from typing import Iterable, Mapping, Sequence
 
+from schema_study.contexts import load_entity_configuration
 from schema_study.evaluation import information_content, information_retention, smoothed_fine_probabilities
 from schema_study.inputs import mapped_type
+from schema_study.paths import CODE_ROOT
 from schema_study.schemas import LEVELS, Schema, group_direction, map_fine_ids, partition_errors, rollup_ids
 
 # Human readings of the frozen group names against the BioRED guideline and the
@@ -39,19 +41,12 @@ SEMANTIC_GROUP_NOTES = {
     },
 }
 
-ORIGINAL_BIORED_TYPES = (
-    "GeneOrGeneProduct",
-    "DiseaseOrPhenotypicFeature",
-    "ChemicalEntity",
-    "SequenceVariant",
-    "OrganismTaxon",
-    "CellLine",
-)
-E1_MERGE = {
-    "GeneOrGeneProduct": "Molecular_Entity",
-    "ChemicalEntity": "Molecular_Entity",
-    "SequenceVariant": "Molecular_Entity",
-}
+def _entity_defaults() -> tuple[tuple[str, ...], dict[str, str]]:
+    """Read the authoritative entity mapping from the study configuration."""
+    raw = load_entity_configuration(CODE_ROOT)
+    native = tuple(raw["original_types"])
+    merge = dict(raw["entity_levels"]["E1"]["merge"])
+    return native, merge
 
 
 def nats_to_bits(value: float) -> float:
@@ -275,6 +270,20 @@ def _schema_ceilings(schema: Schema, reference_counts: Mapping[str, int], observ
     relations. The prediction-induced term is omitted because this summary
     does not use model output. The definition of the ceiling is unchanged.
     """
+    probabilities = smoothed_fine_probabilities(reference_counts, schema.fine_ids)
+    if any(information_content(probabilities[fine_id]) == 0.0 for fine_id in schema.fine_ids):
+        # A certain native label has no information to retain. The retention
+        # ratio divides by that information, so the ceiling is undefined.
+        return {
+            level: {
+                "n_gold_relations": sum(int(count) for count in observation_counts.values()),
+                "frequency_ceiling_C": None,
+                "uniform_ceiling_C": None,
+                "schema_loss_frequency": None,
+                "schema_loss_uniform": None,
+            }
+            for level in LEVELS
+        }
     rows = []
     for fine_id, count in observation_counts.items():
         rows.extend({"fine_id": fine_id, "status": "valid", "predicted_groups": []} for _ in range(int(count)))
@@ -294,14 +303,14 @@ def _schema_ceilings(schema: Schema, reference_counts: Mapping[str, int], observ
 def displayed_entity_type(entity_type: str, level: str, merge: Mapping[str, str] | None = None) -> str | None:
     """Type token supplied at one frozen entity level. E0 supplies none."""
     if merge is None and level == "E1":
-        merge = E1_MERGE
+        _native, merge = _entity_defaults()
     return mapped_type(entity_type, level, dict(merge or {}))
 
 
 def entity_type_information(
     counts: Mapping[str, int],
     *,
-    native_types: Sequence[str] = ORIGINAL_BIORED_TYPES,
+    native_types: Sequence[str] | None = None,
     merge: Mapping[str, str] | None = None,
     unit: str,
 ) -> dict:
@@ -311,8 +320,9 @@ def entity_type_information(
     Broader E1 probabilities are sums of the add-one native probabilities.
     Counts outside the native type list are reported and left out of the entropy.
     """
-    merge = dict(E1_MERGE if merge is None else merge)
-    native = tuple(native_types)
+    default_native, default_merge = _entity_defaults()
+    merge = dict(default_merge if merge is None else merge)
+    native = tuple(default_native if native_types is None else native_types)
     outside = {entity_type: int(count) for entity_type, count in counts.items() if entity_type not in native and count}
     inside = {entity_type: int(counts.get(entity_type, 0)) for entity_type in native}
     probabilities = smoothed_fine_probabilities(inside, native)
@@ -360,11 +370,12 @@ def candidate_type_changes(
     pairs: Iterable[tuple[str, str]],
     *,
     merge: Mapping[str, str] | None = None,
-    native_types: Sequence[str] = ORIGINAL_BIORED_TYPES,
+    native_types: Sequence[str] | None = None,
 ) -> dict:
     """Count candidates by whether each target type is more specific at E2 than at E1."""
-    merge = dict(E1_MERGE if merge is None else merge)
-    native = set(native_types)
+    default_native, default_merge = _entity_defaults()
+    merge = dict(default_merge if merge is None else merge)
+    native = set(default_native if native_types is None else native_types)
     summary = Counter()
     argument_specific = [0, 0]
     n_pairs = 0

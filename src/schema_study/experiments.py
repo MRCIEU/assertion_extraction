@@ -35,6 +35,23 @@ TRAINING_PROCEDURE = (
 
 MODEL_EXECUTION_ENABLED = False
 
+# Modules that may import a model library. They are not part of CPU validation.
+# The default command line does not import them, and its train and generate
+# commands stay blocked while MODEL_EXECUTION_ENABLED is false.
+AUTHORISED_MODEL_EXECUTION_MODULES = (
+    "formal_train.py",
+    "formal_generate.py",
+    "round6_generate.py",
+    "backend_generate.py",
+    "round5_followup.py",
+    "round5_diagnose.py",
+    "weight_verify.py",
+    "smoke_qwen.py",
+    "smoke_biomedbert.py",
+    "models/torch_backend.py",
+    "models/qwen_backend.py",
+)
+
 
 class ModelExecutionBlocked(RuntimeError):
     """Raised because this delivery does not run training or model inference."""

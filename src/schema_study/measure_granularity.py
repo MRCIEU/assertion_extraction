@@ -16,8 +16,6 @@ import pyarrow.dataset as ds
 from schema_study.batch_plan import adopted_answers
 from schema_study.contexts import INPUT_VERSION
 from schema_study.granularity import (
-    E1_MERGE,
-    ORIGINAL_BIORED_TYPES,
     SEMANTIC_GROUP_NOTES,
     candidate_type_changes,
     compare_identifiers,

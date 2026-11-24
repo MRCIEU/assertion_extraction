@@ -6,7 +6,7 @@ The calculations use the study's add-one smoothing on native labels. A broader c
 
 The detailed counts, the candidate-identifier audit, and the figures are in `/home/b5ac/freddieyu.b5ac/projects/project_1/studies/schema_granularity_v1/reports/representation_granularity/`. The prepared versions are `biored_candidates_v2`, `bc8_candidates_v2`, and `drugprot_candidates_v1`. The formal predictions are those in `formal_20261115`. The schema files are `configs/schemas/biored.yaml` and `configs/schemas/drugprot.yaml`. This measurement does not change those files, the splits, or the saved predictions.
 
-The researcher authorised these measurements, the read-only prediction check, and this document. That authorisation does not extend to training, generation, ontology acquisition, or a source-level evaluation.
+The researcher authorised these measurements, the read-only prediction check, and this document. That authorisation does not extend to training, generation, ontology acquisition, or a source-level evaluation. Candidate passages prepared under a later authorisation are described in `docs/source_references.md`.
 
 ## Structural properties
 
