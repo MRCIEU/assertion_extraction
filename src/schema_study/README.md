@@ -11,5 +11,6 @@ Method: BioRED is one label plus No_Relation, with softmax cross-entropy. DrugPr
 | formal_generate | Fills one shard and keeps the attempt ledger |
 | formal_analyze | Scores and rolls up from the candidate tables |
 | predictions | Parses an answer and rejects an illegal BioRED label set |
+| granularity | Measures label entropy of the frozen entity and predicate levels |
 
 A failed or illegal answer stays in the scored population. It is not treated as a correct empty prediction.

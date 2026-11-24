@@ -79,3 +79,31 @@ def plot_named_bars(names: list[str], values: list[float], path: Path, ylabel: s
     axis.set_ylabel(ylabel)
     figure.tight_layout()
     return save_figure(figure, path, synthetic=synthetic)
+
+
+def plot_level_series(
+    level_names: list[str],
+    series: dict[str, list[float]],
+    path: Path,
+    ylabel: str,
+    *,
+    synthetic: bool,
+) -> dict:
+    """Bar chart over named representation levels.
+
+    The horizontal positions are the experimental conditions in order. They
+    are not equal increments of scientific meaning.
+    """
+    figure, axis = plt.subplots(figsize=(7, 4))
+    positions = list(range(len(level_names)))
+    width = 0.8 / max(len(series), 1)
+    shades = ("0.25", "0.6", "0.4")
+    for index, (name, values) in enumerate(series.items()):
+        offset = (index - (len(series) - 1) / 2) * width
+        axis.bar([position + offset for position in positions], values, width=width, label=name, color=shades[index % len(shades)])
+    axis.set_xticks(positions, level_names)
+    axis.set_ylabel(ylabel)
+    axis.set_xlabel("Experimental condition")
+    axis.legend()
+    figure.tight_layout()
+    return save_figure(figure, path, synthetic=synthetic)

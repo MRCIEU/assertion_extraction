@@ -1,6 +1,6 @@
-# Stage 00 assessment of the existing granularity study
+# Assessment of the existing granularity study
 
-This assessment records which existing data, representations, predictions, and evaluation procedures can be reused for a later study of semantic completeness and source-grounded support. The inspected implementation is commit `5e86545eece2aea3280fd9d37c59cd3d84717032` of `MRCIEU/assertion_extraction`. Prepared data and formal outputs remain in `/home/b5ac/freddieyu.b5ac/projects/project_1`. The counts below were produced by `scripts/stage00_inventory.py`; the machine-readable result is `docs/stage00_granularity_assessment/inventory.json`.
+This assessment records which existing data, representations, predictions, and evaluation procedures can be reused for a later study of semantic completeness and source-grounded support. The inspected implementation is commit `5e86545eece2aea3280fd9d37c59cd3d84717032` of `MRCIEU/assertion_extraction`. Prepared data and formal outputs remain in `/home/b5ac/freddieyu.b5ac/projects/project_1`. The counts below were produced by `scripts/inventory_existing_material.py`; the machine-readable result is `docs/existing_material_assessment/inventory.json`. These two files were first committed at `9617eb9ce4700ef62bbb96adcd619c702984e406` under the names `scripts/stage00_inventory.py` and `docs/stage00_granularity_assessment/`. The rename keeps that text and changes only the paths.
 
 The present assessment does not establish the semantic validity of any extracted relation. It does not change candidate populations, data splits, hierarchies, or formal outputs.
 

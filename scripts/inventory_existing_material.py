@@ -190,7 +190,7 @@ def main() -> None:
             "generation_completion": "A generation shard is artefact_complete only when the number of adopted attempt lines is at least the frozen request count.",
         },
     }
-    destination = Path(__file__).resolve().parents[1] / "docs/stage00_granularity_assessment/inventory.json"
+    destination = Path(__file__).resolve().parents[1] / "docs/existing_material_assessment/inventory.json"
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     print(destination)
