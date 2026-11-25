@@ -7,6 +7,8 @@ count is not a distributed world size.
 from __future__ import annotations
 
 import json
+import os
+import random
 from pathlib import Path
 
 from schema_study.learning_conditions import RESEARCH_PREDICATES
@@ -120,7 +122,8 @@ def select_population(task: dict, rows: list[dict]) -> dict:
         views = view_names("drugprot" if task.get("dataset") == "drugprot" else "biored")
         train_rows = [row for row in rows if row["split"] == "train"]
         dev_rows = [row for row in rows if row["split"] == "dev"]
-        labels = {(row["candidate_id"], row["entity"], row["predicate"]): (row.get("assistant") or {}).get("labels", []) for row in train_rows + dev_rows}
+        test_rows = [row for row in rows if row["split"] == "test"]
+        labels = {(row["candidate_id"], row["entity"], row["predicate"]): (row.get("assistant") or {}).get("labels", []) for row in train_rows + dev_rows + test_rows}
         candidates = _unique_candidates(train_rows)
         dev_candidates = _unique_candidates(dev_rows)
         if task.get("exposure") == "resource_efficient_one_view":
@@ -135,10 +138,16 @@ def select_population(task: dict, rows: list[dict]) -> dict:
             kind = "exposure_controlled_all_views"
         else:
             raise ValueError("The shared-schema exposure is not one of the two agreed definitions.")
+        test_candidates = _unique_candidates(test_rows)
+        final_rows = one_view_records(test_candidates, views, 0, int(task.get("seed") or 13)) if kind == "resource_efficient_one_view" else all_view_records(test_candidates, views)
+        development = _attach_view_labels(evaluation, labels) if evaluation else []
+        final_evaluation = _attach_view_labels(final_rows, labels) if final_rows else []
         return {
             "kind": kind,
             "rows": _attach_view_labels(selected, labels),
-            "evaluation": _attach_view_labels(evaluation, labels),
+            "development": development,
+            "final_evaluation": final_evaluation,
+            "evaluation": development,
             "views": views,
             "candidates": len(candidates),
         }
@@ -146,16 +155,25 @@ def select_population(task: dict, rows: list[dict]) -> dict:
         train_rows = [row for row in rows if row["split"] == "train" and row["entity"] == task["entity"]]
         grouped = {predicate: [row for row in train_rows if row.get("predicate") == predicate] for predicate in RESEARCH_PREDICATES}
         ordered = curriculum_records(task["order"], grouped)
-        evaluation = [row for row in rows if row["split"] == "dev" and row["entity"] == task["entity"] and row["predicate"] == "P3"]
-        return {"kind": task["order"], "rows": ordered, "evaluation": evaluation, "candidates": len({row["candidate_id"] for row in train_rows})}
+        development = [row for row in rows if row["split"] == "dev" and row["entity"] == task["entity"] and row["predicate"] == "P3"]
+        final_evaluation = [row for row in rows if row["split"] == "test" and row["entity"] == task["entity"] and row["predicate"] == "P3"]
+        return {"kind": task["order"], "rows": ordered, "development": development, "final_evaluation": final_evaluation, "evaluation": development, "candidates": len({row["candidate_id"] for row in train_rows})}
     if family == "unseen_schema":
         train_rows = [row for row in rows if row["split"] == "train"]
         split = unseen_split(task["withheld"], train_rows)
-        evaluation = [
-            row for row in rows
-            if row["split"] in {"dev", "test"} and (row["entity"] == task["withheld"] or row["predicate"] == task["withheld"])
-        ]
-        return {"kind": "unseen", "rows": split["train"], "evaluation": evaluation, "withheld": task["withheld"]}
+        def withheld_row(row: dict, split: str) -> bool:
+            return row["split"] == split and (row["entity"] == task["withheld"] or row["predicate"] == task["withheld"])
+
+        development = [row for row in rows if withheld_row(row, "dev")]
+        final_evaluation = [row for row in rows if withheld_row(row, "test")]
+        return {
+            "kind": "unseen",
+            "rows": split["train"],
+            "development": development,
+            "final_evaluation": final_evaluation,
+            "evaluation": development,
+            "withheld": task["withheld"],
+        }
     if family in {"hierarchical_multitask", "hierarchical_consistency"}:
         return _hierarchical_population(task, rows)
     if family == "data_efficiency":
@@ -163,22 +181,38 @@ def select_population(task: dict, rows: list[dict]) -> dict:
         documents = subset_document_ids([row["document_id"] for row in scoped if row.get("split", "train") == "train"], int(task["fraction"]), int(task["seed"]))
         allowed = set(documents)
         train = [row for row in scoped if row.get("split", "train") == "train" and row["document_id"] in allowed]
-        held = [row for row in scoped if row.get("split") in {"dev", "test"}]
+        development = [row for row in scoped if row.get("split") == "dev"]
+        final_evaluation = [row for row in scoped if row.get("split") == "test"]
         if any(row["document_id"] not in allowed for row in train):
             raise RuntimeError("A training row is outside the nested document subset.")
-        return {"kind": f"fraction_{task['fraction']}", "rows": train, "evaluation": held, "documents": documents}
+        if any(row["split"] == "test" for row in development):
+            raise RuntimeError("A test row entered development selection.")
+        return {"kind": f"fraction_{task['fraction']}", "rows": train, "development": development, "final_evaluation": final_evaluation, "evaluation": development, "documents": documents}
     if family == "negative_sampling":
         scoped = [row for row in rows if _same_condition(row, task.get("entity"), task.get("predicate"))]
         train = [row for row in scoped if row.get("split", "train") == "train"]
         chosen = negative_population(train, task["strategy"], int(task["seed"]))
-        evaluation = [row for row in scoped if row.get("split") in {"dev", "test"}]
-        return {"kind": task["strategy"], "rows": chosen["rows"], "evaluation": evaluation, "negative_ids": chosen["negative_ids"]}
+        development = [row for row in scoped if row.get("split") == "dev"]
+        final_evaluation = [row for row in scoped if row.get("split") == "test"]
+        return {"kind": task["strategy"], "rows": chosen["rows"], "development": development, "final_evaluation": final_evaluation, "evaluation": development, "negative_ids": chosen["negative_ids"]}
     entity = task.get("entity")
     predicate = task.get("predicate")
     matched = [row for row in rows if _same_condition(row, entity, predicate)]
     selected = [row for row in matched if row.get("split", "train") == "train"]
-    evaluation = [row for row in matched if row.get("split") == "dev"]
-    return {"kind": "independent", "rows": selected, "evaluation": evaluation, "candidates": len(selected)}
+    development = [row for row in matched if row.get("split") == "dev"]
+    final_evaluation = [row for row in matched if row.get("split") == "test"]
+    external = []
+    if task.get("dataset") == "biored":
+        external = [row for row in matched if row.get("split") == "bc8"]
+    return {
+        "kind": "independent",
+        "rows": selected,
+        "development": development,
+        "final_evaluation": final_evaluation,
+        "external_evaluation": external,
+        "evaluation": development,
+        "candidates": len(selected),
+    }
 
 
 def _hierarchical_population(task: dict, rows: list[dict]) -> dict:
@@ -194,8 +228,9 @@ def _hierarchical_population(task: dict, rows: list[dict]) -> dict:
         return complete
 
     train = collect("train")
-    evaluation = collect("dev")
-    return {"kind": task["family"], "rows": train, "evaluation": evaluation, "candidates": len(train)}
+    development = collect("dev")
+    final_evaluation = collect("test")
+    return {"kind": task["family"], "rows": train, "development": development, "final_evaluation": final_evaluation, "evaluation": development, "candidates": len(train)}
 
 
 def _unique_candidates(rows: list[dict]) -> list[dict]:
@@ -265,19 +300,208 @@ def training_status(step: int, total_updates: int, selection_recorded: bool, fai
     return "training_completed"
 
 
+NEGATIVE_LABELS = {"NO_RELATION", "No_Relation", "no_relation"}
+DRUGPROT_DEVELOPMENT_DECISION = {
+    "rule": "independent_sigmoid",
+    "threshold": 0.5,
+    "negative_class": None,
+    "negative_class_counted": False,
+}
+
+
+def positive_labels(labels: list[str]) -> set[str]:
+    """The negative class is the absence of a positive relation. It is not a positive prediction."""
+    return {label for label in labels if label not in NEGATIVE_LABELS}
+
+
 def positive_micro_f1(rows: list[dict]) -> dict:
-    """Corpus micro-F1 from pooled counts. Empty predictions contribute false negatives, not a mean of document F1."""
+    """Corpus micro-F1 from pooled positive labels. Empty predictions contribute false negatives."""
     true_positive = false_positive = false_negative = 0
     for row in rows:
-        gold = set(row.get("gold") or [])
-        predicted = set(row.get("predicted") or []) if row.get("status") == "valid" else set()
+        gold = positive_labels(list(row.get("gold") or []))
+        predicted = positive_labels(list(row.get("predicted") or [])) if row.get("status") == "valid" else set()
         true_positive += len(gold & predicted)
         false_positive += len(predicted - gold)
         false_negative += len(gold - predicted)
     precision = true_positive / (true_positive + false_positive) if true_positive + false_positive else 0.0
     recall = true_positive / (true_positive + false_negative) if true_positive + false_negative else 0.0
     f1 = 0.0 if precision + recall == 0 else 2 * precision * recall / (precision + recall)
-    return {"precision": precision, "recall": recall, "f1": f1, "document_f1_averaged": False}
+    return {"precision": precision, "recall": recall, "f1": f1, "document_f1_averaged": False, "negative_class_counted": False}
+
+
+def require_production_device(policy: str, cuda_available: bool, initialised_world: int) -> dict:
+    """A production GPU policy is rejected when the process is still on CPU."""
+    if policy == "cpu_fixture":
+        return {"device": "cpu", "precision": "fp32", "world": 1, "parameter_sharding": False, "moved_unsharded_before_wrap": False}
+    if policy == "single_gpu":
+        if not cuda_available or initialised_world != 1:
+            raise RuntimeError("A single-GPU production task remained on CPU or was given a distributed world.")
+        return {"device": "cuda:0", "precision": "bf16", "world": 1, "parameter_sharding": False, "moved_unsharded_before_wrap": False}
+    if policy == "ddp":
+        if not cuda_available or initialised_world < 2:
+            raise RuntimeError("Data-parallel training requires an initialised CUDA process group.")
+        return {"device": "cuda:local", "precision": "bf16", "world": initialised_world, "parameter_sharding": False, "replicates_full_parameters": True, "moved_unsharded_before_wrap": True}
+    if policy == "fsdp":
+        if not cuda_available or initialised_world < 2:
+            raise RuntimeError("Parameter sharding requires an initialised CUDA process group.")
+        return {"device": "cuda:local", "precision": "bf16", "world": initialised_world, "parameter_sharding": True, "moved_unsharded_before_wrap": False}
+    raise ValueError(policy)
+
+
+def rank_partitions(example_ids: list[str], *, world: int, micro_batch: int, seed: int, epoch: int, shuffle: bool) -> dict:
+    """Split one global order into disjoint rank sequences that rebuild the effective batch of 16."""
+    if world < 1 or micro_batch < 1:
+        raise ValueError("Rank partitioning needs a positive world size and micro-batch.")
+    if EFFECTIVE_BATCH % (micro_batch * world) != 0:
+        raise ValueError("Micro-batch and world size must divide the global effective batch of 16.")
+    ordered = list(example_ids)
+    if shuffle:
+        random.Random(seed + epoch).shuffle(ordered)
+    accumulation = EFFECTIVE_BATCH // (micro_batch * world)
+    kept_count = (len(ordered) // EFFECTIVE_BATCH) * EFFECTIVE_BATCH
+    kept = ordered[:kept_count]
+    ranks = {rank: [] for rank in range(world)}
+    for start in range(0, kept_count, EFFECTIVE_BATCH):
+        window = kept[start:start + EFFECTIVE_BATCH]
+        for step in range(accumulation):
+            for rank in range(world):
+                offset = step * world * micro_batch + rank * micro_batch
+                ranks[rank].extend(window[offset:offset + micro_batch])
+    assigned = [example for rank in range(world) for example in ranks[rank]]
+    if len(assigned) != len(set(assigned)) or set(assigned) != set(kept):
+        raise RuntimeError("Rank assignment repeated or dropped a kept training example.")
+    return {
+        "ordered_before_drop": ordered,
+        "kept": kept,
+        "dropped": ordered[kept_count:],
+        "ranks": ranks,
+        "shuffle": shuffle,
+        "epoch": epoch,
+        "seed": seed,
+        "effective_batch": EFFECTIVE_BATCH,
+        "accumulation": accumulation,
+        "micro_batch": micro_batch,
+        "world": world,
+        "remainder_policy": "dropped_after_epoch_order",
+    }
+
+
+def resume_rank_examples(rank_examples: list[str], position: int) -> list[str]:
+    """Continuation starts at the next unconsumed rank example. Completed examples are not repeated."""
+    if position < 0 or position > len(rank_examples):
+        raise ValueError("The checkpoint position is outside the rank example sequence.")
+    return rank_examples[position:]
+
+
+ACTIVE_CONTROLLER_STATES = {"submitted", "pending", "running"}
+
+
+def controller_decisions(tasks: list[dict], state: dict, running: int, pending: int, verified_external: set[str] | None = None) -> list[dict]:
+    """Choose submissions from persistent state. An active or completed task is not submitted again."""
+    from schema_study.production_plan import MAX_QUEUED_JOBS
+
+    verified = verified_external or set()
+    seen_groups = set()
+    for task in tasks:
+        if "representative" in task:
+            continue
+        if "blocked" in task.get("statuses", []):
+            task["representative"] = False
+            continue
+        key = f"{task.get('family')}|{task.get('model')}|{(task.get('resources') or {}).get('gpus')}"
+        task["representative_group"] = key
+        task["representative"] = key not in seen_groups
+        seen_groups.add(key)
+    ready_representatives = {
+        task.get("representative_group")
+        for task in tasks
+        if task.get("representative") and state.get(task["task_id"], {}).get("state") == "completed"
+    }
+    decisions = []
+    proposed = 0
+    for task in tasks:
+        current = state.get(task["task_id"], {}).get("state", "unsubmitted")
+        if current in ACTIVE_CONTROLLER_STATES or current == "completed":
+            decisions.append({"task_id": task["task_id"], "action": "skip", "reason": current})
+            continue
+        if current in {"terminal_failure", "blocked"} or "blocked" in task.get("statuses", []):
+            decisions.append({"task_id": task["task_id"], "action": "skip", "reason": current if current != "unsubmitted" else "blocked"})
+            continue
+        group_block = (state.get("_groups") or {}).get(task.get("representative_group") or "")
+        if group_block and group_block.get("blocked"):
+            decisions.append({"task_id": task["task_id"], "action": "skip", "reason": "systematic_group_failure"})
+            continue
+        if task.get("representative") is False and task.get("representative_group") not in ready_representatives:
+            decisions.append({"task_id": task["task_id"], "action": "skip", "reason": "representative_pending"})
+            continue
+        missing = [item for item in task.get("depends_on", []) if item not in verified and state.get(item, {}).get("state") != "completed"]
+        external = {"inputs_prepared", "model_assets", "approval", "historical_drugprot_checkpoint"}
+        missing = [item for item in missing if not (item in external and item in verified)]
+        if missing:
+            decisions.append({"task_id": task["task_id"], "action": "skip", "reason": "prerequisite", "missing": missing})
+            continue
+        if running + pending + proposed + 1 > MAX_QUEUED_JOBS:
+            decisions.append({"task_id": task["task_id"], "action": "defer", "reason": "user_job_limit_512"})
+            continue
+        proposed += 1
+        decisions.append({"task_id": task["task_id"], "action": "submit"})
+    return decisions
+
+
+def record_submission(state: dict, task_id: str, job_id: str, manifest_revision: str) -> dict:
+    """Persist one Slurm identifier. A second submission of an active task is rejected."""
+    current = state.get(task_id, {}).get("state", "unsubmitted")
+    if current in ACTIVE_CONTROLLER_STATES or current == "completed":
+        raise RuntimeError(f"{task_id} is already {current}.")
+    previous = state.get(task_id, {})
+    state[task_id] = {
+        "state": "submitted",
+        "job_id": job_id,
+        "manifest_revision": manifest_revision,
+        "attempts": int(previous.get("attempts", 0)),
+        "group": previous.get("group"),
+    }
+    return state
+
+
+def record_failure(state: dict, task_id: str, reason: str, *, systematic: bool = False, group: str | None = None, limit: int = 2) -> dict:
+    """Count a transient failure. A systematic failure closes the homogeneous group."""
+    previous = state.get(task_id, {})
+    attempts = int(previous.get("attempts", 0)) + 1
+    assigned = group or previous.get("group")
+    closed = systematic or attempts > limit
+    state[task_id] = {
+        "state": "terminal_failure" if closed else "retryable_failure",
+        "attempts": attempts,
+        "reason": reason,
+        "systematic": systematic,
+        "group": assigned,
+    }
+    if systematic and assigned:
+        state.setdefault("_groups", {}).setdefault(assigned, {})["blocked"] = reason
+    return state
+
+
+def save_controller_state(path: Path, state: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lock = path.with_suffix(".lock")
+    try:
+        descriptor = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError as exc:
+        raise RuntimeError("Another controller is writing the task state.") from exc
+    temporary = path.with_suffix(".json.tmp")
+    try:
+        temporary.write_text(json.dumps(state, sort_keys=True) + "\n", encoding="utf-8")
+        temporary.replace(path)
+    finally:
+        os.close(descriptor)
+        lock.unlink(missing_ok=True)
+
+
+def load_controller_state(path: Path) -> dict:
+    if not path.is_file():
+        return {}
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def attach_stored_candidate(raw: str | None, candidate_id: str) -> str | None:
@@ -337,6 +561,21 @@ def self_consistency(samples: list[dict], multi: bool) -> dict:
     return {"samples": samples, "valid_samples": len(valid), "labels": labels, "aggregation": "majority"}
 
 
+def sequence_logprobs(token_logprobs: dict[str, list[float]]) -> dict[str, float]:
+    """Sum the token log probabilities of each legal sequence. A supplied label score is not accepted."""
+    if not token_logprobs or any(not values for values in token_logprobs.values()):
+        raise RuntimeError("Candidate scoring requires token log probabilities for each legal sequence.")
+    return {label: float(sum(values)) for label, values in token_logprobs.items()}
+
+
+def require_legal_scores(scores: dict[str, float], legal_labels: list[str], multi: bool = False) -> dict:
+    """Every legal candidate needs its own score. A prechosen label is not a score."""
+    missing = [label for label in legal_labels if label not in scores]
+    if missing or not scores:
+        raise RuntimeError("Candidate scoring is missing a score for a legal output.")
+    return score_candidates({label: scores[label] for label in legal_labels}, multi)
+
+
 def score_candidates(scores: dict[str, float], multi: bool) -> dict:
     if not scores:
         raise ValueError("Candidate scoring needs a score for every legal output.")
@@ -361,13 +600,17 @@ def generation_requests(rows: list[dict]) -> list[dict]:
         prompt = row.get("prompt")
         if not prompt or prompt == row.get("candidate_id"):
             raise ValueError(f"{row.get('candidate_id')} has no model input.")
-        requests.append({
+        request = {
             "request_id": row["request_id"],
             "candidate_id": row["candidate_id"],
             "prompt": prompt,
             "model": row["model"],
             "decoding": row.get("decoding", "greedy"),
-        })
+        }
+        for key in ("schema_json", "source_text", "legal_labels", "multi", "spans"):
+            if key in row:
+                request[key] = row[key]
+        requests.append(request)
     return requests
 
 

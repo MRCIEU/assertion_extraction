@@ -263,6 +263,21 @@ def test_torch_fixture_is_not_collected_without_torch(tmp_path: Path):
     assert selected["best"]["development_micro_f1"] == 0.9
     assert selected["best"]["step"] == 1
     assert (tmp_path / "selection" / "best" / "adapter_checkpoint.pt").is_file()
+    assert (tmp_path / "selection" / "best_adapter" / "adapter_config.json").is_file()
+    saved_selection = torch.load(tmp_path / "selection" / "adapter_checkpoint.pt", map_location="cpu", weights_only=False)
+    restored = FixtureCausalModel()
+    resumed = fit(restored, batches, configuration=configuration, steps=2, total_steps=2, resume=saved_selection, fresh=restored, score_fn=lambda _model: 0.0)
+    assert resumed["best"]["development_micro_f1"] == 0.9
+    assert resumed["steps"] == 2
+    from schema_study.production_encoder import TinyEncoder
+
+    encoder = TinyEncoder(8, 4)
+    tokens = torch.tensor([[1, 2, 3, 0]])
+    masked = encoder(tokens, torch.tensor([[1, 1, 1, 0]]))
+    unmasked = encoder(tokens, torch.ones(1, 4))
+    assert not torch.allclose(masked, unmasked)
+    verifier = execute_task({"executor": "schema_study.measurement_cpu:adapt_verifier", "family": "verifier_adaptation", "task_id": "verifier"}, tmp_path / "verifier", gpu_permitted=False)
+    assert verifier["started"] is False and verifier["completed"] is False
     partial = fit(
         FixtureCausalModel(), batches, configuration=configuration, steps=1, total_steps=2,
         fingerprints={"input": "population-a"}, output_dir=tmp_path / "finger",
@@ -405,8 +420,14 @@ def test_population_horizon_and_scheduler_are_distinct():
     aggregated = self_consistency([{"request_id": "r", "multi": False}], {}, backend=_sample)
     assert calls == [0, 1, 2, 3, 4]
     assert aggregated["executed"] is True
-    scored = candidate_scores([{"request_id": "r", "multi": False}], {}, backend=lambda _request: {"scores": {"A": 0.2, "B": 0.8}})
-    assert scored["executed"] is True
+    scored = candidate_scores(
+        [{"request_id": "r", "multi": False, "legal_labels": ["A", "B"]}],
+        {},
+        backend=lambda _request: {"token_logprobs": {"A": [-0.4, -0.2], "B": [-0.1]}},
+    )
+    assert scored["executed"] is True and scored["ledger"]["r"] == "valid"
+    with pytest.raises(RuntimeError, match="token log"):
+        candidate_scores([{"request_id": "r", "legal_labels": ["A", "B"]}], {}, backend=lambda _request: {"scores": {"A": 1.0}})
     evidence = evidence_generate([{"request_id": "r", "source_text": "No span here."}], {}, backend=lambda _request: {"raw": '{"labels": ["A"]}', "labels": ["A"], "spans": []})
     assert evidence["executed"] is True
     command = sbatch_argv({"family": "principal_training", "task_id": "t", "resources": {"gpus": 1}, "walltime": "04:00:00"}, "scripts/slurm/matched_task.sbatch")
@@ -425,3 +446,114 @@ def test_population_horizon_and_scheduler_are_distinct():
     assert curriculum_tasks[0]["configuration"]["data_schedule"] == "single_matched_curriculum_pass"
     assert context_sources("bc8") == ("bc8", "biored")
     assert context_sources("drugprot") == ("drugprot",)
+
+
+def _rank_worker(rank: int, world: int, path: str, identifiers: list[str]) -> None:
+    from schema_study.production_runtime import rank_partitions, resume_rank_examples
+
+    partition = rank_partitions(identifiers, world=world, micro_batch=1, seed=13, epoch=1, shuffle=True)
+    assigned = partition["ranks"][rank]
+    Path(path).write_text(json.dumps({"assigned": assigned, "resumed": resume_rank_examples(assigned, 3), "dropped": partition["dropped"]}), encoding="utf-8")
+
+
+def test_device_partition_selection_and_controller(tmp_path: Path):
+    from schema_study.production_dispatch import _run_generation
+    from schema_study.production_runtime import (
+        controller_decisions,
+        load_controller_state,
+        positive_micro_f1,
+        rank_partitions,
+        record_submission,
+        require_production_device,
+        resume_rank_examples,
+        save_controller_state,
+        select_population,
+    )
+
+    with pytest.raises(RuntimeError, match="CPU"):
+        require_production_device("single_gpu", False, 1)
+    assert require_production_device("fsdp", True, 2)["moved_unsharded_before_wrap"] is False
+    assert require_production_device("ddp", True, 2)["replicates_full_parameters"] is True
+    identifiers = [f"example-{index}" for index in range(36)]
+    curriculum = rank_partitions(identifiers, world=2, micro_batch=1, seed=13, epoch=0, shuffle=False)
+    assert curriculum["kept"] == identifiers[:32]
+    assert set(curriculum["ranks"][0]).isdisjoint(curriculum["ranks"][1])
+    assert len(curriculum["ranks"][0]) + len(curriculum["ranks"][1]) == 32
+    rebuilt = []
+    for start in range(0, 32, 16):
+        window = curriculum["kept"][start:start + 16]
+        assert len(window) == len(set(window)) == 16
+        rebuilt.extend(window)
+    assert rebuilt == identifiers[:32]
+    continued = resume_rank_examples(curriculum["ranks"][0], 4)
+    assert continued == curriculum["ranks"][0][4:]
+    assert positive_micro_f1([{"gold": ["NO_RELATION", "Association"], "predicted": ["NO_RELATION"], "status": "valid"}])["f1"] == 0.0
+    rows = [
+        {"candidate_id": "train", "entity": "E2", "predicate": "P3", "split": "train", "document_id": "d", "assistant": {"labels": []}},
+        {"candidate_id": "dev", "entity": "E2", "predicate": "P3", "split": "dev", "document_id": "d", "assistant": {"labels": ["Association"]}},
+        {"candidate_id": "test", "entity": "E2", "predicate": "P3", "split": "test", "document_id": "d", "assistant": {"labels": ["Association"]}},
+    ]
+    for index in range(16):
+        rows.append({"candidate_id": f"more-{index}", "entity": "E2", "predicate": "P3", "split": "train", "document_id": f"doc{index}", "assistant": {"labels": []}})
+    selected = select_population({"family": "data_efficiency", "entity": "E2", "predicate": "P3", "fraction": 100, "seed": 13}, rows)
+    assert [row["candidate_id"] for row in selected["development"]] == ["dev"]
+    assert [row["candidate_id"] for row in selected["final_evaluation"]] == ["test"]
+    tasks = [
+        {"task_id": "rep", "family": "principal_training", "model": "qwen8b", "resources": {"gpus": 1}, "depends_on": ["approval"], "statuses": []},
+        {"task_id": "later", "family": "principal_training", "model": "qwen8b", "resources": {"gpus": 1}, "depends_on": ["approval"], "statuses": []},
+        {"task_id": "score", "family": "analysis", "depends_on": ["rep"], "statuses": []},
+    ]
+    first = controller_decisions(tasks, {}, 0, 0, {"approval"})
+    assert [row["action"] for row in first] == ["submit", "skip", "skip"]
+    state = record_submission({}, "rep", "100", "abc")
+    with pytest.raises(RuntimeError, match="already"):
+        record_submission(state, "rep", "101", "abc")
+    state["rep"]["state"] = "valid_continuation_required"
+    waiting = controller_decisions(tasks, state, 0, 0, {"approval"})
+    assert waiting[2]["action"] == "skip"
+    state["rep"]["state"] = "completed"
+    released = controller_decisions(tasks, state, 0, 0, {"approval"})
+    assert released[1]["action"] == "submit"
+    assert released[2]["action"] == "submit"
+    deferred = controller_decisions(tasks, {"rep": {"state": "completed"}}, 512, 0, {"approval"})
+    assert deferred[1]["action"] == "defer"
+    save_controller_state(tmp_path / "state.json", state)
+    assert load_controller_state(tmp_path / "state.json")["rep"]["job_id"] == "100"
+    generated = _run_generation({
+        "family": "constrained",
+        "requests": [{"request_id": "r", "candidate_id": "c", "prompt": "Read the passage.", "model": "qwen8b"}],
+        "backend": lambda _request: {"raw": '{"labels": []}', "labels": []},
+    }, tmp_path / "generate")
+    assert generated["completed"] is True
+    assert "Read the passage." in Path(generated["shards"][0]).read_text(encoding="utf-8")
+    missing = _run_generation({"family": "zero_shot", "requests": []}, tmp_path / "empty")
+    assert missing["completed"] is False
+    from schema_study.production_dispatch import execute_task
+
+    waiting = execute_task({"executor": "schema_study.analysis_plan:analyse_records", "family": "analysis", "task_id": "analysis", "documents": []}, tmp_path / "analysis", gpu_permitted=False)
+    assert waiting["completed"] is False and waiting["status"] == "waiting_for_predictions"
+    import multiprocessing
+
+    identifiers = [f"rank-example-{index}" for index in range(40)]
+    context = multiprocessing.get_context("fork")
+    processes = []
+    for rank in range(2):
+        process = context.Process(target=_rank_worker, args=(rank, 2, str(tmp_path / f"rank-{rank}.json"), identifiers))
+        process.start()
+        processes.append(process)
+    for process in processes:
+        process.join()
+        assert process.exitcode == 0
+    left = json.loads((tmp_path / "rank-0.json").read_text(encoding="utf-8"))
+    right = json.loads((tmp_path / "rank-1.json").read_text(encoding="utf-8"))
+    assert set(left["assigned"]).isdisjoint(right["assigned"])
+    assert len(left["assigned"]) + len(right["assigned"]) == 32
+    assert left["resumed"] == left["assigned"][3:]
+    from schema_study.production_runtime import record_failure
+
+    failed = record_failure({}, "later", "filesystem", group="principal_training|qwen8b|1")
+    assert failed["later"]["state"] == "retryable_failure"
+    closed = record_failure(failed, "later", "filesystem", systematic=True, group="principal_training|qwen8b|1")
+    tasks.append({"task_id": "sibling", "family": "principal_training", "model": "qwen8b", "resources": {"gpus": 1}, "depends_on": ["approval"], "statuses": [], "representative": False, "representative_group": "principal_training|qwen8b|1"})
+    blocked = {row["task_id"]: row for row in controller_decisions(tasks, closed, 0, 0, {"approval"})}
+    assert blocked["sibling"]["reason"] == "systematic_group_failure"

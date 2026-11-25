@@ -19,6 +19,8 @@ if [[ -n "${SLURM_JOB_GPUS:-}" || -n "${SLURM_GPUS:-}" || -n "${SLURM_GPUS_ON_NO
   exit 2
 fi
 
+source /home/b5ac/freddieyu.b5ac/miniforge3/etc/profile.d/conda.sh
+conda activate hf-hpc
 export PATH=/home/b5ac/freddieyu.b5ac/miniforge3/envs/hf-hpc/bin:/usr/bin:/bin
 export PYTHONDONTWRITEBYTECODE=1
 export PYTHONNOUSERSITE=1

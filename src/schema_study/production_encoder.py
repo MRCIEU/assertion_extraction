@@ -24,7 +24,11 @@ class TinyEncoder(nn.Module):
         self.embed = nn.Embedding(vocab, hidden)
 
     def forward(self, input_ids: torch.Tensor, attention_mask: torch.Tensor | None = None) -> torch.Tensor:
-        return self.embed(input_ids).mean(dim=1)
+        hidden = self.embed(input_ids)
+        if attention_mask is None:
+            return hidden.mean(dim=1)
+        weights = attention_mask.to(dtype=hidden.dtype).unsqueeze(-1)
+        return (hidden * weights).sum(dim=1) / weights.sum(dim=1).clamp_min(1)
 
 
 class SchemaHierarchicalModel(nn.Module):
@@ -157,10 +161,15 @@ def train_hierarchical(model: SchemaHierarchicalModel | None = None, steps: int 
     horizon = int(total_steps or steps)
     produced = _production_batches(model, schema, steps) if batches is None else batches
     step = 0
-    for token_ids, targets in produced:
+    for item in produced:
         if step >= steps:
             break
-        outputs = model(token_ids)
+        if isinstance(item, dict):
+            token_ids, targets = item["input_ids"], item["targets"]
+            outputs = model(token_ids, item.get("attention_mask"))
+        else:
+            token_ids, targets = item
+            outputs = model(token_ids)
         objective, detail = hierarchical_objective(outputs, targets, model.corpus, schema, consistency)
         optimizer.zero_grad(set_to_none=True)
         objective.backward()

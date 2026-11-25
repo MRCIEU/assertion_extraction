@@ -83,9 +83,8 @@ def apply_requests(requests: list[dict], completed: dict[str, str], generate) ->
         except RuntimeError as exc:
             if "retryable" in str(exc):
                 updated[request["request_id"]] = "retryable"
-            else:
-                updated[request["request_id"]] = "invalid"
-            continue
+                continue
+            raise
         updated[request["request_id"]] = classify_output(result.get("raw"), result.get("labels"), failed=bool(result.get("failed")))
     return updated
 
@@ -219,14 +218,19 @@ def qualified_generate(requests, completed=None, backend=None, ledger=None) -> d
 
 
 def candidate_scores(requests, completed=None, backend=None, ledger=None) -> dict:
-    from schema_study.production_runtime import score_candidates
-
     if backend is None:
         return {"family": "candidate_scoring", "submitted": False, "reason": "formal_gpu_execution_is_not_authorised"}
 
     def generate(request):
+        from schema_study.production_runtime import require_legal_scores, sequence_logprobs
+
         result = backend(request)
-        scored = score_candidates(result.get("scores") or {}, bool(request.get("multi")))
-        return {"raw": json.dumps(scored["scores"]), "labels": scored["labels"], "scores": scored}
+        legal = request.get("legal_labels") or []
+        if not legal:
+            raise RuntimeError("Candidate scoring has no legal output schema.")
+        if "token_logprobs" not in result:
+            raise RuntimeError("Candidate scoring requires token log probabilities for each legal sequence.")
+        scored = require_legal_scores(sequence_logprobs(result["token_logprobs"]), legal, bool(request.get("multi")))
+        return {"raw": json.dumps({"labels": scored["labels"]}), "labels": scored["labels"], "scores": scored}
 
     return _run("candidate_scoring", requests, completed or {}, generate, ledger)

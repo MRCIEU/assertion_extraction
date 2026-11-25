@@ -200,13 +200,42 @@ def matched_main(arguments: list[str]) -> int:
     if not gpu_authorised(get_paths().study, get_paths().code_root):
         print("formal_gpu_submission=blocked", flush=True)
         return 3
-    commands = submission_commands()
-    for command in commands:
-        subprocess.run(command, check=True)
-    requeue = controller_requeue(os.environ.get("SLURM_JOB_ID", "0"), True, finished=not commands)
+    from schema_study.production_plan import executing_revision, execution_manifest
+    from schema_study.production_runtime import (
+        controller_decisions,
+        load_controller_state,
+        record_submission,
+        save_controller_state,
+        sbatch_argv,
+    )
+
+    tasks = [task for task in execution_manifest() if "blocked" not in task["statuses"]]
+    state_path = get_paths().study / "runs" / "formal" / "formal_matched_e0_e7" / "controller_state.json"
+    state = load_controller_state(state_path)
+    queue = subprocess.run(["squeue", "-u", os.environ.get("USER", ""), "-h", "-o", "%T"], capture_output=True, text=True)
+    if queue.returncode != 0:
+        print("formal_gpu_submission=queue_unreadable", flush=True)
+        return 3
+    tokens = queue.stdout.split()
+    running = sum(item == "RUNNING" for item in tokens)
+    pending = sum(item == "PENDING" for item in tokens)
+    decisions = controller_decisions(tasks, state, running, pending, {"inputs_prepared", "model_assets", "approval", "historical_drugprot_checkpoint"})
+    by_id = {task["task_id"]: task for task in tasks}
+    revision = executing_revision(get_paths().code_root) or ""
+    submitted = 0
+    for decision in decisions:
+        if decision["action"] != "submit":
+            continue
+        command = sbatch_argv(by_id[decision["task_id"]], "scripts/slurm/matched_task.sbatch")
+        command.insert(1, "--parsable")
+        result = subprocess.run(command, check=True, capture_output=True, text=True)
+        record_submission(state, decision["task_id"], result.stdout.strip().split(";")[0], revision)
+        submitted += 1
+    save_controller_state(state_path, state)
+    requeue = controller_requeue(os.environ.get("SLURM_JOB_ID", "0"), True, finished=submitted == 0 and not any(item["action"] == "defer" for item in decisions))
     if requeue is not None:
         subprocess.run(requeue, check=True)
-    print(json.dumps({"submitted": len(commands)}), flush=True)
+    print(json.dumps({"submitted": submitted}), flush=True)
     return 0
 
 

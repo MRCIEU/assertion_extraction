@@ -1,6 +1,7 @@
 #!/bin/bash
-# One bounded controller step. It requeues itself only when the approval file
-# matches and work remains. It does not poll from a login node.
+# One bounded controller step. The next step is submitted with sbatch --parsable
+# and a job dependency, which Isambard documents for work beyond one walltime.
+# It does not poll from a login node.
 #SBATCH --job-name=p1-controller
 #SBATCH --partition=workq
 #SBATCH --account=brics.b5ac
@@ -15,6 +16,8 @@
 set -euo pipefail
 set +x
 
+source /home/b5ac/freddieyu.b5ac/miniforge3/etc/profile.d/conda.sh
+conda activate hf-hpc
 export PATH=/home/b5ac/freddieyu.b5ac/miniforge3/envs/hf-hpc/bin:/usr/bin:/bin
 export PYTHONDONTWRITEBYTECODE=1
 export PYTHONNOUSERSITE=1

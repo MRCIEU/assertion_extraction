@@ -209,26 +209,54 @@ def _rng_state() -> dict:
     state = {"python": random.getstate(), "numpy": np.random.get_state(), "torch": torch.get_rng_state()}
     if torch.cuda.is_available():
         state["cuda"] = torch.cuda.get_rng_state_all()
+    if torch.distributed.is_available() and torch.distributed.is_initialized():
+        import torch.distributed as dist
+
+        local = {"rank": dist.get_rank(), "python": state["python"], "numpy": state["numpy"], "torch": state["torch"]}
+        if "cuda" in state:
+            local["cuda"] = state["cuda"]
+        gathered = [None] * dist.get_world_size()
+        dist.all_gather_object(gathered, local)
+        state["distributed"] = gathered
     return state
 
 
 def _restore_rng(state: dict) -> None:
-    random.setstate(state["python"])
-    np.random.set_state(state["numpy"])
-    torch.set_rng_state(state["torch"])
-    if "cuda" in state and torch.cuda.is_available():
-        torch.cuda.set_rng_state_all(state["cuda"])
+    chosen = state
+    if state.get("distributed") and torch.distributed.is_available() and torch.distributed.is_initialized():
+        rank = torch.distributed.get_rank()
+        chosen = next(item for item in state["distributed"] if item["rank"] == rank)
+    random.setstate(chosen["python"])
+    np.random.set_state(chosen["numpy"])
+    torch.set_rng_state(chosen["torch"])
+    if "cuda" in chosen and torch.cuda.is_available():
+        torch.cuda.set_rng_state_all(chosen["cuda"])
 
 
 def _adapter_state(model: nn.Module) -> dict:
-    return {name: value.detach().cpu().clone() for name, value in model.state_dict().items() if "lora_" in name}
+    """Collect adapter tensors. FSDP gathers a full state dict on rank 0 before the file is written."""
+    if type(model).__name__ == "FullyShardedDataParallel":
+        from torch.distributed.fsdp import FullStateDictConfig, FullyShardedDataParallel, StateDictType
+
+        config = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
+        with FullyShardedDataParallel.state_dict_type(model, StateDictType.FULL_STATE_DICT, config):
+            state = model.state_dict()
+    else:
+        module = model.module if hasattr(model, "module") else model
+        state = module.state_dict()
+    return {name: value.detach().cpu().clone() for name, value in state.items() if "lora_" in name}
 
 
 def save_checkpoint(directory: Path, package: dict) -> Path:
-    """Publish one checkpoint. A second writer for the same directory is rejected."""
+    """Publish one checkpoint after every rank has supplied its state. A second writer is rejected."""
     import os
 
+    distributed = torch.distributed.is_available() and torch.distributed.is_initialized()
+    if distributed:
+        torch.distributed.barrier()
     if int(os.environ.get("RANK", "0")) != 0:
+        if distributed:
+            torch.distributed.barrier()
         return directory / "adapter_checkpoint.pt"
     directory.mkdir(parents=True, exist_ok=True)
     lock = directory / ".writer.lock"
@@ -249,16 +277,61 @@ def save_checkpoint(directory: Path, package: dict) -> Path:
         lock.unlink(missing_ok=True)
         if temporary.exists():
             temporary.unlink()
+    if distributed:
+        torch.distributed.barrier()
     return destination
 
 
+def _is_fsdp(model: nn.Module) -> bool:
+    return type(model).__name__ == "FullyShardedDataParallel"
+
+
+def _optimizer_state(model: nn.Module, optimizer) -> dict:
+    """Collect a full optimiser state. FSDP uses the process group rather than a local shard file."""
+    if _is_fsdp(model):
+        from torch.distributed.fsdp import FullOptimStateDictConfig, FullStateDictConfig, FullyShardedDataParallel, StateDictType
+
+        with FullyShardedDataParallel.state_dict_type(
+            model,
+            StateDictType.FULL_STATE_DICT,
+            FullStateDictConfig(offload_to_cpu=True, rank0_only=True),
+            FullOptimStateDictConfig(offload_to_cpu=True, rank0_only=True),
+        ):
+            return FullyShardedDataParallel.optim_state_dict(model, optimizer)
+    return optimizer.state_dict()
+
+
+def _load_optimizer_state(model: nn.Module, optimizer, state: dict) -> None:
+    if _is_fsdp(model):
+        from torch.distributed.fsdp import FullOptimStateDictConfig, FullStateDictConfig, FullyShardedDataParallel, StateDictType
+
+        with FullyShardedDataParallel.state_dict_type(
+            model,
+            StateDictType.FULL_STATE_DICT,
+            FullStateDictConfig(offload_to_cpu=True, rank0_only=True),
+            FullOptimStateDictConfig(offload_to_cpu=True, rank0_only=True),
+        ):
+            prepared = FullyShardedDataParallel.optim_state_dict_to_load(model, optimizer, state)
+        optimizer.load_state_dict(prepared)
+        return
+    optimizer.load_state_dict(state)
+
+
 def _package(model, optimizer, step: int, position: int, configuration: dict, fingerprints: dict, best: dict | None) -> dict:
-    if any("lora_" not in key for key in _adapter_state(model)):
+    import os
+
+    adapter = _adapter_state(model)
+    if any("lora_" not in key for key in adapter):
         raise RuntimeError("A frozen base weight entered the adapter checkpoint.")
+    recorded = dict(fingerprints or {})
+    if configuration.get("base_revision"):
+        recorded["base_revision"] = configuration["base_revision"]
+    if configuration.get("tokenizer_revision"):
+        recorded["tokenizer_revision"] = configuration["tokenizer_revision"]
     return {
-        "adapter": _adapter_state(model),
+        "adapter": adapter,
         "configuration": configuration,
-        "optimizer": optimizer.state_dict(),
+        "optimizer": _optimizer_state(model, optimizer),
         "scheduler": {
             "name": "linear_decay_after_warmup",
             "step": step,
@@ -268,9 +341,11 @@ def _package(model, optimizer, step: int, position: int, configuration: dict, fi
         },
         "step": step,
         "position": position,
+        "rank_position": {"rank": int(os.environ.get("RANK", "0")), "position": position},
+        "data_partition": configuration.get("data_partition"),
         "epoch": int(configuration.get("epoch", 0)),
         "rng": _rng_state(),
-        "fingerprints": fingerprints,
+        "fingerprints": recorded,
         "best": best,
         "base_revision": configuration.get("base_revision"),
         "tokenizer_revision": configuration.get("tokenizer_revision"),
@@ -278,7 +353,7 @@ def _package(model, optimizer, step: int, position: int, configuration: dict, fi
     }
 
 
-def restore_into_new_model(saved: dict, model: nn.Module, optimizer, expected: dict | None = None) -> tuple[int, int]:
+def restore_into_new_model(saved: dict, model: nn.Module, optimizer, expected: dict | None = None, load_optimizer: bool = True) -> tuple[int, int]:
     """Load an adapter file into a newly constructed model. Missing adapter tensors are not filled with a new initialisation."""
     adapter = saved["adapter"]
     if any("lora_" not in name for name in adapter):
@@ -296,7 +371,8 @@ def restore_into_new_model(saved: dict, model: nn.Module, optimizer, expected: d
     current = model.state_dict()
     current.update({name: adapter[name] for name in required})
     model.load_state_dict(current)
-    optimizer.load_state_dict(saved["optimizer"])
+    if load_optimizer:
+        _load_optimizer_state(model, optimizer, saved["optimizer"])
     _restore_rng(saved["rng"])
     return int(saved["step"]), int(saved["position"])
 
@@ -328,6 +404,55 @@ class BatchCursor:
             self.next()
 
 
+def _apply_device_policy(model: nn.Module, configuration: dict) -> tuple[torch.device, dict]:
+    """Place a production model on CUDA. FSDP shards from CPU memory and does not gather the full model first."""
+    import os
+
+    from schema_study.production_runtime import require_production_device
+
+    policy = configuration.get("device_policy", "cpu_fixture")
+    initialised = world_size() if torch.distributed.is_available() and torch.distributed.is_initialized() else 1
+    record = require_production_device(policy, torch.cuda.is_available(), initialised if policy in {"ddp", "fsdp"} else 1)
+    if policy == "cpu_fixture":
+        return torch.device("cpu"), {**record, "model": model}
+    local = int(os.environ.get("LOCAL_RANK", "0"))
+    device = torch.device("cuda", local)
+    if policy == "single_gpu":
+        model = model.to(device)
+    elif policy == "ddp":
+        model = model.to(device)
+        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[local])
+    elif policy == "fsdp":
+        from torch.distributed.fsdp import FullyShardedDataParallel, MixedPrecision, ShardingStrategy
+
+        precision = MixedPrecision(param_dtype=torch.bfloat16, reduce_dtype=torch.bfloat16, buffer_dtype=torch.bfloat16)
+        model = FullyShardedDataParallel(
+            model, device_id=device, mixed_precision=precision, sharding_strategy=ShardingStrategy.FULL_SHARD,
+        )
+    record["requested_gpus"] = int(configuration.get("requested_gpus", initialised))
+    record["initialised_world"] = initialised if policy in {"ddp", "fsdp"} else 1
+    return device, {**record, "model": model}
+
+
+def export_peft_adapter(directory: Path, adapter: dict, configuration: dict) -> Path:
+    """Write the selected adapter in the PEFT directory layout, separate from the resumable checkpoint."""
+    directory.mkdir(parents=True, exist_ok=True)
+    config = {
+        "peft_type": "LORA",
+        "r": configuration.get("rank"),
+        "lora_alpha": configuration.get("alpha"),
+        "lora_dropout": configuration.get("dropout"),
+        "target_modules": configuration.get("target_modules"),
+        "bias": "none",
+        "base_model_name_or_path": configuration.get("base_revision"),
+    }
+    (directory / "adapter_config.json").write_text(json.dumps(config, sort_keys=True) + "\n", encoding="utf-8")
+    torch.save({name: tensor for name, tensor in adapter.items() if "lora_" in name}, directory / "adapter_model.bin")
+    if not (directory / "adapter_config.json").is_file() or (directory / "adapter_model.bin").stat().st_size <= 0:
+        raise RuntimeError("The inference adapter export was not published.")
+    return directory
+
+
 def fit(
     model: nn.Module,
     batches: list[dict],
@@ -349,38 +474,41 @@ def fit(
     micro = int(configuration.get("micro_batch_size", 1))
     effective = int(configuration["effective_batch_size"])
     accumulate = accumulation_steps(micro, int(configuration.get("world_size", world_size())), effective)
-    if resume is None:
-        attach_lora(model, configuration)
-    trainable = [parameter for parameter in model.parameters() if parameter.requires_grad]
-    optimizer = torch.optim.AdamW(trainable, lr=float(configuration["learning_rate"]))
     step = 0
     position = 0
     best = None
-    if resume is not None:
+    if configuration.get("require_fingerprints"):
+        for key in ("input", "configuration"):
+            if not (fingerprints or {}).get(key):
+                raise RuntimeError(f"The {key} fingerprint is missing. A null fingerprint is not compatibility.")
+    if resume is None:
+        attach_lora(model, configuration)
+    else:
         if fresh is None:
             raise ValueError("Continuation must restore a newly constructed model.")
         model = fresh
         if not any(parameter.requires_grad and "lora_" in name for name, parameter in model.named_parameters()):
             attach_lora(model, configuration)
-        trainable = [parameter for parameter in model.parameters() if parameter.requires_grad]
-        optimizer = torch.optim.AdamW(trainable, lr=float(configuration["learning_rate"]))
-        step, position = restore_into_new_model(resume, model, optimizer, expected={**(fingerprints or {}), "total_steps": total})
+        step, position = restore_into_new_model(
+            resume, model, torch.optim.AdamW([parameter for parameter in model.parameters() if parameter.requires_grad], lr=float(configuration["learning_rate"])),
+            expected={**(fingerprints or {}), "total_steps": total}, load_optimizer=False,
+        )
+        saved_best = resume.get("best") or {}
+        if saved_best.get("development_micro_f1") is not None:
+            best = {
+                "step": saved_best.get("step"),
+                "development_micro_f1": saved_best.get("development_micro_f1"),
+                "adapter": resume.get("best_adapter"),
+            }
+    device, placement_record = _apply_device_policy(model, configuration)
+    model = placement_record["model"]
+    trainable = [parameter for parameter in model.parameters() if parameter.requires_grad]
+    optimizer = torch.optim.AdamW(trainable, lr=float(configuration["learning_rate"]))
+    if resume is not None:
+        _load_optimizer_state(model, optimizer, resume["optimizer"])
     losses = []
     learning_rates = []
     consumed = []
-    if int(configuration.get("world_size", 1)) > 1:
-        import os
-
-        if not torch.cuda.is_available() or not (torch.distributed.is_available() and torch.distributed.is_initialized()):
-            raise RuntimeError("Distributed training requires an initialised CUDA process group. A requested GPU count is not a world size.")
-        local = int(os.environ.get("LOCAL_RANK", "0"))
-        model = model.to(torch.device("cuda", local))
-        if configuration.get("placement") == "fsdp_full_shard":
-            from torch.distributed.fsdp import FullyShardedDataParallel, ShardingStrategy
-
-            model = FullyShardedDataParallel(model, sharding_strategy=ShardingStrategy.FULL_SHARD)
-        else:
-            model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[local])
     cursor = BatchCursor(batches)
     cursor.skip(position)
     stop = {"requested": False}
@@ -402,10 +530,7 @@ def fit(
             accumulated = 0.0
             for _offset in range(accumulate):
                 batch = cursor.next()
-                if torch.cuda.is_available() and int(configuration.get("world_size", 1)) > 1:
-                    import os
-
-                    device = torch.device("cuda", int(os.environ.get("LOCAL_RANK", "0")))
+                if device.type == "cuda":
                     batch = {key: value.to(device) if torch.is_tensor(value) else value for key, value in batch.items()}
                 position = cursor.index
                 consumed.append([int(value) for value in batch["input_ids"].reshape(-1)[:8].tolist()])
@@ -436,10 +561,15 @@ def fit(
     public_best = None if not best else {key: value for key, value in best.items() if key != "adapter"}
     package = _package(model, optimizer, step, position, configuration, fingerprints or {}, public_best)
     package["status"] = status
+    package["device"] = str(device)
+    package["placement"] = {key: value for key, value in placement_record.items() if key != "model"}
+    if best and best.get("adapter"):
+        package["best_adapter"] = best["adapter"]
     if output_dir is not None:
         save_checkpoint(output_dir, package)
         if best and best.get("adapter"):
             save_checkpoint(output_dir / "best", {**package, "adapter": best["adapter"], "role": "best"})
+            export_peft_adapter(output_dir / "best_adapter", best["adapter"], configuration)
     return {
         "losses": losses,
         "learning_rates": learning_rates,

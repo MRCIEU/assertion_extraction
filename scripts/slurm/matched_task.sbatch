@@ -10,12 +10,14 @@
 #SBATCH --mem=64G
 #SBATCH --time=04:00:00
 #SBATCH --export=ALL
+#SBATCH --signal=B:USR1@180
 
 set -euo pipefail
 set +x
 
 source /home/b5ac/freddieyu.b5ac/miniforge3/etc/profile.d/conda.sh
 conda activate hf-hpc
+trap 'pkill -USR1 -P $$ || true; for pid in $(pgrep -P $$ || true); do pkill -USR1 -P "$pid" || true; done' USR1
 export PYTHONDONTWRITEBYTECODE=1
 export PYTHONPATH=/home/b5ac/freddieyu.b5ac/project_1/src
 export SCHEMA_STUDY_STORAGE_ROOT=/home/b5ac/freddieyu.b5ac/projects/project_1

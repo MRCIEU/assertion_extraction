@@ -54,7 +54,8 @@ def execute_task(task: dict, workdir: Path, *, gpu_permitted: bool) -> dict:
         completed.write_text(json.dumps({"rows_written": True, "checkpoint": "adapter", "empirical_qwen_result": False}) + "\n", encoding="utf-8")
         result["completed"] = bool(result["weights_match"] and result["losses_match"] and result["consumed_match"])
         return result
-    if not gpu_permitted:
+    cpu_executors = {"schema_study.analysis_plan:analyse_records", "schema_study.measurement_cpu:adapt_verifier"}
+    if not gpu_permitted and task.get("executor") not in cpu_executors:
         raise PermissionError("formal_gpu_execution_is_not_authorised")
     if not task.get("executor"):
         raise RuntimeError("The task has no production executor.")
@@ -111,18 +112,29 @@ def _invoke_production(task: dict, workdir: Path) -> dict:
         configuration["micro_batch_size"] = 1
         configuration["world_size"] = process["world"]
         configuration["requested_gpus"] = requested
-        configuration["placement"] = placement(task["model"], requested)["method"]
+        method = placement(task["model"], requested)["method"]
+        configuration["placement"] = method
+        configuration["device_policy"] = {"single_process": "single_gpu", "distributed_data_parallel": "ddp", "fsdp_full_shard": "fsdp"}[method]
+        configuration["require_fingerprints"] = True
         configuration["eval_interval"] = horizon["updates_per_epoch"]
-        evaluation = population.get("evaluation") or _development_from_candidates(task)
+        development = population.get("development") or _development_from_candidates(task)
+        if any(row.get("split") == "test" for row in development):
+            raise RuntimeError("A test row entered development selection.")
+        resume, fresh = _resume_lora(workdir, model, configuration, {
+            "input": (task.get("input") or {}).get("fingerprint"),
+            "configuration": json.dumps(task.get("configuration"), sort_keys=True),
+        })
         result = fit(
             model,
-            _supervised_batches(task, tokenizer),
+            _supervised_batches(task, tokenizer, configuration),
             configuration=configuration,
             steps=horizon["total_updates"],
             total_steps=horizon["total_updates"],
             output_dir=workdir,
             fingerprints={"input": (task.get("input") or {}).get("fingerprint"), "configuration": json.dumps(task.get("configuration"), sort_keys=True)},
-            score_fn=_lora_development_score(task, evaluation, tokenizer),
+            score_fn=_lora_development_score(task, development, tokenizer, workdir / "development_predictions.jsonl"),
+            resume=resume,
+            fresh=fresh,
         )
         return {"completed": result["completed"], "status": result["status"], "total_updates": horizon["total_updates"], "empirical_qwen_result": False}
     if executor == "schema_study.production_encoder:train_hierarchical":
@@ -150,23 +162,23 @@ def _invoke_production(task: dict, workdir: Path) -> dict:
             batches=batches,
             score_fn=_hierarchical_development_score(task, evaluation, schema, corpus),
         )
-    if executor.startswith("schema_study.production_inference:"):
-        from schema_study.production_runtime import constrained_sampling, generation_requests
-
-        requests = generation_requests(task.get("requests") or [])
-        if task["family"] == "constrained":
-            return {"completed": False, "status": "ready", "sampling": constrained_sampling({"type": "object"}), "requests": len(requests)}
-        return {"completed": False, "status": "ready", "requests": len(requests), "reason": "Generation runs only inside an authorised GPU job with these prepared requests."}
-    if executor == "schema_study.formal_generate:generate":
-        return {"completed": False, "status": "ready", "reason": "The generation shard must contain complete prompts. Supervised identifiers are not prompts."}
+    if executor.startswith("schema_study.production_inference:") or executor == "schema_study.formal_generate:generate":
+        return _run_generation(task, workdir)
     if executor == "schema_study.analysis_plan:analyse_records":
         from schema_study.analysis_plan import analyse_records
 
         documents = task.get("documents") or []
-        if not documents:
-            return {"completed": False, "status": "waiting_for_predictions"}
+        if not documents or any(not row.get("document_id") for row in documents):
+            return {"completed": False, "status": "waiting_for_predictions", "reason": "Analysis needs prediction records. An empty document field is not a result."}
         report = analyse_records(documents)
-        return {"completed": True, "status": "training_completed", "report": report}
+        return {"completed": True, "status": "analysis_completed", "report": report}
+    if executor == "schema_study.measurement_cpu:adapt_verifier":
+        from schema_study.measurement_cpu import adapt_verifier
+
+        payload = adapt_verifier()
+        payload["completed"] = False
+        payload["status"] = "not_started"
+        return payload
     module_name, function_name = executor.split(":")
     importlib.import_module(module_name)
     return {"completed": False, "status": "failed", "reason": f"{function_name} has no completed production invocation"}
@@ -229,7 +241,7 @@ def _view_entity(task: dict, row: dict) -> str:
     return entity
 
 
-def _supervised_batches(task: dict, tokenizer):
+def _supervised_batches(task: dict, tokenizer, configuration: dict | None = None):
     """Join source text to the selected population, then tokenise. An identifier is not a training string."""
     from schema_study.formal_prepare import _fill
     from schema_study.learning_conditions import HISTORICAL_PREDICATES
@@ -253,8 +265,34 @@ def _supervised_batches(task: dict, tokenizer):
     texts = _context_texts(dataset, needed)
 
     def records():
-        for _repeat in range(_epoch_repeats(task)):
-            for row in selected:
+        import os
+
+        from schema_study.production_runtime import rank_partitions
+
+        world = int(os.environ.get("WORLD_SIZE", "1"))
+        rank = int(os.environ.get("RANK", "0"))
+        shuffle = task["family"] not in {"curriculum", "schema_conditioned_lora"}
+        for epoch in range(_epoch_repeats(task)):
+            keyed = [(f"{index}:{row['candidate_id']}:{row.get('view', '')}:{row.get('epoch', '')}", row) for index, row in enumerate(selected)]
+            partition = rank_partitions([key for key, _row in keyed], world=world, micro_batch=1, seed=int(task.get("seed") or 13), epoch=epoch, shuffle=shuffle)
+            if configuration is not None:
+                configuration["data_partition"] = {
+                    "shuffle": partition["shuffle"],
+                    "epoch": partition["epoch"],
+                    "seed": partition["seed"],
+                    "dropped": partition["dropped"],
+                    "remainder_policy": partition["remainder_policy"],
+                    "same_remainder_each_epoch": not partition["shuffle"],
+                    "effective_batch": partition["effective_batch"],
+                    "accumulation": partition["accumulation"],
+                    "micro_batch": partition["micro_batch"],
+                    "world": partition["world"],
+                    "rank": rank,
+                    "rank_examples": len(partition["ranks"][rank]),
+                }
+            by_key = {key: row for key, row in keyed}
+            for key in partition["ranks"][rank]:
+                row = by_key[key]
                 entity = _view_entity(task, row)
                 predicate = row.get("predicate") or task.get("predicate")
                 historical = HISTORICAL_PREDICATES.get(predicate, predicate)
@@ -308,7 +346,67 @@ def _development_from_candidates(task: dict, schema=None, hierarchical: bool = F
     return rows
 
 
-def _lora_development_score(task: dict, evaluation: list[dict], tokenizer):
+def _run_generation(task: dict, workdir: Path) -> dict:
+    """Write rendered requests, then call the backend. A missing prompt is not a completed generation."""
+    from schema_study.production_inference import (
+        candidate_scores,
+        constrained_generate,
+        evidence_generate,
+        qualified_generate,
+        self_consistency,
+        thinking_generate,
+    )
+    from schema_study.production_runtime import generation_requests, write_shards
+
+    prepared = generation_requests(task.get("requests") or [])
+    if not prepared:
+        return {"completed": False, "status": "failed", "reason": "The generation task has no rendered model input."}
+    shards = write_shards(prepared, workdir / "shards", int(task.get("shard_size") or 32))
+    backend = task.get("backend")
+    if backend is None:
+        return {"completed": False, "status": "ready", "shards": [str(path) for path in shards], "requests": len(prepared)}
+    runners = {
+        "constrained": constrained_generate,
+        "thinking": thinking_generate,
+        "self_consistency": self_consistency,
+        "evidence": evidence_generate,
+        "qualified": qualified_generate,
+        "candidate_scoring": candidate_scores,
+    }
+    family = task["family"]
+    if family in runners:
+        result = runners[family](prepared, {}, backend)
+    else:
+        from schema_study.production_inference import apply_requests
+
+        ledger = apply_requests(prepared, {}, backend)
+        result = {"executed": True, "ledger": ledger}
+    statuses = list((result.get("ledger") or {}).values())
+    completed = bool(result.get("executed")) and statuses and all(status in {"valid", "valid_empty", "invalid"} for status in statuses)
+    return {"completed": completed, "status": "completed" if completed else "failed", "shards": [str(path) for path in shards], **result}
+
+
+def _resume_lora(workdir: Path, model, configuration: dict, fingerprints: dict):
+    """Restore a published checkpoint instead of starting the same task again."""
+    path = workdir / "adapter_checkpoint.pt"
+    if not path.is_file():
+        return None, None
+    import torch
+
+    saved = torch.load(path, map_location="cpu", weights_only=False)
+    if not fingerprints.get("input") or not saved.get("fingerprints", {}).get("input"):
+        raise RuntimeError("The input fingerprint is missing. A null fingerprint is not compatibility.")
+    if saved["fingerprints"]["input"] != fingerprints["input"]:
+        raise RuntimeError("The checkpoint input fingerprint does not match the task.")
+    if saved.get("fingerprints", {}).get("configuration") != fingerprints.get("configuration"):
+        raise RuntimeError("The checkpoint configuration fingerprint does not match the task.")
+    saved_world = int((saved.get("configuration") or {}).get("world_size", 1))
+    if saved_world != int(configuration.get("world_size", 1)):
+        raise RuntimeError("Changing the distributed world size during continuation is not compatible.")
+    return saved, model
+
+
+def _lora_development_score(task: dict, evaluation: list[dict], tokenizer, prediction_path: Path | None = None):
     """Score the development population with the causal model. Test and BC8 rows are not used."""
     from schema_study.formal_prepare import _fill
     from schema_study.learning_conditions import HISTORICAL_PREDICATES
@@ -320,33 +418,71 @@ def _lora_development_score(task: dict, evaluation: list[dict], tokenizer):
     needed = {(row["candidate_id"], _view_entity(task, row)) for row in evaluation}
     texts = _context_texts(dataset, needed)
 
+    prompts = []
+    for record in evaluation:
+        if record.get("split") == "test":
+            raise RuntimeError("A test row entered development selection.")
+        entity = _view_entity(task, record)
+        predicate = record.get("predicate") or task.get("predicate")
+        historical = HISTORICAL_PREDICATES.get(predicate, predicate)
+        block = "\n".join(f"- {name}" for name in schema.positive_display_names(historical))
+        user = _fill(dataset, record["candidate_id"], historical, texts[(record["candidate_id"], entity)], {(dataset, historical): block})
+        prompts.append((record, predicate, historical, user))
+
     def score(model) -> float:
+        import os
+        from contextlib import nullcontext
+
         import torch
 
-        if not hasattr(model, "generate"):
+        rank = int(os.environ.get("RANK", "0"))
+        generator = model.module if hasattr(model, "module") else model
+        if rank == 0 and not hasattr(generator, "generate"):
             raise RuntimeError("Development selection requires the model's generation interface.")
+        device = next(generator.parameters()).device
+        if device.type == "cpu" and os.environ.get("SCHEMA_STUDY_REQUIRE_CUDA") == "1":
+            raise RuntimeError("Development generation remained on CPU.")
+        was_training = model.training
+        model.eval()
         rows = []
-        for record in evaluation:
-            entity = _view_entity(task, record)
-            predicate = record.get("predicate") or task.get("predicate")
-            historical = HISTORICAL_PREDICATES.get(predicate, predicate)
-            block = "\n".join(f"- {name}" for name in schema.positive_display_names(historical))
-            user = _fill(dataset, record["candidate_id"], historical, texts[(record["candidate_id"], entity)], {(dataset, historical): block})
-            prompt_ids = tokenizer.apply_chat_template(
-                [{"role": "user", "content": user}], tokenize=True, add_generation_prompt=True, enable_thinking=False,
-            )
-            output = model.generate(torch.tensor([prompt_ids]), max_new_tokens=64, do_sample=False)
-            text = tokenizer.decode(output[0][len(prompt_ids):], skip_special_tokens=True)
-            parsed = interpret_generation(text, record["candidate_id"], schema, historical)
-            gold = (record.get("assistant") or {}).get("labels", record.get("labels_by_predicate", {}).get(predicate, []))
-            rows.append({"gold": gold, "predicted": parsed["predicted_labels"], "status": "valid" if parsed["ledger_status"] in {"valid", "valid_empty"} else "invalid"})
-        metric = positive_micro_f1(rows)
-        return float(metric["f1"])
+        context = model.summon_full_params(writeback=False, rank0_only=True) if hasattr(model, "summon_full_params") else nullcontext()
+        with context, torch.no_grad():
+            if rank == 0:
+                for start in range(0, len(prompts), 4):
+                    chunk = prompts[start:start + 4]
+                    encoded = [tokenizer.apply_chat_template([{"role": "user", "content": user}], tokenize=True, add_generation_prompt=True, enable_thinking=False) for _record, _predicate, _historical, user in chunk]
+                    width = max(len(ids) for ids in encoded)
+                    tokens = torch.full((len(chunk), width), int(tokenizer.pad_token_id or 0), dtype=torch.long, device=device)
+                    mask = torch.zeros(len(chunk), width, dtype=torch.long, device=device)
+                    for index, ids in enumerate(encoded):
+                        tokens[index, : len(ids)] = torch.tensor(ids, device=device)
+                        mask[index, : len(ids)] = 1
+                    output = generator.generate(tokens, attention_mask=mask, max_new_tokens=256, do_sample=False)
+                    for index, (record, predicate, historical, _user) in enumerate(chunk):
+                        text = tokenizer.decode(output[index][len(encoded[index]):], skip_special_tokens=True)
+                        parsed = interpret_generation(text, record["candidate_id"], schema, historical)
+                        gold = (record.get("assistant") or {}).get("labels", [])
+                        rows.append({"gold": gold, "predicted": parsed["predicted_labels"], "status": "valid" if parsed["ledger_status"] in {"valid", "valid_empty"} else "invalid", "candidate_id": record["candidate_id"], "raw": text, "illegal_labels": parsed.get("illegal_labels", [])})
+            if torch.distributed.is_available() and torch.distributed.is_initialized():
+                torch.distributed.barrier()
+        metric = float(positive_micro_f1(rows)["f1"]) if rank == 0 else 0.0
+        if torch.distributed.is_available() and torch.distributed.is_initialized():
+            value = torch.tensor([metric], dtype=torch.float64, device=device if device.type == "cuda" else "cpu")
+            torch.distributed.broadcast(value, src=0)
+            metric = float(value.item())
+        if rank == 0 and prediction_path is not None:
+            prediction_path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = prediction_path.with_suffix(".jsonl.tmp")
+            temporary.write_text("".join(json.dumps(row, sort_keys=True) + "\n" for row in rows), encoding="utf-8")
+            temporary.replace(prediction_path)
+        if was_training:
+            model.train()
+        return metric
 
     return score
 
 
-def _hierarchical_batches(task: dict, rows: list[dict], schema, corpus: str):
+def _hierarchical_batches(task: dict, rows: list[dict], schema, corpus: str, keep_remainder: bool = False):
     """Tokenise the selected candidates. A sequence longer than the encoder window is rejected, not cut down."""
     import torch
     from transformers import AutoTokenizer
@@ -358,7 +494,7 @@ def _hierarchical_batches(task: dict, rows: list[dict], schema, corpus: str):
     tokenizer = AutoTokenizer.from_pretrained(encoder_layout(name)["tokenizer"], local_files_only=True)
     needed = {(row["candidate_id"], row["entity"]) for row in rows}
     texts = _context_texts(task["dataset"], needed)
-    bucket: list[tuple[list[int], dict]] = []
+    bucket: list[tuple[list[int], dict, str]] = []
     for row in rows:
         encoded = tokenizer(texts[(row["candidate_id"], row["entity"])], add_special_tokens=True, truncation=False)
         if len(encoded["input_ids"]) > 512:
@@ -369,54 +505,71 @@ def _hierarchical_batches(task: dict, rows: list[dict], schema, corpus: str):
                 targets[predicate] = multi_hot_target(schema, predicate, labels)
             else:
                 targets[predicate] = single_label_target(schema, predicate, labels)
-        bucket.append((list(encoded["input_ids"]), targets))
+        bucket.append((list(encoded["input_ids"]), targets, row["candidate_id"]))
         if len(bucket) == 16:
             yield _stack_hierarchical(bucket, corpus)
             bucket = []
+    if keep_remainder and bucket:
+        yield _stack_hierarchical(bucket, corpus)
 
-def _stack_hierarchical(bucket: list[tuple[list[int], dict]], corpus: str):
+def _stack_hierarchical(bucket: list[tuple[list[int], dict, str]], corpus: str):
     import torch
 
-    width = max(len(ids) for ids, _targets in bucket)
+    width = max(len(ids) for ids, _targets, _candidate in bucket)
     tokens = torch.zeros(len(bucket), width, dtype=torch.long)
-    for index, (ids, _targets) in enumerate(bucket):
+    mask = torch.zeros(len(bucket), width, dtype=torch.long)
+    for index, (ids, _targets, _candidate) in enumerate(bucket):
         tokens[index, : len(ids)] = torch.tensor(ids)
+        mask[index, : len(ids)] = 1
     targets = {}
     predicates = bucket[0][1]
     for predicate in predicates:
-        values = [item[predicate] for _ids, item in bucket]
+        values = [item[predicate] for _ids, item, _candidate in bucket]
         if corpus == "drugprot":
             targets[predicate] = torch.tensor(values, dtype=torch.float32)
         else:
             targets[predicate] = torch.tensor(values, dtype=torch.long)
-    return tokens, targets
+    return {"input_ids": tokens, "attention_mask": mask, "targets": targets, "candidate_ids": [candidate for _ids, _targets, candidate in bucket]}
 
 
 def _hierarchical_development_score(task: dict, evaluation: list[dict], schema, corpus: str):
-    from schema_study.production_runtime import positive_micro_f1
+    from schema_study.learning_conditions import HISTORICAL_PREDICATES
+    from schema_study.production_runtime import DRUGPROT_DEVELOPMENT_DECISION, positive_micro_f1
 
-    prepared = list(_hierarchical_batches(task, evaluation, schema, corpus))
+    prepared = list(_hierarchical_batches(task, evaluation, schema, corpus, keep_remainder=True))
+    selected_predicate = task.get("predicate") or "P3"
 
     def score(model) -> float:
         import torch
 
         rows = []
+        was_training = model.training
         model.eval()
         with torch.no_grad():
-            for tokens, targets in prepared:
-                outputs = model(tokens)
-                logits = outputs["P3"]
-                gold = targets["P3"]
-                if corpus == "drugprot":
-                    predicted = (logits.sigmoid() > 0.5).tolist()
-                    gold_rows = gold.tolist()
-                    for gold_row, predicted_row in zip(gold_rows, predicted):
-                        rows.append({"gold": [str(index) for index, value in enumerate(gold_row) if value], "predicted": [str(index) for index, value in enumerate(predicted_row) if value], "status": "valid"})
-                else:
-                    chosen = logits.argmax(dim=-1).tolist()
-                    for gold_index, predicted_index in zip(gold.tolist(), chosen):
-                        rows.append({"gold": [str(gold_index)], "predicted": [str(predicted_index)], "status": "valid"})
-        model.train()
+            for batch in prepared:
+                outputs = model(batch["input_ids"], batch["attention_mask"])
+                for index, candidate_id in enumerate(batch["candidate_ids"]):
+                    heads = {}
+                    for predicate, logits in outputs.items():
+                        labels = [label.stable_id for label in schema.level_labels(HISTORICAL_PREDICATES[predicate])]
+                        if corpus == "drugprot":
+                            chosen = (logits[index].sigmoid() > DRUGPROT_DEVELOPMENT_DECISION["threshold"]).tolist()
+                            gold_row = batch["targets"][predicate][index].tolist()
+                            heads[predicate] = {
+                                "gold": [labels[position] for position, value in enumerate(gold_row) if value],
+                                "predicted": [labels[position] for position, value in enumerate(chosen) if value],
+                            }
+                        else:
+                            gold_index = int(batch["targets"][predicate][index])
+                            predicted_index = int(logits[index].argmax())
+                            heads[predicate] = {
+                                "gold": [] if gold_index >= len(labels) else [labels[gold_index]],
+                                "predicted": [] if predicted_index >= len(labels) else [labels[predicted_index]],
+                            }
+                    selected = heads[selected_predicate]
+                    rows.append({"candidate_id": candidate_id, "gold": selected["gold"], "predicted": selected["predicted"], "status": "valid", "heads": heads, "decision": DRUGPROT_DEVELOPMENT_DECISION if corpus == "drugprot" else {"rule": "argmax_excluding_negative_class"}})
+        if was_training:
+            model.train()
         return float(positive_micro_f1(rows)["f1"])
 
     return score

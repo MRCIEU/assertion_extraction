@@ -78,19 +78,26 @@ def measure_few_shot(corpus: str = "biored", entities: tuple[str, ...] = ("E0", 
     texts = _texts(corpus, entities)
     blocks = _blocks(corpus)
     grouped: dict[tuple[str, str], list[int]] = {}
-    missing = 0
+    eligible = 0
+    missing_target = 0
+    missing_demonstration = 0
+    rendered_requests = 0
     with (PREPARATION / f"few_shot_{corpus}.jsonl").open(encoding="utf-8") as handle:
         for line in handle:
             target = json.loads(line)
+            eligible += 1
             if target["candidate_id"] not in texts:
-                missing += 1
+                missing_target += 1
+                continue
+            unresolved = [identifier for identifier in target["demonstrations"] if identifier not in texts]
+            if unresolved:
+                missing_demonstration += 1
                 continue
             for entity in entities:
-                if f"{entity}" and any(f"{entity}/{research}" in skip for research in predicates):
-                    if all(f"{entity}/{research}" in skip for research in predicates):
-                        continue
-                if any(identifier not in texts for identifier in target["demonstrations"]):
-                    missing += 1
+                if all(f"{entity}/{research}" in skip for research in predicates):
+                    continue
+                if entity not in texts[target["candidate_id"]]:
+                    missing_target += 1
                     continue
                 target_text = texts[target["candidate_id"]][entity]
                 for research in predicates:
@@ -108,12 +115,21 @@ def measure_few_shot(corpus: str = "biored", entities: tuple[str, ...] = ("E0", 
                     )
                     length = len(tokenizer(rendered, add_special_tokens=False)["input_ids"])
                     grouped.setdefault((entity, research), []).append(length)
+                    rendered_requests += 1
+    summaries = {f"{entity}/{predicate}": _summary(values) for (entity, predicate), values in sorted(grouped.items())}
+    budget_failures = sum(item["over_capacity_with_generation_allowance"] for item in summaries.values())
     return {
         "corpus": corpus,
         "kind": "retrieved_five_shot",
-        "missing": missing,
-        "by_condition": {f"{entity}/{predicate}": _summary(values) for (entity, predicate), values in sorted(grouped.items())},
+        "eligible_targets": eligible,
+        "rendered_requests": rendered_requests,
+        "missing_target_contexts": missing_target,
+        "missing_demonstration_contexts": missing_demonstration,
+        "context_budget_failures": budget_failures,
+        "missing": missing_target + missing_demonstration,
+        "by_condition": summaries,
         "zero_shot_lengths_reused": False,
+        "omitted_unresolved_demonstrations": False,
     }
 
 
