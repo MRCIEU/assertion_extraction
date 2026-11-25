@@ -541,7 +541,9 @@ def _parse_generated(task: dict, request: dict, result: dict, schema) -> dict:
         return result
     from schema_study.production_runtime import interpret_generation
 
-    level = task.get("predicate") or request.get("predicate_level")
+    from schema_study.learning_conditions import HISTORICAL_PREDICATES
+
+    level = task.get("schema_predicate") or HISTORICAL_PREDICATES.get(task.get("predicate"), task.get("predicate")) or request.get("predicate_level")
     if not level:
         return result
     interpreted = interpret_generation(result.get("raw"), request["candidate_id"], schema, level)
