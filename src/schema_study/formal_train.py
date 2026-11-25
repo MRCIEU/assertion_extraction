@@ -464,7 +464,7 @@ def main() -> None:
     from schema_study.paths import get_paths
     from schema_study.production_plan import gpu_authorised
 
-    if not gpu_authorised(get_paths().study, os.environ.get("SCHEMA_STUDY_COMMIT", "")):
+    if not gpu_authorised(get_paths().study, get_paths().code_root):
         raise SystemExit(3)
     apply_programme()
     if len(sys.argv) != 6 or sys.argv[1] not in {"train", "predict"}:

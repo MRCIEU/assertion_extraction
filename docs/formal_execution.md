@@ -28,6 +28,10 @@ Public checkpoints that resolve without an access token, and whose weights are n
 
 A CPU fixture in `hf-hpc` trained a four-head encoder for four steps, resumed from a real checkpoint at step two, and matched the uninterrupted weights. Every head and the shared embedding received a gradient. This is not a Qwen result. Few-shot and supervised token-length distributions have not yet been measured.
 
+Resolved tasks keep `executable` false until GPU preflight and approval. Each task names an executor: BiomedBERT and BioLinkBERT use `formal_train.train`, Qwen LoRA including shared-schema and curriculum uses `production_lora.fit`, and the hierarchical and encoder-sensitivity losses use `production_encoder`. The approval digest is the hash of those resolved task definitions and the git revision of the checkout, not a count summary. Proposed Slurm jobs are queued; they are not treated as already running. The running-job ceiling remains 256 and the queued-plus-running ceiling remains 512.
+
+BioLinkBERT-base and the DeBERTa base verifier are stored locally. On the SciFact development rationale task the verifier scored 444 assessable pairs, with accuracy 0.541; eight pairs exceeded the 512-token context and were left unassessable. That figure is not biological truth. GPT-OSS-20B (41 GB) loads as `GptOssConfig` under Transformers 4.57.5, and `GptOssForCausalLM` is present, but it has not been executed. Qwen3.6-27B (56 GB) is `qwen3_5`, which this Transformers release does not recognise. Its weights stay on disk and its tasks stay blocked; the environment is not being upgraded to force recognition.
+
 ## Production path
 
 `production_plan.py` enumerates the agreed conditions. With the twelve completed DrugProt BiomedBERT checkpoints reused, the new principal training count is 312 of 324 designed runs. BioLinkBERT has 48 runs, each hierarchical comparison has 12, schema-conditioned LoRA has 24, and the Qwen3-8B curriculum has 27. Sensitivity runs are counted separately and do not repeat the standard-loss or full-population baselines.

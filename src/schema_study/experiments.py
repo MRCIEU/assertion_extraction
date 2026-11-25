@@ -52,6 +52,8 @@ AUTHORISED_MODEL_EXECUTION_MODULES = (
     "models/qwen_backend.py",
     "measurement_cpu.py",
     "formal_optim.py",
+    "production_lora.py",
+    "production_encoder.py",
 )
 
 

@@ -38,7 +38,8 @@ def _task(family: str, **fields) -> dict:
     return {
         "task_id": hashlib.sha256(f"{family}|{identity}".encode("utf-8")).hexdigest()[:16],
         "family": family,
-        "executable": True,
+        "executable": False,
+        "statuses": ["specified"],
         "continuation_policy": "resume_the_same_world_size_from_the_last_completed_optimiser_step",
         "retry_policy": dict(RETRY_POLICY),
         **fields,
@@ -130,7 +131,10 @@ def sensitivity_tasks() -> list[dict]:
                         tasks.append(_task("data_efficiency", dataset="biored", entity=entity, predicate=predicate, model=model, fraction=fraction, seed=seed, full_run_reused=True))
     for withheld in ("P1", "P2", "E3"):
         for seed in SEEDS:
-            tasks.append(_task("unseen_schema", dataset="biored", model="qwen8b", entity="E2", withheld=withheld, seed=seed))
+            tasks.append(_task(
+                "unseen_schema", dataset="biored", model="qwen8b", withheld=withheld, seed=seed,
+                training_views=unseen_training_views(withheld),
+            ))
     for learning_rate in (1e-5, 5e-5):
         for seed in SEEDS:
             tasks.append(_task("encoder_sensitivity", dataset="biored", entity="E2", predicate="P3", model="biomedbert", learning_rate=learning_rate, seed=seed, baseline_reused=True))
@@ -147,9 +151,93 @@ def curriculum_sequence(order: str, examples_by_predicate: dict[str, list[str]])
     missing = [name for name in PREDICATES if name not in examples_by_predicate]
     if missing:
         raise KeyError(", ".join(missing))
-    sequence = [(predicate, example, "exposure") for predicate in CURRICULUM_EXPOSURE[order] for example in examples_by_predicate[predicate]]
+    if order == "mixed":
+        pools = {predicate: list(examples_by_predicate[predicate]) for predicate in PREDICATES}
+        sequence = []
+        while any(pools.values()):
+            for predicate in PREDICATES:
+                if pools[predicate]:
+                    sequence.append((predicate, pools[predicate].pop(0), "exposure"))
+    else:
+        sequence = [(predicate, example, "exposure") for predicate in CURRICULUM_EXPOSURE[order] for example in examples_by_predicate[predicate]]
     sequence.extend((FINAL_NATIVE_PREDICATE, example, "final_native") for example in examples_by_predicate[FINAL_NATIVE_PREDICATE])
     return sequence
+
+
+def membership_rows(schema, coarse_level: str, native_level: str) -> list[list[int]]:
+    """Map each native label, including the negative outcome, into exactly one coarse label."""
+    native_ids = [label.stable_id for label in schema.level_labels(native_level)] + [schema.no_relation_id]
+    rows = []
+    for label in schema.level_labels(coarse_level):
+        rows.append([1 if identifier in label.members else 0 for identifier in native_ids])
+    rows.append([1 if identifier == schema.no_relation_id else 0 for identifier in native_ids])
+    if any(sum(column) != 1 for column in zip(*rows)):
+        raise ValueError(f"{schema.schema_id} {coarse_level} does not partition {native_level}.")
+    return rows
+
+
+def unseen_training_views(withheld: str) -> list[str]:
+    """E3 is withheld from a multi-level inventory. Training only at E2 would not test that exclusion."""
+    if withheld in BIORED_ENTITIES:
+        views = [entity for entity in BIORED_ENTITIES if entity != withheld]
+    elif withheld in PREDICATES:
+        views = [predicate for predicate in PREDICATES if predicate != withheld]
+    else:
+        raise ValueError(withheld)
+    if withheld in views or len(views) < 2:
+        raise ValueError("The withheld view must leave more than one training view.")
+    return views
+
+
+EXECUTORS = {
+    "full_finetune": "schema_study.formal_train:train",
+    "lora_sft": "schema_study.production_lora:fit",
+    "biolinkbert": "schema_study.formal_train:train",
+    "hierarchical_multitask": "schema_study.production_encoder:train_hierarchical",
+    "hierarchical_consistency": "schema_study.production_encoder:train_hierarchical",
+    "schema_conditioned_lora": "schema_study.production_lora:fit",
+    "curriculum": "schema_study.production_lora:fit",
+    "class_imbalance": "schema_study.production_encoder:train_encoder",
+    "negative_sampling": "schema_study.production_encoder:train_encoder",
+    "data_efficiency": "schema_study.production_encoder:train_encoder",
+    "unseen_schema": "schema_study.production_lora:fit",
+    "encoder_sensitivity": "schema_study.formal_train:train",
+    "lora_sensitivity": "schema_study.production_lora:fit",
+    "zero_shot": "schema_study.formal_generate:generate",
+    "few_shot": "schema_study.formal_generate:generate",
+    "constrained": "schema_study.production_inference:constrained_generate",
+    "thinking": "schema_study.production_inference:thinking_generate",
+    "self_consistency": "schema_study.production_inference:self_consistency",
+    "evidence": "schema_study.production_inference:evidence_generate",
+    "qualified": "schema_study.production_inference:qualified_generate",
+    "certainty": "schema_study.measurement_cpu:main",
+    "nli": "schema_study.measurement_cpu:main",
+    "analysis": "schema_study.analysis_plan:synthetic_report",
+}
+
+
+def executor_for(task: dict) -> str | None:
+    if task["family"] == "principal_training":
+        return EXECUTORS[task["adaptation"]]
+    if task.get("model", "").startswith("qwen") and task["family"] in {"negative_sampling", "data_efficiency", "lora_sensitivity"}:
+        return EXECUTORS["lora_sft"]
+    return EXECUTORS.get(task["family"])
+
+
+def annotate_task(task: dict) -> dict:
+    """Executable stays false until GPU preflight and approval. An implemented executor is not permission to run."""
+    executor = executor_for(task)
+    statuses = ["specified"]
+    if executor:
+        statuses.append("implementation_complete")
+        statuses.append("awaiting_production_gpu_preflight")
+    else:
+        statuses.append("blocked")
+    task["executor"] = executor
+    task["statuses"] = statuses
+    task["executable"] = False
+    task["command"] = f"python -m schema_study.production_dispatch run {task['family']} {task['task_id']}"
+    return task
 
 
 def family_counts(reuse_drugprot_encoder: bool = True) -> dict:
@@ -182,22 +270,63 @@ def programme_definition(commit: str, reuse_drugprot_encoder: bool = True) -> di
     }
 
 
+SCIENTIFIC_FIELDS = (
+    "family", "dataset", "entity", "predicate", "system", "model", "adaptation", "seed",
+    "exposure", "order", "loss", "strategy", "fraction", "withheld", "training_views",
+    "learning_rate", "change", "heads", "consistency", "consistency_weight", "final_block",
+    "new_training", "historical_predicate",
+)
+
+
+def resolved_tasks(reuse_drugprot_encoder: bool = True) -> list[dict]:
+    groups = [
+        principal_training_tasks(reuse_drugprot_encoder),
+        biolinkbert_tasks(),
+        hierarchical_tasks(False),
+        hierarchical_tasks(True),
+        schema_conditioned_tasks(),
+        curriculum_tasks(),
+        sensitivity_tasks(),
+    ]
+    return [annotate_task(task) for group in groups for task in group]
+
+
 def manifest_sha256(commit: str, reuse_drugprot_encoder: bool = True) -> str:
-    payload = json.dumps(programme_definition(commit, reuse_drugprot_encoder), sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    """Digest the resolved task definitions. A count summary is not the approval record."""
+    rows = []
+    for task in sorted(resolved_tasks(reuse_drugprot_encoder), key=lambda item: item["task_id"]):
+        rows.append({field: task[field] for field in SCIENTIFIC_FIELDS if field in task})
+        rows[-1]["task_id"] = task["task_id"]
+        rows[-1]["executor"] = task["executor"]
+    payload = {"account": ACCOUNT, "commit": commit, "scope": "principal_and_agreed_supplementary", "tasks": rows}
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
 
 
-def gpu_authorised(study_directory: Path, commit: str, reuse_drugprot_encoder: bool = True) -> bool:
-    """Approval must name this manifest. A non-empty statement alone is not sufficient."""
+def executing_revision(code_root: Path) -> str | None:
+    """The checkout that will run, not an environment variable supplied by the caller."""
+    import subprocess
+
+    try:
+        output = subprocess.check_output(
+            ["git", "-C", str(code_root), "rev-parse", "HEAD"],
+            text=True, stderr=subprocess.DEVNULL,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    return output.strip() or None
+
+
+def gpu_authorised(study_directory: Path, code_root: Path, reuse_drugprot_encoder: bool = True) -> bool:
+    """Approval must name the resolved manifest and the revision git reports for this checkout."""
     path = Path(study_directory) / "formal_execution_approval.json"
-    if not path.is_file():
+    revision = executing_revision(code_root)
+    if not path.is_file() or revision is None:
         return False
     payload = json.loads(path.read_text(encoding="utf-8"))
-    expected = manifest_sha256(commit, reuse_drugprot_encoder)
     return (
         payload.get("approved") is True
-        and payload.get("manifest_sha256") == expected
-        and payload.get("commit") == commit
+        and payload.get("manifest_sha256") == manifest_sha256(revision, reuse_drugprot_encoder)
+        and payload.get("commit") == revision
         and payload.get("account") == ACCOUNT
         and payload.get("scope") == "principal_and_agreed_supplementary"
         and bool(str(payload.get("statement") or "").strip())
@@ -205,14 +334,16 @@ def gpu_authorised(study_directory: Path, commit: str, reuse_drugprot_encoder: b
 
 
 def submission_allowed(running: int, pending: int, proposed: int) -> tuple[bool, str]:
-    """A 1,000-task array is still rejected when it would pass the 512-job user limit."""
+    """Proposed jobs join the queue. They are not counted as already running."""
     if proposed > MAX_ARRAY_TASKS:
         return False, "array_exceeds_1000"
     if running + pending + proposed > MAX_QUEUED_JOBS:
         return False, "user_job_limit_512"
-    if running + proposed > MAX_RUNNING_JOBS:
-        return False, "defer_until_running_jobs_fall"
     return True, "accepted"
+
+
+def runnable_slots(running: int) -> int:
+    return max(0, MAX_RUNNING_JOBS - running)
 
 
 def validate_dependencies(tasks: list[dict]) -> list[str]:
@@ -226,7 +357,33 @@ def validate_dependencies(tasks: list[dict]) -> list[str]:
                 errors.append(f"{task['task_id']} missing {dependency}")
         if task["task_id"] in task.get("depends_on", []):
             errors.append(f"{task['task_id']} depends on itself")
+    if find_cycles(tasks):
+        errors.append("dependency cycle")
     return errors
+
+
+def find_cycles(tasks: list[dict]) -> list[list[str]]:
+    """Return one node list for each cycle. A self-loop is a cycle."""
+    known = {task["task_id"] for task in tasks}
+    graph = {task["task_id"]: [item for item in task.get("depends_on", []) if item in known] for task in tasks}
+    colour = {task_id: 0 for task_id in graph}
+    cycles = []
+
+    def visit(task_id: str, stack: list[str]) -> None:
+        colour[task_id] = 1
+        stack.append(task_id)
+        for dependency in graph[task_id]:
+            if colour[dependency] == 1:
+                cycles.append(stack[stack.index(dependency):] + [dependency])
+            elif colour[dependency] == 0:
+                visit(dependency, stack)
+        stack.pop()
+        colour[task_id] = 2
+
+    for task_id in graph:
+        if colour[task_id] == 0:
+            visit(task_id, [])
+    return cycles
 
 
 def drugprot_checkpoint_reusable(directory: Path) -> bool:

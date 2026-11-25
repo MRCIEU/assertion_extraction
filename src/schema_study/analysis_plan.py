@@ -76,6 +76,17 @@ def micro_f1_bootstrap(
     }
 
 
+def synthetic_report(documents: list[dict]) -> dict:
+    """Build the reporting table from controlled records. The records are not study results."""
+    contrast = micro_f1_bootstrap(documents, left="system_a", right="system_b", draws=50, seed=100)
+    return {
+        "synthetic": True,
+        "contrast": contrast,
+        "document_f1_averaged": False,
+        "rows": len(documents),
+    }
+
+
 def primary_contrasts() -> dict:
     """Contrasts fixed before the expanded experiment is run."""
     return {
