@@ -30,4 +30,4 @@ export HF_HUB_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
 
 cd /home/b5ac/freddieyu.b5ac/project_1
-exec /home/b5ac/freddieyu.b5ac/miniforge3/envs/hf-hpc/bin/python -m schema_study.qwen_workload remaining
+exec /home/b5ac/freddieyu.b5ac/miniforge3/envs/hf-hpc/bin/python -m schema_study.qwen_workload "${1:-remaining}"

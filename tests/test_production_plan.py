@@ -283,6 +283,7 @@ def test_population_horizon_and_scheduler_are_distinct():
     from schema_study.production_runtime import (
         assert_runtime_world,
         constrained_sampling,
+        context_sources,
         evaluation_released,
         external_model_convention,
         generation_requests,
@@ -422,3 +423,5 @@ def test_population_horizon_and_scheduler_are_distinct():
     curriculum_tasks = [task for task in resolved_tasks() if task["family"] == "curriculum"]
     assert curriculum_tasks[0]["configuration"]["max_epochs"] == 1
     assert curriculum_tasks[0]["configuration"]["data_schedule"] == "single_matched_curriculum_pass"
+    assert context_sources("bc8") == ("bc8", "biored")
+    assert context_sources("drugprot") == ("drugprot",)

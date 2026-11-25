@@ -14,6 +14,7 @@ from transformers import AutoTokenizer
 from schema_study.formal_prepare import BUDGET, _fill
 from schema_study.learning_conditions import HISTORICAL_PREDICATES, QWEN8_REVISION
 from schema_study.paths import get_paths
+from schema_study.production_runtime import context_sources
 from schema_study.records import publish_file
 from schema_study.schemas import default_schema_path, load_schema
 
@@ -54,10 +55,11 @@ def _tokenizer():
 
 def _texts(corpus: str, entities: tuple[str, ...]) -> dict[str, dict[str, str]]:
     found = {}
-    with CONTEXTS[corpus].open(encoding="utf-8") as handle:
-        for line in handle:
-            row = json.loads(line)
-            found[row["candidate_id"]] = {entity: row["views"][entity] for entity in entities}
+    for source in context_sources(corpus):
+        with CONTEXTS[source].open(encoding="utf-8") as handle:
+            for line in handle:
+                row = json.loads(line)
+                found.setdefault(row["candidate_id"], {}).update({entity: row["views"][entity] for entity in entities})
     return found
 
 
@@ -176,11 +178,26 @@ def measure_remaining() -> dict:
     return payload
 
 
+def repair_bc8_few_shot() -> dict:
+    """Replace the BC8 section that looked for demonstrations only inside the BC8 file."""
+    destination = get_paths().assert_output(PREPARATION / "qwen_workload_remaining.json")
+    payload = json.loads(destination.read_text(encoding="utf-8")) if destination.is_file() else {"zero_shot_lengths_reused": False}
+    measured = measure_few_shot("bc8", tuple(f"E{level}" for level in range(8)), ("P0", "P1", "P2", "P3"))
+    measured["demonstration_sources"] = list(context_sources("bc8"))
+    payload["bc8_few_shot"] = measured
+    publish_file(destination, lambda temporary: temporary.write_text(json.dumps(payload) + "\n", encoding="utf-8"))
+    print(json.dumps({"published": "bc8_few_shot", "conditions": len(measured["by_condition"]), "missing": measured["missing"]}), flush=True)
+    return payload
+
+
 def main() -> int:
     import sys
 
     if len(sys.argv) > 1 and sys.argv[1] == "remaining":
         measure_remaining()
+        return 0
+    if len(sys.argv) > 1 and sys.argv[1] == "repair-bc8":
+        repair_bc8_few_shot()
         return 0
     payload = {"few_shot": measure_few_shot(), "sft": measure_sft()}
     destination = get_paths().assert_output(PREPARATION / "qwen_workload_biored.json")

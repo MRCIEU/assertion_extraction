@@ -416,6 +416,13 @@ def controller_requeue(job_id: str, authorised: bool, finished: bool) -> list[st
     return ["sbatch", f"--dependency=afterany:{job_id}", "--account=brics.b5ac", "--partition=workq", "--qos=normal", "scripts/slurm/programme_controller.sbatch"]
 
 
+def context_sources(corpus: str) -> tuple[str, ...]:
+    """BC8 targets are in the BC8 file. Their retrieved demonstrations are BioRED training contexts."""
+    if corpus == "bc8":
+        return ("bc8", "biored")
+    return (corpus,)
+
+
 def external_model_convention(model_name: str) -> dict:
     """GPT-OSS does not inherit Qwen LoRA modules or the Qwen chat template."""
     if model_name == "qwen36":
