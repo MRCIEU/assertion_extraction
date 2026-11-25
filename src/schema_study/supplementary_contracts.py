@@ -38,7 +38,8 @@ def legal_names(task: dict) -> list[str]:
 def legal_label_schema(task: dict) -> dict:
     """Constrain the object to the predicate inventory. An empty list remains legal."""
     names = legal_names(task)
-    labels = {"type": "array", "uniqueItems": True, "items": {"type": "string", "enum": names}}
+    # vLLM 0.33 guidance rejects uniqueItems. Uniqueness is checked after decoding.
+    labels = {"type": "array", "items": {"type": "string", "enum": names}}
     if task.get("dataset") != "drugprot":
         labels["maxItems"] = 1
     return {
@@ -222,6 +223,8 @@ def interpret_contract(task: dict, request: dict, raw: str | None) -> dict:
         return {"complete": False, "reason": "missing_labels", "labels": None}
     legal = set(legal_names(task))
     illegal = [label for label in labels if label not in legal]
+    if len(labels) != len(set(labels)):
+        return {"complete": False, "reason": "duplicate_label", "labels": None, "illegal_labels": illegal}
     if family == "constrained":
         return {"complete": not illegal, "labels": [] if illegal else labels, "illegal_labels": illegal, "reason": "illegal_label" if illegal else "legal_label_schema"}
     evidence = payload.get("evidence")
