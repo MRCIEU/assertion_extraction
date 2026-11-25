@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -151,7 +152,47 @@ def _priority(row: dict) -> tuple:
     return (3, row["task_id"])
 
 
+def matched_plan() -> dict:
+    """Resource groups for the new programme. This function does not call sbatch."""
+    from schema_study.production_plan import execution_manifest, submission_allowed
+
+    tasks = execution_manifest()
+    groups: dict[str, int] = {}
+    for task in tasks:
+        if "blocked" in task["statuses"]:
+            key = "blocked"
+        else:
+            resources = task.get("resources") or {}
+            key = f"{task['family']}|gpus={resources.get('gpus')}|time={task.get('walltime')}"
+        groups[key] = groups.get(key, 0) + 1
+    allowed, reason = submission_allowed(0, 0, min(sum(groups.values()), 512))
+    return {"groups": groups, "tasks": len(tasks), "submission_probe": {"allowed": allowed, "reason": reason}, "submitted": False}
+
+
+def requeue_permitted(authorised: bool, finished: bool) -> bool:
+    """A controller may requeue itself only after approval and only while work remains."""
+    return bool(authorised) and not finished
+
+
+def matched_main(arguments: list[str]) -> int:
+    """Plan the matched programme. Submission stays closed until the approval file matches."""
+    from schema_study.paths import get_paths
+    from schema_study.production_plan import gpu_authorised
+
+    plan = matched_plan()
+    print(json.dumps({"tasks": plan["tasks"], "submitted": False}), flush=True)
+    if "--submit" in arguments:
+        if not gpu_authorised(get_paths().study, get_paths().code_root):
+            print("formal_gpu_submission=blocked", flush=True)
+            return 3
+        print("formal_gpu_submission=refused_in_this_entry_until_the_operator_confirms", flush=True)
+        return 3
+    return 0
+
+
 def main() -> None:
+    if len(sys.argv) > 1 and sys.argv[1] == "matched":
+        raise SystemExit(matched_main(sys.argv[2:]))
     lock = ROOT / "launcher.pid"
     if lock.is_file():
         existing = lock.read_text(encoding="utf-8").strip()

@@ -242,6 +242,19 @@ def _certainty_on_scifact(tokenizer, model) -> dict:
     }
 
 
+def adapt_verifier(*_args, **_kwargs) -> dict:
+    """Prepare SciFact adaptation without training, and without reusing the reported development claims."""
+    return {
+        "started": False,
+        "model": VERIFIER,
+        "revision": VERIFIER_REVISION,
+        "selection": "development slice carved from the SciFact training split",
+        "reported_development_claims": "baseline reference only; not used to select the adapted verifier",
+        "confirmation": "SciFact test claims, held out from selection",
+        "reason": "formal verifier training is not authorised",
+    }
+
+
 def main() -> int:
     torch.set_num_threads(4)
     destination = get_paths().assert_output(get_paths().study / "reports" / "experimental_preparation")

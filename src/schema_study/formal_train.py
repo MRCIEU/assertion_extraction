@@ -162,13 +162,18 @@ def _restore(state: dict, torch) -> None:
         torch.cuda.set_rng_state_all(state["cuda"])
 
 
-def _model(tokenizer, classes: list[str], seed: int, entity: str, predicate: str, torch):
+def _model(tokenizer, classes: list[str], seed: int, entity: str, predicate: str, torch, model_name: str = "biomedbert"):
     from torch.nn import Dropout, Linear
     from transformers import AutoModel
 
+    from schema_study.production_assets import encoder_layout
+
     if not torch.cuda.is_available() or not torch.cuda.is_bf16_supported():
         raise RuntimeError("Stopping: this GPU does not support bf16.")
-    loaded = AutoModel.from_pretrained(MODEL_DIR, local_files_only=True, use_safetensors=True)
+    layout = encoder_layout(model_name)
+    if model_name == "biolinkbert" and "BiomedNLP" in str(layout["model"]):
+        raise RuntimeError("BioLinkBERT was routed to the BiomedBERT checkpoint.")
+    loaded = AutoModel.from_pretrained(layout["model"], local_files_only=True)
     encoder = loaded.bert if hasattr(loaded, "bert") else loaded
     before = encoder.get_input_embeddings().weight.shape[0]
     encoder.resize_token_embeddings(len(tokenizer))
@@ -270,9 +275,42 @@ def _score_split(encoder, dropout, head, ids, lengths, rows, classes, dataset, s
     return scored["summary"]["f1"], None, predicted, probabilities
 
 
-def train(dataset: str, entity: str, predicate: str, seed: int) -> None:
-    import torch
+def _population(train_rows: list[dict], fraction: int, seed: int, negative_strategy: str | None) -> list[dict]:
+    from schema_study.production_records import negative_population, subset_document_ids
+
+    rows = train_rows
+    if fraction != 100:
+        documents = subset_document_ids([row["document_id"] for row in rows], fraction, seed)
+        allowed = set(documents)
+        rows = [row for row in rows if row["document_id"] in allowed]
+    if negative_strategy:
+        tagged = [{**row, "positive": bool(row.get("gold_labels"))} for row in rows]
+        rows = negative_population(tagged, negative_strategy, seed)["rows"]
+    return rows
+
+
+def _criterion(dataset: str, objective: str, target, torch):
     from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss
+
+    if dataset == "drugprot" and objective == "focal":
+        from schema_study.production_encoder import multilabel_focal_loss
+        return lambda logits, gold: multilabel_focal_loss(logits, gold)
+    if dataset == "drugprot" and objective == "class_weighted":
+        raise RuntimeError("DrugProt class weights use the multi-label positive weights and are not a categorical focal loss.")
+    if objective == "focal":
+        from schema_study.production_encoder import focal_loss
+        return lambda logits, gold: focal_loss(logits, gold.view(-1))
+    if objective == "class_weighted":
+        from schema_study.production_records import class_weight_from_counts
+        counts = torch.bincount(target.view(-1)).tolist()
+        counts = [count if count else 1 for count in counts]
+        weight = torch.tensor(class_weight_from_counts(counts), dtype=torch.float32)
+        return lambda logits, gold: torch.nn.functional.cross_entropy(logits, gold.view(-1), weight=weight.to(logits.device))
+    return BCEWithLogitsLoss() if dataset == "drugprot" else CrossEntropyLoss()
+
+
+def train(dataset: str, entity: str, predicate: str, seed: int, model_name: str = "biomedbert", objective: str = "standard", fraction: int = 100, negative_strategy: str | None = None, learning_rate: float | None = None) -> None:
+    import torch
     from transformers import get_linear_schedule_with_warmup
 
     output = _output(dataset, entity, predicate, seed)
@@ -283,22 +321,34 @@ def train(dataset: str, entity: str, predicate: str, seed: int) -> None:
         if saved.get("completed_epochs", 0) >= 10:
             _record(output, "train", {"model_called": False, "reason": "training_already_complete", "calls": 0})
             return
-    tokenizer = load_biomedbert_tokenizer(str(TOKENIZER_DIR))
-    observed = [tokenizer.convert_tokens_to_ids(marker) for marker in SPECIAL_MARKERS]
-    if observed != list(range(30522, 30522 + len(SPECIAL_MARKERS))):
-        raise RuntimeError("Marker ids differ from the accepted tokenizer.")
+    if model_name == "biomedbert":
+        tokenizer = load_biomedbert_tokenizer(str(TOKENIZER_DIR))
+        observed = [tokenizer.convert_tokens_to_ids(marker) for marker in SPECIAL_MARKERS]
+        if observed != list(range(30522, 30522 + len(SPECIAL_MARKERS))):
+            raise RuntimeError("Marker ids differ from the accepted tokenizer.")
+    else:
+        from transformers import AutoTokenizer
+        from schema_study.production_assets import encoder_layout
+        tokenizer = AutoTokenizer.from_pretrained(encoder_layout(model_name)["tokenizer"], local_files_only=True)
+        added = tokenizer.add_special_tokens({"additional_special_tokens": [marker for marker in SPECIAL_MARKERS if marker not in tokenizer.get_vocab()]})
+        if added != len(SPECIAL_MARKERS) and any(marker not in tokenizer.get_vocab() for marker in SPECIAL_MARKERS):
+            raise RuntimeError("The encoder tokenizer did not accept the context markers.")
     rows, classes, schema = _build_rows(dataset, entity, predicate, {"train", "dev"})
-    train_rows = [row for row in rows if row["split"] == "train"]
+    train_rows = _population([row for row in rows if row["split"] == "train"], fraction, seed, negative_strategy)
     dev_rows = [row for row in rows if row["split"] == "dev"]
     train_ids, train_lengths = _encode(tokenizer, train_rows)
     dev_ids, dev_lengths = _encode(tokenizer, dev_rows)
     train_target = _targets(dataset, train_rows, classes)
-    encoder, dropout, head, streams = _model(tokenizer, classes, seed, entity, predicate, torch)
+    encoder, dropout, head, streams = _model(tokenizer, classes, seed, entity, predicate, torch, model_name)
     optimizer, hyperparameters = _optimizer(encoder, head, torch)
+    if learning_rate is not None:
+        for group in optimizer.param_groups:
+            group["lr"] = learning_rate
+        hyperparameters = {**hyperparameters, "learning_rate": learning_rate}
     steps_per_epoch = (len(train_rows) + 15) // 16
     total_steps = steps_per_epoch * hyperparameters["max_epochs"]
     scheduler = get_linear_schedule_with_warmup(optimizer, max(1, int(total_steps * hyperparameters["warmup_ratio"])), total_steps)
-    criterion = BCEWithLogitsLoss() if dataset == "drugprot" else CrossEntropyLoss()
+    criterion = _criterion(dataset, objective, train_target, torch)
     order_rng = random.Random(streams["data_order"])
     book = {"completed_epochs": 0, "optimizer_updates": 0, "best_score": None, "best_epoch": None, "threshold": None}
     if last_path.is_file():

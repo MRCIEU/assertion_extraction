@@ -24,6 +24,7 @@ PREPARATION = STORAGE / "studies/schema_granularity_v1/reports/experimental_prep
 CONTEXTS = {
     "biored": STORAGE / "data/inputs/biored/target_anchored_v2__biomedbert_e1354b7a_matched_e0_e7/contexts.jsonl",
     "bc8": STORAGE / "data/inputs/bc8/target_anchored_v2__biomedbert_e1354b7a_matched_e0_e7/contexts.jsonl",
+    "drugprot": STORAGE / "data/inputs/drugprot/target_anchored_v1__biomedbert_e1354b7a/contexts.jsonl",
 }
 
 
@@ -69,7 +70,7 @@ def _blocks(corpus: str) -> dict:
     return blocks
 
 
-def measure_few_shot(corpus: str = "biored", entities: tuple[str, ...] = ("E0", "E2", "E7"), predicates: tuple[str, ...] = ("P0", "P3")) -> dict:
+def measure_few_shot(corpus: str = "biored", entities: tuple[str, ...] = ("E0", "E2", "E7"), predicates: tuple[str, ...] = ("P0", "P3"), skip: frozenset[str] = frozenset()) -> dict:
     """Retrieved demonstrations keep their identities. The target window is the matched source text."""
     tokenizer = _tokenizer()
     texts = _texts(corpus, entities)
@@ -83,11 +84,16 @@ def measure_few_shot(corpus: str = "biored", entities: tuple[str, ...] = ("E0", 
                 missing += 1
                 continue
             for entity in entities:
+                if f"{entity}" and any(f"{entity}/{research}" in skip for research in predicates):
+                    if all(f"{entity}/{research}" in skip for research in predicates):
+                        continue
                 if any(identifier not in texts for identifier in target["demonstrations"]):
                     missing += 1
                     continue
                 target_text = texts[target["candidate_id"]][entity]
                 for research in predicates:
+                    if f"{entity}/{research}" in skip:
+                        continue
                     historical = HISTORICAL_PREDICATES[research]
                     label_block = {(corpus, historical): blocks[historical]}
                     demonstrations = [
@@ -109,10 +115,10 @@ def measure_few_shot(corpus: str = "biored", entities: tuple[str, ...] = ("E0", 
     }
 
 
-def measure_sft(corpus: str = "biored") -> dict:
+def measure_sft(corpus: str = "biored", entities: tuple[str, ...] | None = None) -> dict:
     """Supervised length includes the assistant label object. The candidate identifier is not inside it."""
     tokenizer = _tokenizer()
-    entities = tuple(f"E{level}" for level in range(8))
+    entities = entities or tuple(f"E{level}" for level in range(8))
     texts = _texts(corpus, entities)
     blocks = _blocks(corpus)
     grouped: dict[tuple[str, str], list[int]] = {}
@@ -148,7 +154,34 @@ def measure_sft(corpus: str = "biored") -> dict:
     }
 
 
+def measure_remaining() -> dict:
+    """Tokenise the workloads that are not already in the BioRED file. That file is not rewritten."""
+    done = json.loads((PREPARATION / "qwen_workload_biored.json").read_text(encoding="utf-8"))
+    skip = frozenset(done["few_shot"]["by_condition"])
+    destination = get_paths().assert_output(PREPARATION / "qwen_workload_remaining.json")
+    payload = {
+        "zero_shot_lengths_reused": False,
+        "biored_independent_sft_preserved": str(PREPARATION / "qwen_workload_biored.json"),
+    }
+
+    def publish(section: str, value: dict) -> None:
+        payload[section] = value
+        publish_file(destination, lambda temporary: temporary.write_text(json.dumps(payload) + "\n", encoding="utf-8"))
+        print(json.dumps({"published": section, "conditions": len(value.get("by_condition", {}))}), flush=True)
+
+    publish("biored_few_shot_remaining", measure_few_shot("biored", tuple(f"E{level}" for level in range(8)), ("P0", "P1", "P2", "P3"), skip))
+    publish("bc8_few_shot", measure_few_shot("bc8", tuple(f"E{level}" for level in range(8)), ("P0", "P1", "P2", "P3")))
+    publish("drugprot_few_shot", measure_few_shot("drugprot", ("native",), ("P0", "P1", "P2", "P3")))
+    publish("drugprot_sft", measure_sft("drugprot", ("native",)))
+    return payload
+
+
 def main() -> int:
+    import sys
+
+    if len(sys.argv) > 1 and sys.argv[1] == "remaining":
+        measure_remaining()
+        return 0
     payload = {"few_shot": measure_few_shot(), "sft": measure_sft()}
     destination = get_paths().assert_output(PREPARATION / "qwen_workload_biored.json")
     publish_file(destination, lambda temporary: temporary.write_text(json.dumps(payload) + "\n", encoding="utf-8"))

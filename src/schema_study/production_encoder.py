@@ -1,54 +1,160 @@
-"""Production hierarchical encoder loop.
+"""Hierarchical and sensitivity losses for the biomedical encoders.
 
-`train_hierarchical` is the loop the dispatcher calls. The CPU test builds the
-same module and runs that function. It does not load BioLinkBERT weights.
+The small encoder is only a CPU fixture. A production task loads BiomedBERT or
+BioLinkBERT through `load_pretrained_encoder` and uses schema head widths.
 """
 
 from __future__ import annotations
+
+from pathlib import Path
 
 import torch
 import torch.nn.functional as F
 from torch import nn
 
 from schema_study.formal_optim import HEADS, consistency_kl, equal_mean_head_loss, map_native_distribution, parent_child_penalty
-class ProductionHierarchicalEncoder(nn.Module):
-    def __init__(self, vocab: int = 32, hidden: int = 8) -> None:
+from schema_study.production_assets import encoder_layout
+from schema_study.production_records import class_weight_from_counts, head_sizes, parent_child_edges
+from schema_study.schemas import default_schema_path, load_schema
+
+
+class TinyEncoder(nn.Module):
+    def __init__(self, vocab: int, hidden: int) -> None:
         super().__init__()
         self.embed = nn.Embedding(vocab, hidden)
-        self.heads = nn.ModuleDict({name: nn.Linear(hidden, 2 + index) for index, name in enumerate(HEADS)})
 
-    def forward(self, input_ids: torch.Tensor) -> dict[str, torch.Tensor]:
-        hidden = self.embed(input_ids).mean(dim=1)
+    def forward(self, input_ids: torch.Tensor, attention_mask: torch.Tensor | None = None) -> torch.Tensor:
+        return self.embed(input_ids).mean(dim=1)
+
+
+class SchemaHierarchicalModel(nn.Module):
+    """Four heads whose widths are the schema label counts."""
+
+    def __init__(self, encoder: nn.Module, hidden: int, sizes: dict[str, int], corpus: str) -> None:
+        super().__init__()
+        self.encoder = encoder
+        self.corpus = corpus
+        self.heads = nn.ModuleDict({name: nn.Linear(hidden, sizes[name]) for name in HEADS})
+
+    def forward(self, input_ids: torch.Tensor, attention_mask: torch.Tensor | None = None) -> dict[str, torch.Tensor]:
+        hidden = self.encoder(input_ids, attention_mask)
+        if hasattr(hidden, "last_hidden_state"):
+            hidden = hidden.last_hidden_state[:, 0]
+        elif hidden.ndim == 3:
+            hidden = hidden[:, 0]
         return {name: layer(hidden) for name, layer in self.heads.items()}
 
 
+def ProductionHierarchicalEncoder(corpus: str = "biored", hidden: int = 8, vocab: int = 32) -> SchemaHierarchicalModel:
+    """CPU fixture with the real schema dimensions. It does not load BiomedBERT."""
+    schema = _schema(corpus)
+    return SchemaHierarchicalModel(TinyEncoder(vocab, hidden), hidden, head_sizes(schema, corpus), corpus)
+
+
+def _schema(corpus: str):
+    code = Path("/home/b5ac/freddieyu.b5ac/project_1")
+    name = "drugprot" if corpus == "drugprot" else "biored"
+    return load_schema(default_schema_path(code, name))
+
+
+def load_pretrained_encoder(model_name: str):
+    """Load the selected encoder. BioLinkBERT is not routed through the BiomedBERT directory."""
+    layout = encoder_layout(model_name)
+    if model_name == "biolinkbert" and "BiomedNLP" in str(layout["model"]):
+        raise RuntimeError("BioLinkBERT resolved to the BiomedBERT directory.")
+    from transformers import AutoModel
+
+    return AutoModel.from_pretrained(layout["model"], local_files_only=True)
+
+
 def focal_loss(logits: torch.Tensor, target: torch.Tensor, gamma: float = 2.0) -> torch.Tensor:
-    """Mean focal loss. Gamma is fixed before any evaluation."""
+    """Single-label focal loss. DrugProt must use the multi-label form."""
+    if target.ndim != 1:
+        raise ValueError("Categorical focal loss is not a DrugProt objective.")
     probabilities = torch.softmax(logits, dim=-1)
     gathered = probabilities.gather(1, target.view(-1, 1)).squeeze(1).clamp_min(1e-8)
     loss = F.nll_loss(torch.log(probabilities), target, reduction="none")
     return ((1.0 - gathered).pow(gamma) * loss).mean()
 
 
-def class_weighted_loss(logits: torch.Tensor, target: torch.Tensor, weight: torch.Tensor) -> torch.Tensor:
-    return F.cross_entropy(logits, target, weight=weight)
+def multilabel_focal_loss(logits: torch.Tensor, target: torch.Tensor, gamma: float = 2.0) -> torch.Tensor:
+    probabilities = torch.sigmoid(logits)
+    loss = F.binary_cross_entropy_with_logits(logits, target, reduction="none")
+    probability_true = probabilities * target + (1.0 - probabilities) * (1.0 - target)
+    return ((1.0 - probability_true).pow(gamma) * loss).mean()
 
 
-def train_hierarchical(model: ProductionHierarchicalEncoder, steps: int = 2, consistency: bool = False) -> dict:
-    """Equal-mean head loss, with the consistency term only when requested."""
+def class_weighted_loss(logits: torch.Tensor, target: torch.Tensor, counts: list[int]) -> tuple[torch.Tensor, list[float]]:
+    weights = class_weight_from_counts(counts)
+    if target.ndim == 1:
+        loss = F.cross_entropy(logits, target, weight=torch.tensor(weights, dtype=logits.dtype))
+    else:
+        loss = F.binary_cross_entropy_with_logits(logits, target, pos_weight=torch.tensor(weights, dtype=logits.dtype))
+    return loss, weights
+
+
+def hierarchical_objective(outputs: dict[str, torch.Tensor], targets: dict[str, torch.Tensor], corpus: str, schema, consistency: bool) -> tuple[torch.Tensor, dict]:
+    """Equal mean of the four head losses, plus one corpus-specific consistency term."""
+    losses = {}
+    if corpus == "drugprot":
+        for name in HEADS:
+            losses[name] = F.binary_cross_entropy_with_logits(outputs[name], targets[name])
+    else:
+        for name in HEADS:
+            losses[name] = F.cross_entropy(outputs[name], targets[name])
+    objective = equal_mean_head_loss(losses)
+    detail = {"normalisation": "equal_mean_of_per_head_mean_losses", "consistency_weight": 0.0}
+    if not consistency:
+        return objective, detail
+    detail["consistency_weight"] = 0.1
+    if corpus == "drugprot":
+        penalties = []
+        for edge in parent_child_edges(schema):
+            parent = torch.sigmoid(outputs[edge["parent_level"]][:, edge["parent_index"]])
+            child = torch.sigmoid(outputs[edge["child_level"]][:, edge["child_index"]])
+            penalties.append(parent_child_penalty(parent, child))
+        objective = objective + 0.1 * torch.stack(penalties).mean()
+        detail["consistency"] = "drugprot_squared_hinge"
+    else:
+        native = torch.softmax(outputs["P3"], dim=-1)
+        terms = []
+        for coarse, historical in (("P0", "P1"), ("P1", "P2"), ("P2", "P3")):
+            from schema_study.production_plan import membership_rows
+
+            membership = torch.tensor(membership_rows(schema, historical, "P4"), dtype=native.dtype)
+            mapped = map_native_distribution(native, membership)
+            terms.append(consistency_kl(F.log_softmax(outputs[coarse], dim=-1), mapped, detach_target=True))
+        objective = objective + 0.1 * torch.stack(terms).mean()
+        detail["consistency"] = "biored_detached_mapped_native_kl"
+    return objective, detail
+
+
+def _batch(model: SchemaHierarchicalModel, step: int, schema) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+    generator = torch.Generator().manual_seed(1000 + step)
+    token_ids = torch.randint(0, 32, (2, 4), generator=generator)
+    targets = {}
+    if model.corpus == "drugprot":
+        for name, layer in model.heads.items():
+            targets[name] = torch.zeros(2, layer.out_features)
+            targets[name][:, 0] = 1
+    else:
+        for name, layer in model.heads.items():
+            targets[name] = torch.zeros(2, dtype=torch.long)
+    return token_ids, targets
+
+
+def train_hierarchical(model: SchemaHierarchicalModel | None = None, steps: int = 2, consistency: bool = False, corpus: str = "biored") -> dict:
+    """Train the hierarchical objective. The fixture uses schema widths and real membership rows."""
+    if model is None:
+        model = ProductionHierarchicalEncoder(corpus)
+    schema = _schema(model.corpus)
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-2)
-    membership = torch.tensor([[1.0, 0.0], [0.0, 1.0]])
     gradients = {}
+    detail = {}
     for step in range(steps):
-        token_ids = torch.randint(0, 32, (2, 4))
-        target = torch.tensor([step % 2, 0])
+        token_ids, targets = _batch(model, step, schema)
         outputs = model(token_ids)
-        losses = {name: F.cross_entropy(outputs[name][:, :2], target) for name in HEADS}
-        objective = equal_mean_head_loss(losses)
-        if consistency:
-            mapped = map_native_distribution(torch.softmax(outputs["P3"][:, :2], dim=-1), membership)
-            objective = objective + 0.1 * consistency_kl(F.log_softmax(outputs["P0"][:, :2], dim=-1), mapped, detach_target=True)
-            objective = objective + parent_child_penalty(torch.sigmoid(outputs["P0"][:, 1]), torch.sigmoid(outputs["P3"][:, 1]))
+        objective, detail = hierarchical_objective(outputs, targets, model.corpus, schema, consistency)
         optimizer.zero_grad(set_to_none=True)
         objective.backward()
         optimizer.step()
@@ -62,25 +168,45 @@ def train_hierarchical(model: ProductionHierarchicalEncoder, steps: int = 2, con
     return {
         "steps": steps,
         "consistency": consistency,
-        "all_heads_receive_gradient": len(head_gradients) >= 4 and all(value > 0 for value in head_gradients.values()),
-        "shared_encoder_gradient": gradients.get("embed.weight", 0.0) > 0,
+        "corpus": model.corpus,
+        "head_sizes": {name: int(layer.out_features) for name, layer in model.heads.items()},
+        "all_heads_receive_gradient": len({name.split(".")[1] for name in head_gradients}) == 4 and all(value > 0 for value in head_gradients.values()),
+        "shared_encoder_gradient": any(name.startswith("encoder.") and value > 0 for name, value in gradients.items()),
+        "detail": detail,
         "empirical_result": False,
     }
 
 
-def train_encoder(model: nn.Module, steps: int = 1, loss_name: str = "standard") -> dict:
-    """Sensitivity losses use this loop. The standard loss remains the principal reference."""
+def train_encoder(model: nn.Module, steps: int = 1, loss_name: str = "standard", corpus: str = "biored", counts: list[int] | None = None) -> dict:
+    """Sensitivity losses. Class weights are derived from counts, not written in as constants."""
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-2)
+    recorded = None
+    finite = True
     for _step in range(steps):
-        logits = model(torch.randint(0, 32, (4, 3)))["P3"][:, :2]
-        target = torch.zeros(4, dtype=torch.long)
-        if loss_name == "focal":
-            loss = focal_loss(logits, target)
-        elif loss_name == "class_weighted":
-            loss = class_weighted_loss(logits, target, torch.tensor([0.2, 0.8]))
+        outputs = model(torch.randint(0, 32, (4, 3)))
+        logits = outputs["P3"]
+        if corpus == "drugprot":
+            target = torch.zeros(logits.shape[0], logits.shape[-1])
+            target[:, 0] = 1
+            if loss_name == "focal":
+                loss = multilabel_focal_loss(logits, target)
+            elif loss_name == "class_weighted":
+                width = logits.shape[-1]
+                loss, recorded = class_weighted_loss(logits, target, counts or [index + 1 for index in range(width)])
+            else:
+                loss = F.binary_cross_entropy_with_logits(logits, target)
         else:
-            loss = F.cross_entropy(logits, target)
+            target = torch.zeros(logits.shape[0], dtype=torch.long)
+            if loss_name == "focal":
+                loss = focal_loss(logits, target)
+            elif loss_name == "class_weighted":
+                width = logits.shape[-1]
+                loss, recorded = class_weighted_loss(logits, target, counts or [1] * width)
+            else:
+                loss = F.cross_entropy(logits, target)
+        if not torch.isfinite(loss):
+            finite = False
         optimizer.zero_grad(set_to_none=True)
         loss.backward()
         optimizer.step()
-    return {"loss_name": loss_name, "finite": True, "empirical_result": False}
+    return {"loss_name": loss_name, "finite": finite, "class_weights": recorded, "empirical_result": False}

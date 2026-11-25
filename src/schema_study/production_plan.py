@@ -152,12 +152,16 @@ def curriculum_sequence(order: str, examples_by_predicate: dict[str, list[str]])
     if missing:
         raise KeyError(", ".join(missing))
     if order == "mixed":
-        pools = {predicate: list(examples_by_predicate[predicate]) for predicate in PREDICATES}
+        indices = {predicate: 0 for predicate in PREDICATES}
         sequence = []
-        while any(pools.values()):
+        remaining = sum(len(examples_by_predicate[predicate]) for predicate in PREDICATES)
+        while remaining:
             for predicate in PREDICATES:
-                if pools[predicate]:
-                    sequence.append((predicate, pools[predicate].pop(0), "exposure"))
+                index = indices[predicate]
+                if index < len(examples_by_predicate[predicate]):
+                    sequence.append((predicate, examples_by_predicate[predicate][index], "exposure"))
+                    indices[predicate] = index + 1
+                    remaining -= 1
     else:
         sequence = [(predicate, example, "exposure") for predicate in CURRICULUM_EXPOSURE[order] for example in examples_by_predicate[predicate]]
     sequence.extend((FINAL_NATIVE_PREDICATE, example, "final_native") for example in examples_by_predicate[FINAL_NATIVE_PREDICATE])
@@ -205,38 +209,155 @@ EXECUTORS = {
     "lora_sensitivity": "schema_study.production_lora:fit",
     "zero_shot": "schema_study.formal_generate:generate",
     "few_shot": "schema_study.formal_generate:generate",
+    "adapter_inference": "schema_study.formal_generate:generate",
     "constrained": "schema_study.production_inference:constrained_generate",
     "thinking": "schema_study.production_inference:thinking_generate",
     "self_consistency": "schema_study.production_inference:self_consistency",
     "evidence": "schema_study.production_inference:evidence_generate",
     "qualified": "schema_study.production_inference:qualified_generate",
+    "candidate_scoring": "schema_study.production_inference:candidate_scores",
     "certainty": "schema_study.measurement_cpu:main",
     "nli": "schema_study.measurement_cpu:main",
-    "analysis": "schema_study.analysis_plan:synthetic_report",
+    "verifier_adaptation": "schema_study.measurement_cpu:adapt_verifier",
+    "analysis": "schema_study.analysis_plan:analyse_records",
+    "gpt_oss": "schema_study.production_lora:load_causal_lm",
+    "qwen36": None,
+}
+
+IMPLEMENTED_FAMILIES = {
+    "principal_training", "biolinkbert", "hierarchical_multitask", "hierarchical_consistency",
+    "schema_conditioned_lora", "curriculum", "class_imbalance", "negative_sampling",
+    "data_efficiency", "unseen_schema", "encoder_sensitivity", "lora_sensitivity",
+    "zero_shot", "few_shot", "adapter_inference", "constrained", "thinking",
+    "self_consistency", "evidence", "qualified", "candidate_scoring", "certainty",
+    "nli", "verifier_adaptation", "analysis", "gpt_oss",
+}
+BLOCKED_MODELS = {
+    "qwen36": "Transformers 4.57.5 does not recognise model_type qwen3_5. The optional comparison does not block the principal study.",
 }
 
 
 def executor_for(task: dict) -> str | None:
+    if task.get("model") == "qwen36":
+        return None
     if task["family"] == "principal_training":
         return EXECUTORS[task["adaptation"]]
     if task.get("model", "").startswith("qwen") and task["family"] in {"negative_sampling", "data_efficiency", "lora_sensitivity"}:
         return EXECUTORS["lora_sft"]
+    if task.get("model") == "qwen8b" and task["family"] == "negative_sampling":
+        return EXECUTORS["lora_sft"]
     return EXECUTORS.get(task["family"])
 
 
+def _configuration(task: dict) -> dict:
+    """Scientific settings that change the result. Walltime is not one of them."""
+    from schema_study.learning_conditions import lora_configuration
+    from schema_study.models.schedule import STUDY_HYPERPARAMETERS
+
+    if task.get("adaptation") == "lora_sft" or task["family"] in {"schema_conditioned_lora", "curriculum", "unseen_schema", "lora_sensitivity"} or (
+        str(task.get("model", "")).startswith("qwen") and task["family"] in {"negative_sampling", "data_efficiency"}
+    ):
+        configuration = lora_configuration()
+        if task.get("change") == "rank_8":
+            configuration["rank"] = 8
+        elif task.get("change") == "rank_32":
+            configuration["rank"] = 32
+        elif task.get("change") == "lr_5e-5":
+            configuration["learning_rate"] = 5e-5
+        elif task.get("change") == "lr_2e-4":
+            configuration["learning_rate"] = 2e-4
+        configuration["seed"] = task.get("seed")
+        return {key: configuration[key] for key in ("precision", "quantization", "rank", "alpha", "dropout", "learning_rate", "warmup_ratio", "max_epochs", "effective_batch_size", "seed")}
+    configuration = {
+        "precision": "bf16",
+        "learning_rate": task.get("learning_rate", STUDY_HYPERPARAMETERS["learning_rate"]),
+        "max_epochs": STUDY_HYPERPARAMETERS["max_epochs"],
+        "effective_batch_size": STUDY_HYPERPARAMETERS["effective_batch_size"],
+        "objective": task.get("loss") or task.get("adaptation") or "standard",
+        "seed": task.get("seed"),
+    }
+    if task.get("fraction"):
+        configuration["fraction"] = task["fraction"]
+    if task.get("strategy"):
+        configuration["negative_strategy"] = task["strategy"]
+    if "consistency" in task:
+        configuration["consistency_weight"] = task["consistency_weight"]
+    return configuration
+
+
+def _resources(task: dict) -> dict:
+    model = task.get("model", "")
+    if str(model).startswith("qwen32") or model == "qwen32b":
+        return {"gpus": 2, "gpu_options": [1, 2, 4], "cpus": 8, "strategy": "distributed_data_parallel", "partition": "workq", "qos": "normal"}
+    if str(model).startswith("qwen") or model in {"gpt_oss_20b", "qwen36"}:
+        return {"gpus": 1, "gpu_options": [1, 2, 4], "cpus": 8, "strategy": "distributed_data_parallel", "partition": "workq", "qos": "normal"}
+    return {"gpus": 1, "gpu_options": [1], "cpus": 8, "strategy": "single_gpu", "partition": "workq", "qos": "normal"}
+
+
+def _walltime(task: dict) -> str:
+    if task.get("dataset") == "drugprot" and task["family"] in {"principal_training", "biolinkbert"}:
+        return "08:00:00"
+    if task["family"] in {"schema_conditioned_lora", "curriculum", "lora_sensitivity"} or task.get("adaptation") == "lora_sft":
+        return "24:00:00"
+    return "04:00:00"
+
+
 def annotate_task(task: dict) -> dict:
-    """Executable stays false until GPU preflight and approval. An implemented executor is not permission to run."""
+    """A completed implementation is not authorisation. Executable stays false."""
+    from schema_study.learning_conditions import HISTORICAL_PREDICATES
+    from schema_study.production_assets import ENCODERS, GENERATIVE
+    from schema_study.production_records import input_reference
+
     executor = executor_for(task)
-    statuses = ["specified"]
-    if executor:
-        statuses.append("implementation_complete")
-        statuses.append("awaiting_production_gpu_preflight")
-    else:
-        statuses.append("blocked")
     task["executor"] = executor
-    task["statuses"] = statuses
     task["executable"] = False
+    task["authorised"] = False
+    model = task.get("model")
+    if model in ENCODERS:
+        task["model_revision"] = ENCODERS[model]["revision"]
+        task["tokenizer_revision"] = ENCODERS[model]["revision"]
+    elif model in GENERATIVE:
+        task["model_revision"] = GENERATIVE[model]["revision"]
+        task["tokenizer_revision"] = GENERATIVE[model]["revision"]
+    elif model == "deberta_base":
+        from schema_study.production_assets import DEBERTA_REVISION
+        task["model_revision"] = DEBERTA_REVISION
+    if task.get("predicate"):
+        task["schema_predicate"] = task.get("historical_predicate") or HISTORICAL_PREDICATES.get(task["predicate"], task["predicate"])
+    dataset = task.get("dataset") or "biored"
+    kind = "sft" if task.get("adaptation") in {"lora_sft", "full_finetune"} or task["family"] in {
+        "schema_conditioned_lora", "curriculum", "unseen_schema", "lora_sensitivity", "hierarchical_multitask", "hierarchical_consistency",
+    } else "contexts"
+    if dataset in {"biored", "drugprot", "bc8"}:
+        try:
+            task["input"] = input_reference(dataset, "sft" if kind == "sft" and dataset != "bc8" else "contexts")
+        except KeyError:
+            task["input"] = input_reference(dataset, "contexts")
+    task["configuration"] = _configuration(task)
+    entity = task.get("entity", "all")
+    predicate = task.get("predicate", "all")
+    seed = task.get("seed", "none")
+    root = f"/home/b5ac/freddieyu.b5ac/projects/project_1/studies/schema_granularity_v1/runs/formal/formal_matched_e0_e7/{task['family']}/{dataset}/{entity}/{predicate}/seed{seed}/{task['task_id']}"
+    task["output"] = root
+    task["checkpoint"] = root + "/checkpoints"
+    task["validator"] = "completion record with rows_written true, finite loss, and the saved adapter or encoder state"
+    dependencies = ["inputs_prepared", "model_assets", "approval"]
+    if task.get("new_training") is False:
+        dependencies.append("historical_drugprot_checkpoint")
+    if task.get("trains_from"):
+        dependencies.append(task["trains_from"])
+    task["depends_on"] = dependencies
+    task["resources"] = _resources(task)
+    task["walltime"] = _walltime(task)
     task["command"] = f"python -m schema_study.production_dispatch run {task['family']} {task['task_id']}"
+    reason = BLOCKED_MODELS.get(model or "")
+    statuses = ["specified"]
+    if reason or not executor or task["family"] not in IMPLEMENTED_FAMILIES:
+        statuses.append("blocked")
+        task["blocked_reason"] = reason or "production_executor_missing"
+    else:
+        statuses.extend(["implementation_complete", "awaiting_production_gpu_preflight"])
+    task["statuses"] = statuses
     return task
 
 
@@ -291,15 +412,67 @@ def resolved_tasks(reuse_drugprot_encoder: bool = True) -> list[dict]:
     return [annotate_task(task) for group in groups for task in group]
 
 
-def manifest_sha256(commit: str, reuse_drugprot_encoder: bool = True) -> str:
-    """Digest the resolved task definitions. A count summary is not the approval record."""
-    rows = []
-    for task in sorted(resolved_tasks(reuse_drugprot_encoder), key=lambda item: item["task_id"]):
-        rows.append({field: task[field] for field in SCIENTIFIC_FIELDS if field in task})
-        rows[-1]["task_id"] = task["task_id"]
-        rows[-1]["executor"] = task["executor"]
+def scientific_record(task: dict) -> dict:
+    """Fields that change the scientific result. Scheduling fields are omitted."""
+    row = {field: task[field] for field in SCIENTIFIC_FIELDS if field in task}
+    row["task_id"] = task["task_id"]
+    row["executor"] = task.get("executor")
+    row["model_revision"] = task.get("model_revision")
+    row["schema_predicate"] = task.get("schema_predicate")
+    row["input_fingerprint"] = (task.get("input") or {}).get("fingerprint")
+    row["configuration"] = task.get("configuration")
+    return row
+
+
+def approval_digest(tasks: list[dict], commit: str) -> str:
+    rows = [scientific_record(task) for task in sorted(tasks, key=lambda item: item["task_id"])]
     payload = {"account": ACCOUNT, "commit": commit, "scope": "principal_and_agreed_supplementary", "tasks": rows}
-    return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")).hexdigest()
+
+
+def _inference_tasks() -> list[dict]:
+    tasks = []
+    for model in ("qwen8b", "qwen32b"):
+        for dataset, entities in (("biored", BIORED_ENTITIES), ("bc8", BIORED_ENTITIES), ("drugprot", ("native",))):
+            for entity in entities:
+                for predicate in PREDICATES:
+                    for paradigm, family in (("zero_shot", "zero_shot"), ("few_shot", "few_shot")):
+                        tasks.append(_task(family, dataset=dataset, entity=entity, predicate=predicate, model=model, paradigm=paradigm, seed=None))
+    return tasks
+
+
+def _supplementary_tasks(training: list[dict]) -> list[dict]:
+    tasks = []
+    for strategy in ("constrained", "candidate_scoring", "thinking", "self_consistency", "evidence", "qualified"):
+        for dataset, entity in (("biored", "E2"), ("biored", "E7"), ("drugprot", "native")):
+            tasks.append(_task(strategy, dataset=dataset, entity=entity, predicate="P3", model="qwen8b", scope="supplementary_decoding"))
+    for dataset in ("biored", "drugprot"):
+        for paradigm in ("zero_shot", "few_shot"):
+            tasks.append(_task("gpt_oss", dataset=dataset, entity="E2" if dataset == "biored" else "native", predicate="P3", model="gpt_oss_20b", paradigm=paradigm))
+            tasks.append(_task("qwen36", dataset=dataset, entity="E2" if dataset == "biored" else "native", predicate="P3", model="qwen36", paradigm=paradigm))
+    for source in training:
+        if source.get("adaptation") == "lora_sft" or source["family"] in {"schema_conditioned_lora", "curriculum", "unseen_schema", "lora_sensitivity"}:
+            tasks.append(_task(
+                "adapter_inference", dataset=source.get("dataset"), entity=source.get("entity"), predicate=source.get("predicate"),
+                model=source.get("model"), seed=source.get("seed"), trains_from=source["task_id"],
+            ))
+    tasks.append(_task("verifier_adaptation", dataset="scifact", model="deberta_base", split="train_development_held_out_from_reported_baseline"))
+    for dataset in ("biored", "drugprot", "bc8"):
+        tasks.append(_task("analysis", dataset=dataset, statistic="corpus_micro_f1"))
+    tasks.append(_task("certainty", dataset="scifact", model="sentence_level_certainty", labelled_accuracy=False))
+    tasks.append(_task("nli", dataset="scifact", model="deberta_base", role="general_domain_baseline"))
+    return tasks
+
+
+def execution_manifest(reuse_drugprot_encoder: bool = True) -> list[dict]:
+    """Training, inference, measurement and analysis. Continuation segments are not extra training runs."""
+    training = resolved_tasks(reuse_drugprot_encoder)
+    return training + [annotate_task(task) for task in _inference_tasks() + _supplementary_tasks(training)]
+
+
+def manifest_sha256(commit: str, reuse_drugprot_encoder: bool = True) -> str:
+    """Digest the resolved execution definitions. A count summary is not the approval record."""
+    return approval_digest(execution_manifest(reuse_drugprot_encoder), commit)
 
 
 def executing_revision(code_root: Path) -> str | None:
@@ -331,6 +504,14 @@ def gpu_authorised(study_directory: Path, code_root: Path, reuse_drugprot_encode
         and payload.get("scope") == "principal_and_agreed_supplementary"
         and bool(str(payload.get("statement") or "").strip())
     )
+
+
+def retry_decision(kind: str, attempts: int) -> str:
+    """Bounded recovery. An attempt count at the limit stops the condition."""
+    policy = RETRY_POLICY[kind]
+    if attempts >= int(policy["max_attempts"]):
+        return "stop"
+    return str(policy["action"])
 
 
 def submission_allowed(running: int, pending: int, proposed: int) -> tuple[bool, str]:
@@ -384,6 +565,43 @@ def find_cycles(tasks: list[dict]) -> list[list[str]]:
         if colour[task_id] == 0:
             visit(task_id, [])
     return cycles
+
+
+def submission_groups(tasks: list[dict]) -> dict[str, list[str]]:
+    """Group task ids by resource request. This does not submit them."""
+    groups: dict[str, list[str]] = {}
+    for task in tasks:
+        resources = task.get("resources") or {}
+        key = f"gpu{resources.get('gpus', 0)}:{task.get('walltime', 'unset')}"
+        groups.setdefault(key, []).append(task["task_id"])
+    return groups
+
+
+def recover_drugprot_provenance(directory: Path) -> dict:
+    """Separate files that were read from values reconstructed from the writer."""
+    completion = directory / "prediction_complete.json"
+    history = directory / "training_history.jsonl"
+    process = next(directory.glob("processes/*_train/status.json"), None)
+    verified = {
+        "completion_record": completion.is_file(),
+        "history_present": history.is_file(),
+        "process_status_present": process is not None,
+        "checkpoint_bytes": (directory / "checkpoints" / "best" / "checkpoint.pt").stat().st_size if (directory / "checkpoints" / "best" / "checkpoint.pt").is_file() else 0,
+    }
+    if process is not None:
+        verified["process"] = json.loads(process.read_text(encoding="utf-8"))
+    reconstructed = {
+        "model_id": "microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext",
+        "revision": "e1354b7a3a09615f6aba48dfad4b7a613eef7062",
+        "input": "data/inputs/drugprot/target_anchored_v1__biomedbert_e1354b7a/contexts.jsonl",
+        "source": "formal_train.py constants for formal_20261115",
+        "stored_inside_checkpoint": False,
+    }
+    return {
+        "directly_verified": verified,
+        "reconstructed_from_writer": reconstructed,
+        "limitation": "The checkpoint does not store an input or model fingerprint, so reuse is defensible only as a completed run of that writer.",
+    }
 
 
 def drugprot_checkpoint_reusable(directory: Path) -> bool:

@@ -76,15 +76,24 @@ def micro_f1_bootstrap(
     }
 
 
-def synthetic_report(documents: list[dict]) -> dict:
-    """Build the reporting table from controlled records. The records are not study results."""
-    contrast = micro_f1_bootstrap(documents, left="system_a", right="system_b", draws=50, seed=100)
+def analyse_records(documents: list[dict], *, left: str = "system_a", right: str = "system_b") -> dict:
+    """Read prediction counts and recompute corpus micro-F1. This is the formal analysis path."""
+    contrast = micro_f1_bootstrap(documents, left=left, right=right, draws=50, seed=100)
     return {
-        "synthetic": True,
+        "synthetic": all(row.get("synthetic") for row in documents),
         "contrast": contrast,
         "document_f1_averaged": False,
         "rows": len(documents),
+        "catalogue": [item["id"] for item in analysis_catalogue()],
     }
+
+
+def synthetic_report(documents: list[dict]) -> dict:
+    """Controlled records used to test `analyse_records`. They are not study results."""
+    marked = [{**row, "synthetic": True} for row in documents]
+    report = analyse_records(marked)
+    report["synthetic"] = True
+    return report
 
 
 def primary_contrasts() -> dict:

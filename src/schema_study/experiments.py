@@ -54,6 +54,8 @@ AUTHORISED_MODEL_EXECUTION_MODULES = (
     "formal_optim.py",
     "production_lora.py",
     "production_encoder.py",
+    "production_inference.py",
+    "production_assets.py",
 )
 
 
