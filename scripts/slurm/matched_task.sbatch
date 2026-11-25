@@ -38,6 +38,10 @@ case "$1" in
     # expose that compiler. The CUDA runtime libraries stay on the library path.
     unset CUDA_HOME CUDA_PATH CPATH C_INCLUDE_PATH CPLUS_INCLUDE_PATH LIBRARY_PATH CMAKE_PREFIX_PATH PKG_CONFIG_PATH
     export VLLM_USE_FLASHINFER_SAMPLER=0
+    # Triton compiles land on local disk. A shared Lustre cache returns stale file handles.
+    export TRITON_CACHE_DIR="/tmp/${SLURM_JOB_ID}/triton"
+    export TORCHINDUCTOR_CACHE_DIR="/tmp/${SLURM_JOB_ID}/inductor"
+    mkdir -p "$TRITON_CACHE_DIR" "$TORCHINDUCTOR_CACHE_DIR"
     export PATH="/home/b5ac/freddieyu.b5ac/projects/project_1/environments/vllm/bin:/usr/bin:/bin"
     export LD_LIBRARY_PATH="/home/b5ac/freddieyu.b5ac/projects/project_1/environments/vllm/lib/python3.12/site-packages/nvidia/cu13/lib"
     exec /home/b5ac/freddieyu.b5ac/projects/project_1/environments/vllm/bin/python -m schema_study.production_dispatch run "$1" "$2"

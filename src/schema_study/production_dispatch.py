@@ -152,14 +152,16 @@ def _invoke_production(task: dict, workdir: Path, *, gpu_permitted: bool = False
         encoder, _tokenizer = prepare_marker_encoder(encoder_name, int(task.get("seed") or 13))
         model = SchemaHierarchicalModel(encoder, int(encoder.config.hidden_size), head_sizes(schema, corpus), corpus)
         evaluation = population.get("evaluation") or _development_from_candidates(task, schema=schema, hierarchical=True)
-        batches = _hierarchical_batches(task, population["rows"], schema, corpus)
+        def batch_fn():
+            return _hierarchical_batches(task, population["rows"], schema, corpus)
+
         return train_hierarchical(
             model,
             steps=horizon["total_updates"],
             total_steps=horizon["total_updates"],
             consistency=bool(task.get("consistency")),
             corpus=corpus,
-            batches=batches,
+            batch_fn=batch_fn,
             score_fn=_hierarchical_development_score(task, evaluation, schema, corpus),
             output_dir=workdir,
             epoch_updates=horizon["updates_per_epoch"],

@@ -177,14 +177,14 @@ def _write_checkpoint(path: Path, payload: dict) -> None:
     temporary.replace(path)
 
 
-def train_hierarchical(model: SchemaHierarchicalModel | None = None, steps: int = 2, consistency: bool = False, corpus: str = "biored", batches=None, score_fn=None, total_steps: int | None = None, output_dir=None, epoch_updates: int | None = None) -> dict:
+def train_hierarchical(model: SchemaHierarchicalModel | None = None, steps: int = 2, consistency: bool = False, corpus: str = "biored", batches=None, score_fn=None, total_steps: int | None = None, output_dir=None, epoch_updates: int | None = None, batch_fn=None) -> dict:
     """Train the hierarchical objective. A supplied batch iterator is the production population; the default is a schema-width fixture."""
     from schema_study.production_runtime import training_status
 
     if model is None:
         model = ProductionHierarchicalEncoder(corpus)
     schema = _schema(model.corpus)
-    production = batches is not None
+    production = batches is not None or batch_fn is not None
     if production:
         if not torch.cuda.is_available():
             raise RuntimeError("Hierarchical training requires CUDA.")
@@ -209,72 +209,82 @@ def train_hierarchical(model: SchemaHierarchicalModel | None = None, steps: int 
                         state[key] = value.to("cuda")
             completed = int(saved.get("step") or 0)
             best = saved.get("best")
-    produced = _production_batches(model, schema, steps) if batches is None else batches
     step = completed
-    seen = 0
-    for item in produced:
-        if step >= steps:
-            break
-        if seen < completed:
-            seen += 1
-            continue
-        if isinstance(item, dict):
-            token_ids, targets = item["input_ids"], item["targets"]
-            device = next(model.parameters()).device
-            token_ids = token_ids.to(device)
-            mask = item.get("attention_mask")
-            if mask is not None:
-                mask = mask.to(device)
-            targets = {name: value.to(device) for name, value in targets.items()}
-            outputs = model(token_ids, mask)
+    while step < steps:
+        if batch_fn is not None:
+            produced = batch_fn()
+        elif batches is None:
+            produced = _production_batches(model, schema, steps)
         else:
-            token_ids, targets = item
-            outputs = model(token_ids)
-        objective, detail = hierarchical_objective(outputs, targets, model.corpus, schema, consistency)
-        optimizer.zero_grad(set_to_none=True)
-        objective.backward()
-        optimizer.step()
-        step += 1
-        seen += 1
-        if step == 1 or (completed and step == completed + 1):
-            gradients = {
-                name: float(parameter.grad.detach().abs().sum())
-                for name, parameter in model.named_parameters()
-                if parameter.grad is not None
-            }
-            if output_dir is not None and torch.isfinite(objective) and not (Path(output_dir) / "scientific_status.json").is_file():
-                from schema_study.production_runtime import publish_scientific_status
+            produced = batches
+        yielded = False
+        for item in produced:
+            yielded = True
+            if step >= steps:
+                break
+            if step < completed:
+                step += 1
+                continue
+            if isinstance(item, dict):
+                token_ids, targets = item["input_ids"], item["targets"]
+                device = next(model.parameters()).device
+                token_ids = token_ids.to(device)
+                mask = item.get("attention_mask")
+                if mask is not None:
+                    mask = mask.to(device)
+                targets = {name: value.to(device) for name, value in targets.items()}
+                outputs = model(token_ids, mask)
+            else:
+                token_ids, targets = item
+                outputs = model(token_ids)
+            objective, detail = hierarchical_objective(outputs, targets, model.corpus, schema, consistency)
+            optimizer.zero_grad(set_to_none=True)
+            objective.backward()
+            optimizer.step()
+            step += 1
+            if step == 1 or (completed and step == completed + 1):
+                gradients = {
+                    name: float(parameter.grad.detach().abs().sum())
+                    for name, parameter in model.named_parameters()
+                    if parameter.grad is not None
+                }
+                if output_dir is not None and torch.isfinite(objective) and not (Path(output_dir) / "scientific_status.json").is_file():
+                    from schema_study.production_runtime import publish_scientific_status
 
-                publish_scientific_status(Path(output_dir), {
-                    "technical_preflight": True,
-                    "useful_computation_started": time.time(),
-                    "model_loaded": True,
-                    "device": str(next(model.parameters()).device),
-                    "optimiser_steps": 1,
-                    "loss_finite": True,
-                    "checkpoint_validated": False,
-                    "monitoring_guarantees_completion": False,
-                })
-        selection_due = step % epoch_updates == 0 if epoch_updates else step % max(1, horizon) == 0
-        if score_fn is not None and selection_due:
-            metric = float(score_fn(model))
-            if best is None or metric > best["development_micro_f1"]:
-                best = {"step": step, "development_micro_f1": metric}
-                best_state = {key: value.detach().cpu() for key, value in model.state_dict().items()}
-                if output_dir is not None and production:
-                    _write_checkpoint(Path(output_dir) / "checkpoints/best/model.pt", {
-                        "state_dict": best_state,
-                        "best": best,
-                        "corpus": model.corpus,
+                    publish_scientific_status(Path(output_dir), {
+                        "technical_preflight": True,
+                        "useful_computation_started": time.time(),
+                        "model_loaded": True,
+                        "device": str(next(model.parameters()).device),
+                        "optimiser_steps": 1,
+                        "loss_finite": True,
+                        "checkpoint_validated": False,
+                        "monitoring_guarantees_completion": False,
                     })
-        if output_dir is not None and production and (step % 50 == 0 or step == steps):
-            _write_checkpoint(Path(output_dir) / "checkpoints/last/model.pt", {
-                "state_dict": {key: value.detach().cpu() for key, value in model.state_dict().items()},
-                "optimizer": optimizer.state_dict(),
-                "step": step,
-                "best": best,
-                "corpus": model.corpus,
-            })
+            selection_due = step % epoch_updates == 0 if epoch_updates else step % max(1, horizon) == 0
+            if score_fn is not None and selection_due:
+                metric = float(score_fn(model))
+                if best is None or metric > best["development_micro_f1"]:
+                    best = {"step": step, "development_micro_f1": metric}
+                    best_state = {key: value.detach().cpu() for key, value in model.state_dict().items()}
+                    if output_dir is not None and production:
+                        _write_checkpoint(Path(output_dir) / "checkpoints/best/model.pt", {
+                            "state_dict": best_state,
+                            "best": best,
+                            "corpus": model.corpus,
+                        })
+            if output_dir is not None and production and (step % 50 == 0 or step == steps):
+                _write_checkpoint(Path(output_dir) / "checkpoints/last/model.pt", {
+                    "state_dict": {key: value.detach().cpu() for key, value in model.state_dict().items()},
+                    "optimizer": optimizer.state_dict(),
+                    "step": step,
+                    "best": best,
+                    "corpus": model.corpus,
+                })
+        if not yielded:
+            raise RuntimeError("Hierarchical training received no batches.")
+        if batch_fn is None:
+            break
     head_gradients = {name: value for name, value in gradients.items() if name.startswith("heads.")}
     status = training_status(step, horizon, best is not None) if production else "fixture"
     checkpoint_path = Path(output_dir) / "checkpoints/best/model.pt" if output_dir is not None else None
