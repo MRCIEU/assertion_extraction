@@ -16,6 +16,8 @@ The prepared collections, splits, and native labels are unchanged: `biored_candi
 
 Concept inventories no longer take the first observed entity type. BioRED has 3,868 non-empty concept identifiers, 63 mentions without an identifier, 3 composite identifiers, and 1 identifier with more than one native type. BC8 has 3,458 non-empty identifiers, 20 mentions without an identifier, and 5 type conflicts. A composite MeSH identifier is classified only when every descriptor component yields the same admissible chain.
 
+The MeSH-tree counts below, including the proposal that reached E8, treat descriptor-tree nodes as types. That result is retained as an exploratory inventory. The corrected classification, which keeps a MeSH edge out of the primary type unless a stated subclass relation supports it, is in `docs/entity_classification.md`.
+
 ## Entity classification
 
 UMLS remains unavailable. The resources actually used are public and are not committed.
@@ -27,7 +29,7 @@ UMLS remains unavailable. The resources actually used are public and are not com
 | NCBI Taxonomy | taxdump fetched 25 November 2026 | Ancestor ranks for organism identifiers |
 | Cellosaurus | 57.0 | Cell-line category |
 
-MONDO and ChEBI were not acquired. MeSH identifiers already supply the disease and chemical paths used here, and a second hierarchy was not merged into them. Pharmacological roles are not types. A gene identifier is not read as the molecular form in the text. An `rs` identifier is not read as a variant class. A cell line’s disease of origin is stored as an excluded association, not as the next level of the cell-line category. `part_of`, `derived_from`, and pharmacological-action links are not treated as `is_a`.
+MONDO and ChEBI were acquired after this inventory. They are not merged into the MeSH-tree counts in this file. Their use is described in `docs/entity_classification.md`. Pharmacological roles are not types. A gene identifier is not read as the molecular form in the text. An `rs` identifier is not read as a variant class. A cell line’s disease of origin is stored as an excluded association, not as the next level of the cell-line category. `part_of`, `derived_from`, and pharmacological-action links are not treated as `is_a`.
 
 The displayed MeSH path is the lexicographically first tree whose top letter matches the native type. The descriptor itself is the concept identity and is not shown as a type. Later requested levels carry the terminal class forward and do not count that repetition as a new distinction.
 

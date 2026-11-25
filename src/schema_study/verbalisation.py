@@ -1,37 +1,124 @@
-"""Fixed verbalisation of a relation label.
+"""Biological propositions for relation labels.
 
-Templates follow the annotation definitions. They do not add causation,
-mechanism, or certainty that the label does not contain. A parent with
-several native members is spoken as that set.
+Version 2 described how a dataset annotates a pair. Version 3 states the
+biological relationship, or states that the guideline does not define one.
+A reporting sentence says that the source reports the proposition. It does
+not say that the dataset annotated it, and it does not treat discussion as
+supporting evidence.
 """
 
 from __future__ import annotations
 
-VERBALISATION_VERSION = "representation_verbalisation_v2"
+VERBALISATION_VERSION = "representation_verbalisation_v3"
+PREVIOUS_VERBALISATION_VERSION = "representation_verbalisation_v2"
 
-_NATIVE = {
-    "Positive_Correlation": "are annotated with a positive correlation, including an increase or a co-movement in the BioRED guideline",
-    "Negative_Correlation": "are annotated with a negative correlation, including a decrease, treatment, or protective relationship in the BioRED guideline",
-    "Association": "are annotated with Association, the BioRED residual category for pairs not assigned a directional correlation",
-    "Bind": "are annotated with a physical binding relation, subject to the guideline exception that a stated consequential correlation is annotated as that correlation",
-    "Comparison": "are annotated with Comparison; the recovered guideline does not give this label a separate prose definition",
-    "Cotreatment": "are annotated as a combination treatment",
-    "Drug_Interaction": "are annotated with a pharmacodynamic interaction between chemicals given together",
-    "Conversion": "are annotated with a chemical conversion; an overlapping Association instruction remains unresolved",
-    "ACTIVATOR": "are annotated with direct upregulation or activation of the gene or gene product by the chemical",
-    "AGONIST": "are annotated with an agonist relation; the guideline direction of the effect is not uniform",
-    "AGONIST-ACTIVATOR": "are annotated with an agonist that activates the gene or gene product",
-    "AGONIST-INHIBITOR": "are annotated with an agonist that inhibits the gene or gene product",
-    "ANTAGONIST": "are annotated with an antagonist relation",
-    "DIRECT-REGULATOR": "are annotated with direct regulation whose direction is not specified",
-    "INDIRECT-DOWNREGULATOR": "are annotated with indirect downregulation",
-    "INDIRECT-UPREGULATOR": "are annotated with indirect upregulation",
-    "INHIBITOR": "are annotated with direct inhibition or downregulation",
-    "PART-OF": "are annotated with the chemical as part of the gene or gene product",
-    "PRODUCT-OF": "are annotated with the chemical as a product of the gene or gene product",
-    "SUBSTRATE": "are annotated with the chemical as a substrate of the gene or gene product",
-    "SUBSTRATE_PRODUCT-OF": "are annotated with the chemical as both substrate and product",
+# Each entry is (proposition body, definition_status).
+# BioRED relations are not directional. DrugProt keeps chemical then gene roles.
+_PROPOSITIONS = {
+    "Positive_Correlation": (
+        "{a} and {b} are positively associated: their levels or activities move together, or one is described as increasing the other. No specific mechanism is stated.",
+        "defined",
+    ),
+    "Negative_Correlation": (
+        "{a} and {b} are negatively associated: their levels or activities move in opposite directions, or one is described as decreasing or countering the other. No specific mechanism is stated.",
+        "defined",
+    ),
+    "Association": (
+        "{a} and {b} are associated. The relation has no stated direction and no more specific relation from the BioRED inventory.",
+        "defined",
+    ),
+    "Bind": (
+        "{a} and {b} bind one another.",
+        "defined",
+    ),
+    "Comparison": (
+        "A comparison involving {a} and {b} is reported. The annotation guideline does not state what is being compared.",
+        "unresolved_definition",
+    ),
+    "Cotreatment": (
+        "{a} and {b} are administered together.",
+        "defined",
+    ),
+    "Drug_Interaction": (
+        "{a} and {b} have a pharmacodynamic interaction when they are administered together.",
+        "defined",
+    ),
+    "Conversion": (
+        "A chemical conversion relates {a} and {b}. The relation is not directional.",
+        "unresolved_overlap",
+    ),
+    "RELATED_TO": (
+        "{a} and {b} stand in a positive relation from the task inventory. The specific relation is not stated.",
+        "defined",
+    ),
+    "Any_Relation": (
+        "{a} and {b} stand in a positive relation from the task inventory. The specific relation is not stated.",
+        "defined",
+    ),
+    "ACTIVATOR": (
+        "The chemical {a} increases the activity or amount of the gene or gene product {b}.",
+        "defined",
+    ),
+    "AGONIST": (
+        "The chemical {a} acts as an agonist of the gene or gene product {b}. The guideline does not give this label one direction of effect, so none is stated.",
+        "unresolved_direction",
+    ),
+    "AGONIST-ACTIVATOR": (
+        "The chemical {a} is an agonist that increases the activity or amount of the gene or gene product {b}.",
+        "defined",
+    ),
+    "AGONIST-INHIBITOR": (
+        "The chemical {a} is an agonist that decreases the activity or amount of the gene or gene product {b}.",
+        "defined",
+    ),
+    "ANTAGONIST": (
+        "The chemical {a} acts as an antagonist of the gene or gene product {b}.",
+        "defined",
+    ),
+    "DIRECT-REGULATOR": (
+        "The chemical {a} directly regulates the gene or gene product {b}. The direction is not stated.",
+        "defined",
+    ),
+    "INDIRECT-DOWNREGULATOR": (
+        "The chemical {a} indirectly decreases the activity or amount of the gene or gene product {b}.",
+        "defined",
+    ),
+    "INDIRECT-UPREGULATOR": (
+        "The chemical {a} indirectly increases the activity or amount of the gene or gene product {b}.",
+        "defined",
+    ),
+    "INHIBITOR": (
+        "The chemical {a} decreases the activity or amount of the gene or gene product {b}.",
+        "defined",
+    ),
+    "PART-OF": (
+        "The chemical {a} is part of the gene or gene product {b}.",
+        "defined",
+    ),
+    "PRODUCT-OF": (
+        "The chemical {a} is a product of the gene or gene product {b}.",
+        "defined",
+    ),
+    "SUBSTRATE": (
+        "The chemical {a} is a substrate of the gene or gene product {b}.",
+        "defined",
+    ),
+    "SUBSTRATE_PRODUCT-OF": (
+        "The chemical {a} is both a substrate and a product of the gene or gene product {b}.",
+        "defined",
+    ),
 }
+
+_REJECTED = {"missing", "invalid", "rejected"}
+
+
+def prompt_label(label: str) -> str:
+    """Historical prompt strings. Renaming RELATED_TO does not authorise a new generation."""
+    if label == "RELATED_TO":
+        return "Any_Relation"
+    if label == "NO_RELATION":
+        return "No_Relation"
+    return label
 
 
 def verbalise(
@@ -42,55 +129,64 @@ def verbalise(
     members: list[str] | None = None,
     condition: str = "proposition",
     corpus: str = "biored",
+    prediction_status: str = "available",
 ) -> dict:
-    """Return one versioned sentence, or a status when no assertion was produced."""
+    """One versioned proposition, or a status when no positive assertion exists."""
     if condition not in {"proposition", "reporting"}:
         raise ValueError(condition)
+    if prediction_status in _REJECTED:
+        return _empty(label, condition, prediction_status)
     if not label:
-        return {
-            "version": VERBALISATION_VERSION,
-            "status": "not_produced",
-            "text": None,
-            "condition": condition,
-        }
+        return _empty(label, condition, "not_produced")
     if label in {"No_Relation", "NO_RELATION"}:
-        text = (
-            f"No positive relation between {argument_1} and {argument_2} is annotated "
-            "within the dataset scope. This does not establish that the entities have no biological relationship."
-        )
-        return _done(label, condition, text, members or [], causal=False)
+        return _empty(label, condition, "no_positive_assertion")
     native_members = list(members or [label])
-    if len(native_members) > 1:
-        listed = ", ".join(native_members)
-        body = f"are annotated with one of these permitted categories, which are not one shared mechanism: {listed}"
+    if len(native_members) == 1:
+        member = native_members[0]
+        template = _PROPOSITIONS.get(member) or _PROPOSITIONS.get(label)
+        if template is None:
+            return _empty(label, condition, "unresolved_template")
+        text, definition = template
+        text = text.format(a=argument_1, b=argument_2)
+        status = "verbalised"
     else:
-        body = _NATIVE.get(label)
-        if body is None:
-            return {
-                "version": VERBALISATION_VERSION,
-                "status": "unresolved_template",
-                "text": None,
-                "label": label,
-                "condition": condition,
-            }
-    if corpus == "drugprot":
-        pair = f"The chemical {argument_1} and the gene or gene product {argument_2} {body}."
-    else:
-        pair = f"{argument_1} and {argument_2} {body}."
+        pieces = []
+        for member in native_members:
+            template = _PROPOSITIONS.get(member)
+            if template is None:
+                return _empty(label, condition, "unresolved_template")
+            pieces.append(template[0].format(a=argument_1, b=argument_2))
+        numbered = " ".join(f"({index}) {piece}" for index, piece in enumerate(pieces, start=1))
+        text = f"One of the following holds, and they are not one mechanism: {numbered}"
+        definition = "disjunction"
+        status = "verbalised"
     if condition == "reporting":
-        pair = "The source annotation records that " + pair[0].lower() + pair[1:]
-    return _done(label, condition, pair, native_members, causal=False)
-
-
-def _done(label: str, condition: str, text: str, members: list[str], *, causal: bool) -> dict:
+        text = "The source reports that " + text[0].lower() + text[1:]
     return {
         "version": VERBALISATION_VERSION,
-        "status": "verbalised",
+        "status": status,
         "label": label,
         "condition": condition,
         "text": text,
-        "members": members,
-        "adds_causation": causal,
+        "members": native_members,
+        "definition_status": definition,
+        "adds_causation": False,
         "adds_certainty": False,
-        "residual_is_a_disjunction": len(members) > 1,
+        "discussion_is_not_support": True,
+        "residual_is_a_disjunction": len(native_members) > 1,
+        "corpus_roles": "chemical_then_gene" if corpus == "drugprot" else "non_directional",
+    }
+
+
+def _empty(label, condition: str, status: str) -> dict:
+    return {
+        "version": VERBALISATION_VERSION,
+        "status": status,
+        "label": label,
+        "condition": condition,
+        "text": None,
+        "adds_causation": False,
+        "adds_certainty": False,
+        "discussion_is_not_support": True,
+        "residual_is_a_disjunction": False,
     }

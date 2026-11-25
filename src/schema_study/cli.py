@@ -64,6 +64,7 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("prepare-source-references")
     sub.add_parser("prepare-representation-readiness")
     sub.add_parser("prepare-formal-protocol")
+    sub.add_parser("prepare-study-records")
     report_cmd = sub.add_parser("report")
     report_cmd.add_argument("--output", required=True)
     report_cmd.add_argument("--synthetic", action="store_true")
@@ -117,6 +118,10 @@ def main(argv: list[str] | None = None) -> int:
             return prepare()
         if args.command == "prepare-formal-protocol":
             from schema_study.formal_protocol import prepare
+
+            return prepare()
+        if args.command == "prepare-study-records":
+            from schema_study.study_records import prepare
 
             return prepare()
         if args.command == "report":
