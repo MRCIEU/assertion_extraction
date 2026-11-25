@@ -400,7 +400,7 @@ SCIENTIFIC_COMPLETE = {"training_completed", "inference_completed", "completed"}
 RETRYABLE_SLURM = {"TIMEOUT", "NODE_FAIL", "PREEMPTED", "DEADLINE"}
 TERMINAL_SLURM = {"FAILED", "CANCELLED", "OUT_OF_MEMORY", "BOOT_FAIL"}
 MONITORING_SECONDS = 300
-HELD_FAMILIES = {"verifier_adaptation"}
+HELD_FAMILIES = set()
 
 
 def _group_released(entry: dict) -> bool:
@@ -829,7 +829,7 @@ def interpret_generation(raw: str | None, candidate_id: str, schema, level: str)
 
 
 def constrained_sampling(schema_json: dict) -> dict:
-    """vLLM 0.13 structured outputs. This is not an unconstrained sample."""
+    """vLLM 0.33 structured outputs. This is not an unconstrained sample."""
     return {"temperature": 0.0, "max_tokens": 256, "structured_outputs": {"json": schema_json}}
 
 

@@ -73,6 +73,27 @@ def load_pretrained_encoder(model_name: str):
     return AutoModel.from_pretrained(layout["model"], local_files_only=True)
 
 
+def prepare_marker_encoder(model_name: str, seed: int = 13):
+    """Load the encoder and add the same marker embeddings used by the principal BiomedBERT trainer."""
+    from schema_study.experiments import seed_streams
+    from schema_study.inputs import SPECIAL_MARKERS, load_biomedbert_tokenizer
+
+    tokenizer = load_biomedbert_tokenizer(str(encoder_layout(model_name)["tokenizer"]))
+    encoder = load_pretrained_encoder(model_name)
+    before = encoder.get_input_embeddings().weight.shape[0]
+    encoder.resize_token_embeddings(len(tokenizer))
+    after = encoder.get_input_embeddings().weight.shape[0]
+    if after - before != len(SPECIAL_MARKERS):
+        raise RuntimeError(f"Embedding resize mismatch: {before} -> {after}")
+    streams = seed_streams(int(seed), "hierarchical", "shared")
+    generator = torch.Generator()
+    generator.manual_seed(streams["marker_embedding_init"] % (2**31 - 1))
+    with torch.no_grad():
+        rows = torch.randn((len(SPECIAL_MARKERS), encoder.config.hidden_size), generator=generator)
+        encoder.get_input_embeddings().weight[-len(SPECIAL_MARKERS):].copy_(rows * encoder.config.initializer_range)
+    return encoder, tokenizer
+
+
 def focal_loss(logits: torch.Tensor, target: torch.Tensor, gamma: float = 2.0) -> torch.Tensor:
     """Single-label focal loss. DrugProt must use the multi-label form."""
     if target.ndim != 1:
@@ -149,26 +170,63 @@ def _batch(model: SchemaHierarchicalModel, step: int, schema) -> tuple[torch.Ten
     return token_ids, targets
 
 
-def train_hierarchical(model: SchemaHierarchicalModel | None = None, steps: int = 2, consistency: bool = False, corpus: str = "biored", batches=None, score_fn=None, total_steps: int | None = None, output_dir=None) -> dict:
+def _write_checkpoint(path: Path, payload: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(".pt.tmp")
+    torch.save(payload, temporary)
+    temporary.replace(path)
+
+
+def train_hierarchical(model: SchemaHierarchicalModel | None = None, steps: int = 2, consistency: bool = False, corpus: str = "biored", batches=None, score_fn=None, total_steps: int | None = None, output_dir=None, epoch_updates: int | None = None) -> dict:
     """Train the hierarchical objective. A supplied batch iterator is the production population; the default is a schema-width fixture."""
     from schema_study.production_runtime import training_status
 
     if model is None:
         model = ProductionHierarchicalEncoder(corpus)
     schema = _schema(model.corpus)
+    production = batches is not None
+    if production:
+        if not torch.cuda.is_available():
+            raise RuntimeError("Hierarchical training requires CUDA.")
+        model.to("cuda")
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-2)
     gradients = {}
     detail = {}
     best = None
+    best_state = None
     horizon = int(total_steps or steps)
+    completed = 0
+    if output_dir is not None and production:
+        last_path = Path(output_dir) / "checkpoints/last/model.pt"
+        if last_path.is_file():
+            saved = torch.load(last_path, map_location="cpu", weights_only=False)
+            model.load_state_dict(saved["state_dict"])
+            model.to("cuda")
+            optimizer.load_state_dict(saved["optimizer"])
+            for state in optimizer.state.values():
+                for key, value in state.items():
+                    if torch.is_tensor(value):
+                        state[key] = value.to("cuda")
+            completed = int(saved.get("step") or 0)
+            best = saved.get("best")
     produced = _production_batches(model, schema, steps) if batches is None else batches
-    step = 0
+    step = completed
+    seen = 0
     for item in produced:
         if step >= steps:
             break
+        if seen < completed:
+            seen += 1
+            continue
         if isinstance(item, dict):
             token_ids, targets = item["input_ids"], item["targets"]
-            outputs = model(token_ids, item.get("attention_mask"))
+            device = next(model.parameters()).device
+            token_ids = token_ids.to(device)
+            mask = item.get("attention_mask")
+            if mask is not None:
+                mask = mask.to(device)
+            targets = {name: value.to(device) for name, value in targets.items()}
+            outputs = model(token_ids, mask)
         else:
             token_ids, targets = item
             outputs = model(token_ids)
@@ -177,13 +235,14 @@ def train_hierarchical(model: SchemaHierarchicalModel | None = None, steps: int 
         objective.backward()
         optimizer.step()
         step += 1
-        if step == 1:
+        seen += 1
+        if step == 1 or (completed and step == completed + 1):
             gradients = {
                 name: float(parameter.grad.detach().abs().sum())
                 for name, parameter in model.named_parameters()
                 if parameter.grad is not None
             }
-            if output_dir is not None and torch.isfinite(objective):
+            if output_dir is not None and torch.isfinite(objective) and not (Path(output_dir) / "scientific_status.json").is_file():
                 from schema_study.production_runtime import publish_scientific_status
 
                 publish_scientific_status(Path(output_dir), {
@@ -196,24 +255,29 @@ def train_hierarchical(model: SchemaHierarchicalModel | None = None, steps: int 
                     "checkpoint_validated": False,
                     "monitoring_guarantees_completion": False,
                 })
-        if score_fn is not None and step % max(1, horizon) == 0:
+        selection_due = step % epoch_updates == 0 if epoch_updates else step % max(1, horizon) == 0
+        if score_fn is not None and selection_due:
             metric = float(score_fn(model))
             if best is None or metric > best["development_micro_f1"]:
                 best = {"step": step, "development_micro_f1": metric}
+                best_state = {key: value.detach().cpu() for key, value in model.state_dict().items()}
+                if output_dir is not None and production:
+                    _write_checkpoint(Path(output_dir) / "checkpoints/best/model.pt", {
+                        "state_dict": best_state,
+                        "best": best,
+                        "corpus": model.corpus,
+                    })
+        if output_dir is not None and production and (step % 50 == 0 or step == steps):
+            _write_checkpoint(Path(output_dir) / "checkpoints/last/model.pt", {
+                "state_dict": {key: value.detach().cpu() for key, value in model.state_dict().items()},
+                "optimizer": optimizer.state_dict(),
+                "step": step,
+                "best": best,
+                "corpus": model.corpus,
+            })
     head_gradients = {name: value for name, value in gradients.items() if name.startswith("heads.")}
-    production = batches is not None
     status = training_status(step, horizon, best is not None) if production else "fixture"
-    checkpoint_path = None
-    if output_dir is not None and production and status == "training_completed":
-        checkpoint_path = Path(output_dir) / "checkpoints/best/model.pt"
-        checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = checkpoint_path.with_suffix(".pt.tmp")
-        torch.save({
-            "state_dict": {key: value.detach().cpu() for key, value in model.state_dict().items()},
-            "best": best,
-            "corpus": model.corpus,
-        }, temporary)
-        temporary.replace(checkpoint_path)
+    checkpoint_path = Path(output_dir) / "checkpoints/best/model.pt" if output_dir is not None else None
     if output_dir is not None and production:
         from schema_study.production_runtime import publish_scientific_status
 

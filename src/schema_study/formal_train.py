@@ -313,7 +313,7 @@ def train(dataset: str, entity: str, predicate: str, seed: int, model_name: str 
     import torch
     from transformers import get_linear_schedule_with_warmup
 
-    apply_programme()
+    _bind_encoder_contexts(model_name)
     output = Path(output_dir) if output_dir is not None else _output(dataset, entity, predicate, seed)
     if "formal_20261115" in str(output) and os.environ.get("SCHEMA_STUDY_PROGRAMME") == "formal_matched_e0_e7":
         raise RuntimeError("The matched programme must not write into formal_20261115.")
@@ -493,6 +493,7 @@ def _record(output: Path, kind: str, payload: dict) -> None:
 def predict(dataset: str, entity: str, predicate: str, seed: int, model_name: str = "biomedbert", output_dir: Path | None = None, checkpoint: Path | None = None) -> dict:
     import torch
 
+    _bind_encoder_contexts(model_name)
     output = Path(output_dir) if output_dir is not None else _output(dataset, entity, predicate, seed)
     output.mkdir(parents=True, exist_ok=True)
     prediction_path = output / "predictions.jsonl"
@@ -572,6 +573,25 @@ def evaluate(task: dict) -> dict:
         output_dir=Path(task["output"]),
         checkpoint=checkpoint,
     )
+
+
+def _bind_encoder_contexts(model_name: str) -> None:
+    """Principal BiomedBERT keeps its verified windows. BioLinkBERT uses its own verified collection."""
+    apply_programme()
+    if model_name != "biolinkbert":
+        return
+    versions = {
+        "biored": "target_anchored_v2__biolinkbert_b71f5d70_matched_e0_e7",
+        "bc8": "target_anchored_v2__biolinkbert_b71f5d70_matched_e0_e7",
+        "drugprot": "target_anchored_v1__biolinkbert_b71f5d70",
+    }
+    for corpus, version in versions.items():
+        directory = STORAGE / "data/inputs" / corpus / version
+        ready = directory / "READY.json"
+        path = directory / "contexts.jsonl"
+        if not ready.is_file() or not path.is_file():
+            raise RuntimeError(f"BioLinkBERT contexts for {corpus} are not verified. The source windows were not truncated.")
+        CONTEXTS[corpus] = path
 
 
 def apply_programme() -> str:

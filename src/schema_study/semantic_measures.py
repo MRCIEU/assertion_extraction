@@ -28,10 +28,25 @@ GENERAL_NLI = {
     "context_policy": "do_not_truncate_relevant_evidence",
 }
 SCIFACT_ADAPTATION = {
-    "training_authorised": False,
-    "base_checkpoint": GENERAL_NLI["model_id"],
-    "dataset": "allenai/scifact official release",
-    "status": "configuration_only",
+    "training_authorised": True,
+    "base_checkpoint": "MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli",
+    "revision": "6f5cf0a2b59cabb106aca4c287eed12e357e90eb",
+    "dataset": "allenai/scifact official training claims",
+    "selection_population": "claim-grouped 10 percent of the official training claims",
+    "official_development_role": "baseline comparison only; not used to select the adapted checkpoint",
+    "learning_rate": 2e-5,
+    "max_epochs": 5,
+    "effective_batch_size": 16,
+    "optimiser": "AdamW",
+    "weight_decay": 0.01,
+    "warmup_ratio": 0.1,
+    "schedule": "linear_decay",
+    "seeds": [13, 42, 2026],
+    "max_length": 512,
+    "selection_metric": "development_macro_f1",
+    "status": "authorised_starting_configuration",
+    "is_biological_truth": False,
+    "is_target_domain_validity": False,
 }
 CERTAINTY_CANDIDATES = (
     {
@@ -54,9 +69,10 @@ CERTAINTY_CANDIDATES = (
 VERIFICATION_CANDIDATES = (
     {
         "id": "scifact_adaptation",
-        "base_checkpoint": "MoritzLaurer/DeBERTa-v3-xsmall-mnli-fever-anli-ling-wanli",
-        "status": "configuration_only",
-        "requirement": "No training is authorised. The official SciFact release is the adaptation data.",
+        "base_checkpoint": "MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli",
+        "revision": "6f5cf0a2b59cabb106aca4c287eed12e357e90eb",
+        "status": "authorised_starting_configuration",
+        "requirement": "Train on official SciFact training claims. Keep the official development claims out of checkpoint selection.",
     },
     {
         "id": "qwen3_8b_prompted_verifier",

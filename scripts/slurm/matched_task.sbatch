@@ -27,16 +27,20 @@ export SCHEMA_STUDY_PROGRAMME=formal_matched_e0_e7
 
 cd /home/b5ac/freddieyu.b5ac/project_1
 gpus="${SLURM_GPUS_ON_NODE:-${SLURM_GPUS:-1}}"
-distributed=0
+# Training stays on hf-hpc. Generation uses the separate vLLM 0.33 runtime.
+# That runtime has its own PyTorch and is not the training stack.
 case "$1" in
-  zero_shot|few_shot|adapter_inference|constrained|thinking|self_consistency|evidence|qualified|candidate_scoring|gpt_oss|certainty|nli|analysis|verifier_adaptation)
-    distributed=0
-    ;;
-  *)
-    distributed=1
+  zero_shot|few_shot|adapter_inference|constrained|thinking|self_consistency|evidence|qualified|candidate_scoring|gpt_oss)
+    export PYTHONPATH=/home/b5ac/freddieyu.b5ac/project_1/src
+    export PYTHONNOUSERSITE=1
+    CUDA_HOME=/home/b5ac/freddieyu.b5ac/projects/project_1/environments/vllm/lib/python3.12/site-packages/nvidia/cu13
+    export CUDA_HOME
+    export PATH="${CUDA_HOME}/bin:/home/b5ac/freddieyu.b5ac/projects/project_1/environments/vllm/bin:${PATH}"
+    export LD_LIBRARY_PATH="${CUDA_HOME}/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    exec /home/b5ac/freddieyu.b5ac/projects/project_1/environments/vllm/bin/python -m schema_study.production_dispatch run "$1" "$2"
     ;;
 esac
-if [[ "$distributed" == 1 && "$gpus" -gt 1 ]]; then
+if [[ "$gpus" -gt 1 ]]; then
   exec /home/b5ac/freddieyu.b5ac/miniforge3/envs/hf-hpc/bin/torchrun --nproc_per_node="$gpus" -m schema_study.production_dispatch run "$1" "$2"
 fi
 exec /home/b5ac/freddieyu.b5ac/miniforge3/envs/hf-hpc/bin/python -m schema_study.production_dispatch run "$1" "$2"

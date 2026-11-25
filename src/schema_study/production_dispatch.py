@@ -59,10 +59,10 @@ def execute_task(task: dict, workdir: Path, *, gpu_permitted: bool) -> dict:
         raise PermissionError("formal_gpu_execution_is_not_authorised")
     if not task.get("executor"):
         raise RuntimeError("The task has no production executor.")
-    return _invoke_production(task, workdir)
+    return _invoke_production(task, workdir, gpu_permitted=gpu_permitted)
 
 
-def _invoke_production(task: dict, workdir: Path) -> dict:
+def _invoke_production(task: dict, workdir: Path, *, gpu_permitted: bool = False) -> dict:
     """Call the registered executor with the task's model, inputs and configuration."""
     executor = task["executor"]
     if task.get("model") == "qwen36" or "blocked" in task.get("statuses", []):
@@ -138,7 +138,7 @@ def _invoke_production(task: dict, workdir: Path) -> dict:
         )
         return {"completed": result["completed"], "status": result["status"], "total_updates": horizon["total_updates"], "empirical_qwen_result": False}
     if executor == "schema_study.production_encoder:train_hierarchical":
-        from schema_study.production_encoder import SchemaHierarchicalModel, load_pretrained_encoder, train_hierarchical
+        from schema_study.production_encoder import SchemaHierarchicalModel, prepare_marker_encoder, train_hierarchical
         from schema_study.production_records import head_sizes
         from schema_study.schemas import default_schema_path, load_schema
 
@@ -149,7 +149,7 @@ def _invoke_production(task: dict, workdir: Path) -> dict:
         population = select_population(task, _metadata_rows(task))
         horizon = horizon_for_task(task, population.get("candidates") or len(population["rows"]), 1, 1)
         encoder_name = "biolinkbert" if task.get("model") == "biolinkbert" else "biomedbert"
-        encoder = load_pretrained_encoder(encoder_name)
+        encoder, _tokenizer = prepare_marker_encoder(encoder_name, int(task.get("seed") or 13))
         model = SchemaHierarchicalModel(encoder, int(encoder.config.hidden_size), head_sizes(schema, corpus), corpus)
         evaluation = population.get("evaluation") or _development_from_candidates(task, schema=schema, hierarchical=True)
         batches = _hierarchical_batches(task, population["rows"], schema, corpus)
@@ -162,6 +162,7 @@ def _invoke_production(task: dict, workdir: Path) -> dict:
             batches=batches,
             score_fn=_hierarchical_development_score(task, evaluation, schema, corpus),
             output_dir=workdir,
+            epoch_updates=horizon["updates_per_epoch"],
         )
     if executor == "schema_study.formal_train:evaluate":
         from schema_study.formal_train import evaluate
@@ -180,12 +181,16 @@ def _invoke_production(task: dict, workdir: Path) -> dict:
         report = analyse_records(documents)
         return {"completed": True, "status": "analysis_completed", "report": report}
     if executor == "schema_study.measurement_cpu:adapt_verifier":
-        from schema_study.measurement_cpu import adapt_verifier
+        if not gpu_permitted:
+            return {
+                "started": False,
+                "completed": False,
+                "status": "not_started",
+                "reason": "Verifier adaptation runs on the scheduled GPU.",
+            }
+        from schema_study.measurement_cpu import train_adapted_verifier
 
-        payload = adapt_verifier()
-        payload["completed"] = False
-        payload["status"] = "not_started"
-        return payload
+        return train_adapted_verifier(task, workdir)
     module_name, function_name = executor.split(":")
     importlib.import_module(module_name)
     return {"completed": False, "status": "failed", "reason": f"{function_name} has no completed production invocation"}
@@ -410,17 +415,18 @@ class GenerationSession:
             from schema_study.production_assets import GENERATIVE
 
             spec = GENERATIVE[self.specification["model"]]
+            gpus = int((self.task.get("resources") or {}).get("gpus") or 1)
             self.engine = LLM(
                 model=str(spec["path"]),
                 dtype="bfloat16",
                 enable_lora=bool(self.specification.get("adapter")),
+                tensor_parallel_size=max(1, gpus),
+                gpu_memory_utilization=0.9,
             )
             self.loads += 1
         return self.engine
 
-    def _prompts(self, requests: list[dict]) -> list[str]:
-        if not self.specification.get("enable_thinking"):
-            return [request.get("rendered") or request.get("prompt") or "" for request in requests]
+    def _load_tokenizer(self):
         if self.tokenizer is None:
             from transformers import AutoTokenizer
 
@@ -428,6 +434,21 @@ class GenerationSession:
 
             spec = GENERATIVE[self.specification["model"]]
             self.tokenizer = AutoTokenizer.from_pretrained(spec["path"], local_files_only=True, revision=spec["revision"])
+        return self.tokenizer
+
+    def _prompts(self, requests: list[dict]) -> list[str]:
+        if self.specification.get("model") == "gpt_oss_20b":
+            self._load_tokenizer()
+            prompts = []
+            for request in requests:
+                user = request.get("prompt") or ""
+                prompts.append(self.tokenizer.apply_chat_template(
+                    [{"role": "user", "content": user}], tokenize=False, add_generation_prompt=True,
+                ))
+            return prompts
+        if not self.specification.get("enable_thinking"):
+            return [request.get("rendered") or request.get("prompt") or "" for request in requests]
+        self._load_tokenizer()
         prompts = []
         for request in requests:
             messages = request.get("messages")
@@ -796,13 +817,14 @@ def _lora_development_score(task: dict, evaluation: list[dict], tokenizer, predi
 def _hierarchical_batches(task: dict, rows: list[dict], schema, corpus: str, keep_remainder: bool = False):
     """Tokenise the selected candidates. A sequence longer than the encoder window is rejected, not cut down."""
     import torch
-    from transformers import AutoTokenizer
 
     from schema_study.production_assets import encoder_layout
     from schema_study.production_records import multi_hot_target, single_label_target
 
     name = "biolinkbert" if task.get("model") == "biolinkbert" else "biomedbert"
-    tokenizer = AutoTokenizer.from_pretrained(encoder_layout(name)["tokenizer"], local_files_only=True)
+    from schema_study.inputs import load_biomedbert_tokenizer
+
+    tokenizer = load_biomedbert_tokenizer(str(encoder_layout(name)["tokenizer"]))
     needed = {(row["candidate_id"], row["entity"]) for row in rows}
     texts = _context_texts(task["dataset"], needed)
     bucket: list[tuple[list[int], dict, str]] = []
@@ -857,8 +879,9 @@ def _hierarchical_development_score(task: dict, evaluation: list[dict], schema, 
         was_training = model.training
         model.eval()
         with torch.no_grad():
+            device = next(model.parameters()).device
             for batch in prepared:
-                outputs = model(batch["input_ids"], batch["attention_mask"])
+                outputs = model(batch["input_ids"].to(device), batch["attention_mask"].to(device))
                 for index, candidate_id in enumerate(batch["candidate_ids"]):
                     heads = {}
                     for predicate, logits in outputs.items():
@@ -897,7 +920,7 @@ def _evaluate_hierarchical(task: dict, workdir: Path) -> dict:
 
     from schema_study.formal_train import _build_rows
     from schema_study.learning_conditions import HISTORICAL_PREDICATES, RESEARCH_PREDICATES
-    from schema_study.production_encoder import SchemaHierarchicalModel, load_pretrained_encoder
+    from schema_study.production_encoder import SchemaHierarchicalModel, prepare_marker_encoder
     from schema_study.production_records import head_sizes
     from schema_study.production_runtime import DRUGPROT_DEVELOPMENT_DECISION, publish_scientific_status
     from schema_study.schemas import default_schema_path, load_schema
@@ -906,9 +929,11 @@ def _evaluate_hierarchical(task: dict, workdir: Path) -> dict:
     schema = load_schema(default_schema_path(get_paths().code_root, corpus))
     saved = torch.load(checkpoint, map_location="cpu", weights_only=False)
     encoder_name = "biolinkbert" if task.get("model") == "biolinkbert" else "biomedbert"
-    encoder = load_pretrained_encoder(encoder_name)
+    encoder, _tokenizer = prepare_marker_encoder(encoder_name, int(task.get("seed") or 13))
     model = SchemaHierarchicalModel(encoder, int(encoder.config.hidden_size), head_sizes(schema, corpus), corpus)
     model.load_state_dict(saved["state_dict"])
+    if torch.cuda.is_available():
+        model.to("cuda")
     model.eval()
     targets = [("biored", "test"), ("bc8", "bc8")] if task.get("dataset") == "biored" else [("drugprot", "eval")]
     destination = workdir / "predictions.jsonl"
@@ -934,8 +959,9 @@ def _evaluate_hierarchical(task: dict, workdir: Path) -> dict:
             if not population:
                 return {"completed": False, "status": "valid_continuation_required", "reason": f"{target_dataset} final population is empty"}
             scoring = {**task, "dataset": target_dataset}
+            device = next(model.parameters()).device
             for batch in _hierarchical_batches(scoring, population, schema, corpus, keep_remainder=True):
-                outputs = model(batch["input_ids"], batch["attention_mask"])
+                outputs = model(batch["input_ids"].to(device), batch["attention_mask"].to(device))
                 for index, candidate_id in enumerate(batch["candidate_ids"]):
                     heads = {}
                     for predicate, logits in outputs.items():
