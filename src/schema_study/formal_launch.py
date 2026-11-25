@@ -299,7 +299,7 @@ def matched_main(arguments: list[str]) -> int:
                 elapsed_seconds=int(occupancy["elapsed"].get(entry["job_id"], 0)),
             )
             if (
-                task.get("family") in {"thinking", "self_consistency", "gpt_oss"}
+                task.get("family") in {"thinking", "self_consistency", "gpt_oss", "evidence", "qualified", "constrained"}
                 and updated.get("state") == "inference_completed"
                 and not (output or {}).get("configuration_verified")
             ):

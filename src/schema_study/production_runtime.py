@@ -629,7 +629,10 @@ def probe_readiness(task: dict) -> dict:
             from schema_study.production_assets import ENCODERS, GENERATIVE
 
             spec = GENERATIVE.get(model) or ENCODERS.get(model)
-            if model == "deberta_base":
+            if model == "sentence_level_certainty":
+                location = Path("/home/b5ac/freddieyu.b5ac/projects/project_1/cache/huggingface/pedropei-sentence-level-certainty")
+                ready = (location / "config.json").is_file() and (location / "pytorch_model.bin").is_file()
+            elif model == "deberta_base":
                 from schema_study.production_assets import DEBERTA_REVISION, MODELS
 
                 location = MODELS / "MoritzLaurer__DeBERTa-v3-base-mnli-fever-anli" / DEBERTA_REVISION

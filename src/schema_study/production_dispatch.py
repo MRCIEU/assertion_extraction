@@ -193,6 +193,14 @@ def _invoke_production(task: dict, workdir: Path, *, gpu_permitted: bool = False
         from schema_study.measurement_cpu import train_adapted_verifier
 
         return train_adapted_verifier(task, workdir)
+    if executor == "schema_study.measurement_cpu:main":
+        from schema_study.measurement_cpu import run_general_nli, run_sentence_certainty
+
+        if task.get("family") == "nli":
+            return run_general_nli(task, workdir)
+        if task.get("family") == "certainty":
+            return run_sentence_certainty(task, workdir)
+        return {"completed": False, "status": "failed", "reason": "measurement_cpu.main is a benchmark script, not a production task"}
     module_name, function_name = executor.split(":")
     importlib.import_module(module_name)
     return {"completed": False, "status": "failed", "reason": f"{function_name} has no completed production invocation"}
@@ -386,7 +394,7 @@ def backend_specification(task: dict) -> dict:
     if task.get("model") == "gpt_oss_20b":
         specification["max_new_tokens"] = 2048
     if family == "constrained":
-        specification.update({"decoding": "constrained", "structured_outputs": True})
+        specification.update({"decoding": "legal_label_schema", "structured_outputs": True, "legal_label_schema": True})
     elif family == "thinking":
         specification.update({"decoding": "thinking", "enable_thinking": True})
     elif family == "self_consistency":
@@ -441,6 +449,17 @@ class GenerationSession:
         return self.tokenizer
 
     def _prompts(self, requests: list[dict]) -> list[str]:
+        if requests and requests[0].get("prompt_contract"):
+            self._load_tokenizer()
+            return [
+                self.tokenizer.apply_chat_template(
+                    [{"role": "user", "content": request.get("prompt") or ""}],
+                    tokenize=False,
+                    add_generation_prompt=True,
+                    enable_thinking=False,
+                )
+                for request in requests
+            ]
         if self.specification.get("model") == "gpt_oss_20b":
             self._load_tokenizer()
             prompts = []
@@ -490,8 +509,12 @@ class GenerationSession:
             "max_tokens": self.specification["max_new_tokens"],
             "n": 5 if self.specification["decoding"] == "self_consistency" else 1,
         }
-        if self.specification.get("structured_outputs"):
-            sampling["structured_outputs"] = {"json": requests[0].get("schema_json") or {"type": "object"}}
+        if self.specification.get("legal_label_schema") or requests[0].get("schema_json"):
+            from schema_study.supplementary_contracts import legal_label_schema
+
+            sampling["structured_outputs"] = {"json": requests[0].get("schema_json") or legal_label_schema(self.task)}
+        elif self.specification.get("structured_outputs"):
+            sampling["structured_outputs"] = {"json": {"type": "object"}}
         if self.specification.get("token_logprobs"):
             return self._score_labels(requests, engine, sampling, _generation_schema(self.task))
         rows = vllm_generate(self._prompts(requests), sampling, lora_path=self.specification.get("adapter"), engine=engine)
@@ -556,6 +579,12 @@ def _resume_compatible(task: dict, record: dict) -> bool:
         return isinstance(record.get("samples"), list) and len(record["samples"]) == 5
     if task.get("family") == "gpt_oss":
         return record.get("harmony_final_channel") is True
+    if task.get("family") == "evidence":
+        return record.get("prompt_contract") == "evidence_grounded"
+    if task.get("family") == "qualified":
+        return record.get("prompt_contract") == "qualified_assertion"
+    if task.get("family") == "constrained":
+        return record.get("prompt_contract") == "legal_label_schema"
     return True
 
 
@@ -642,12 +671,28 @@ def _family_result(family: str, request: dict, result: dict, schema=None, level:
         aggregated = aggregate(samples, bool(request.get("multi")))
         return {**result, "raw": result.get("raw") or json.dumps([sample["raw"] for sample in samples]), "labels": aggregated["labels"], "samples": samples, "scores": {"valid_samples": aggregated["valid_samples"], "aggregation": aggregated["aggregation"]}}
     if family == "candidate_scoring":
-        from schema_study.production_runtime import require_legal_scores, sequence_logprobs
+        from schema_study.production_runtime import sequence_logprobs
 
         legal = list(request.get("legal_labels") or []) or list((result.get("token_logprobs") or {}).keys())
-        scored = require_legal_scores(sequence_logprobs(result["token_logprobs"]), legal, bool(request.get("multi")))
-        labels = [] if scored["labels"] == ["[]"] else scored["labels"]
-        return {"raw": json.dumps({"labels": labels}), "labels": labels, "scores": scored, "token_logprobs": result["token_logprobs"]}
+        totals = sequence_logprobs(result["token_logprobs"])
+        means = {label: totals[label] / max(1, len(result["token_logprobs"][label])) for label in totals}
+        missing = [label for label in legal if label not in means]
+        if missing or not means:
+            raise RuntimeError("Candidate scoring is missing a score for a legal output.")
+        if request.get("dataset") == "drugprot":
+            empty = means["[]"]
+            labels = [label for label in legal if label != "[]" and means[label] > empty]
+            rule = "drugprot_labels_whose_mean_logprob_beats_the_empty_decision"
+        else:
+            chosen = max(legal, key=lambda label: (means[label], label))
+            labels = [] if chosen == "[]" else [chosen]
+            rule = "argmax_of_mean_token_logprob"
+        return {
+            "raw": json.dumps({"labels": labels}),
+            "labels": labels,
+            "scores": {"length_normalised_mean": means, "sequence_sum": totals, "decision_rule": rule},
+            "token_logprobs": result["token_logprobs"],
+        }
     return result
 
 
@@ -722,7 +767,12 @@ def _run_generation(task: dict, workdir: Path) -> dict:
     directories, allowed, checked = _generation_sources(task, workdir)
     if not checked["ready"]:
         return {"completed": False, "status": "incomplete_inputs", "validation": checked}
-    ledger_path = workdir / "predictions.jsonl"
+    ledger_name = {
+        "evidence": "predictions_evidence_grounded.jsonl",
+        "qualified": "predictions_qualified_assertion.jsonl",
+        "constrained": "predictions_legal_label.jsonl",
+    }.get(task.get("family"), "predictions.jsonl")
+    ledger_path = workdir / ledger_name
     published: dict[str, dict] = {}
     if ledger_path.is_file():
         retained = []
@@ -748,23 +798,53 @@ def _run_generation(task: dict, workdir: Path) -> dict:
             prepared = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
             if allowed is not None:
                 prepared = [row for row in prepared if _request_key(row) in allowed]
+            if task.get("family") in {"evidence", "qualified"}:
+                from schema_study.supplementary_contracts import apply_contract
+
+                prepared = apply_contract(task, prepared)
             expected.extend(row["request_id"] for row in prepared)
             runnable = [row for row in prepared if row["request_id"] in set(pending_requests([row["request_id"] for row in prepared], statuses))]
             if not runnable:
+                continue
+            blocked = [row for row in runnable if row.get("contract_ready") is False]
+            runnable = [row for row in runnable if row.get("contract_ready") is not False]
+            for request in blocked:
+                record = prediction_record(request, {"raw": "", "labels": None}, task, session.specification, "invalid")
+                record["prompt_contract"] = request.get("prompt_contract")
+                record["contract_reason"] = request.get("contract_reason")
+                published[request["request_id"]] = record
+                statuses[request["request_id"]] = "invalid"
+            if not runnable:
+                _write_predictions(ledger_path, published)
                 continue
             for request, result in zip(runnable, session.generate_batch(runnable)):
                 level = task.get("schema_predicate")
                 shaped = _family_result(task["family"], request, result, schema, level)
                 shaped = _parse_generated(task, request, shaped, schema)
+                if task.get("family") in {"evidence", "qualified"}:
+                    from schema_study.supplementary_contracts import interpret_contract
+
+                    interpreted = interpret_contract(task, request, shaped.get("raw"))
+                    shaped = {**shaped, "labels": interpreted["labels"] if interpreted.get("complete") else None, "parsed": interpreted, "evidence": interpreted.get("evidence")}
                 status = classify_output(shaped.get("raw"), shaped.get("labels"), failed=bool(shaped.get("failed")))
                 record = prediction_record(request, shaped, task, session.specification, status)
                 if task.get("family") == "thinking":
                     record["thinking_enabled"] = True
+                if task.get("family") in {"evidence", "qualified", "constrained"}:
+                    record["prompt_contract"] = {
+                        "evidence": "evidence_grounded",
+                        "qualified": "qualified_assertion",
+                        "constrained": "legal_label_schema",
+                    }[task["family"]]
                 if task.get("family") == "gpt_oss":
                     record["harmony_final_channel"] = True
                     record["max_new_tokens"] = session.specification.get("max_new_tokens")
                 if shaped.get("samples"):
                     record["samples"] = shaped["samples"]
+                if shaped.get("evidence"):
+                    record["evidence"] = shaped["evidence"]
+                if shaped.get("parsed") and task.get("family") == "qualified":
+                    record["qualifiers"] = shaped["parsed"].get("qualifiers")
                 if prediction_usable(record):
                     published[request["request_id"]] = record
                     statuses[request["request_id"]] = status
@@ -778,6 +858,10 @@ def _run_generation(task: dict, workdir: Path) -> dict:
         "predictions_usable": scientific_done,
         "engine_loads": session.loads,
         "configuration_verified": True,
+        "evidence_grounded": task.get("family") == "evidence",
+        "qualified_assertion": task.get("family") == "qualified",
+        "legal_label_schema": task.get("family") == "constrained",
+        "historical_label_only_ledger": "predictions.jsonl",
         "thinking_enabled": task.get("family") == "thinking",
         "samples_retained": 5 if task.get("family") == "self_consistency" else None,
     }) + "\n", encoding="utf-8")

@@ -506,7 +506,106 @@ def adapt_verifier(*_args, **_kwargs) -> dict:
     }
 
 
+def evaluate_adapted_checkpoints(workdir: Path) -> dict:
+    """Score official SciFact development from the saved selected checkpoints. This does not retrain or reselect."""
+    local_verifier = Path("/home/b5ac/freddieyu.b5ac/projects/project_1/models") / "MoritzLaurer__DeBERTa-v3-base-mnli-fever-anli" / VERIFIER_REVISION
+    tokenizer, _unused, id2label = _load(str(local_verifier))
+    reports = []
+    for seed in (13, 42, 2026):
+        checkpoint = workdir / f"seed{seed}" / "checkpoints" / "best" / "model.pt"
+        if not checkpoint.is_file():
+            raise FileNotFoundError(checkpoint)
+        saved = torch.load(checkpoint, map_location="cpu", weights_only=False)
+        if saved.get("revision") != VERIFIER_REVISION or int(saved.get("seed", -1)) != seed or "state_dict" not in saved:
+            raise RuntimeError(f"Seed {seed} checkpoint does not carry the pinned verifier provenance.")
+        model = AutoModelForSequenceClassification.from_pretrained(str(local_verifier), local_files_only=True)
+        model.load_state_dict(saved["state_dict"])
+        model.to("cuda" if torch.cuda.is_available() else "cpu")
+        model.eval()
+        official = _scifact(tokenizer, model, id2label)
+        official["seed"] = seed
+        official["selection"] = saved.get("best")
+        official["selection_claims_excluded"] = True
+        official["official_development_used_for_selection"] = False
+        official["entailment_is_biological_truth"] = False
+        official["target_domain_validity"] = False
+        destination = workdir / f"seed{seed}" / "official_development.json"
+        destination.write_text(json.dumps(official, indent=2) + "\n", encoding="utf-8")
+        reports.append({"seed": seed, "metrics": official.get("metrics"), "assessable": official.get("assessable"), "unassessable_context": official.get("unassessable_context")})
+        del model
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    summary = {
+        "seeds": reports,
+        "independent_evaluation": "official SciFact development claims",
+        "not_used_to_select_checkpoints": True,
+        "entailment_is_biological_truth": False,
+        "target_domain_validity": False,
+    }
+    (workdir / "official_development_summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+    return summary
+
+
+def run_general_nli(task: dict, workdir: Path) -> dict:
+    """Score the pinned general-domain DeBERTa on official SciFact development. This is not the adapted verifier."""
+    del task
+    local_verifier = Path("/home/b5ac/freddieyu.b5ac/projects/project_1/models") / "MoritzLaurer__DeBERTa-v3-base-mnli-fever-anli" / VERIFIER_REVISION
+    tokenizer, model, id2label = _load(str(local_verifier))
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    model.to(device)
+    model.eval()
+    result = _scifact(tokenizer, model, id2label)
+    result["checkpoint"] = "general_domain_base"
+    result["revision"] = VERIFIER_REVISION
+    result["adapted_checkpoint"] = False
+    result["entailment_is_biological_truth"] = False
+    result["target_domain_validity"] = False
+    workdir.mkdir(parents=True, exist_ok=True)
+    (workdir / "general_domain_nli.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+    from schema_study.production_runtime import publish_scientific_status
+
+    publish_scientific_status(workdir, {"scientific": "inference_completed", "technical_preflight": True, "predictions_usable": True, "configuration_verified": True, "general_domain_nli": True})
+    return {"completed": True, "status": "inference_completed", "general_domain": True}
+
+
+def run_sentence_certainty(task: dict, workdir: Path) -> dict:
+    """Score sentences with the pinned single-logit certainty estimator. Unlabelled SciFact text is not an accuracy."""
+    del task
+    local_certainty = Path("/home/b5ac/freddieyu.b5ac/projects/project_1/cache/huggingface/pedropei-sentence-level-certainty")
+    if not (local_certainty / "pytorch_model.bin").is_file():
+        raise FileNotFoundError("The pinned sentence-level certainty checkpoint is not at the established path.")
+    tokenizer = AutoTokenizer.from_pretrained(local_certainty, local_files_only=True)
+    model = AutoModelForSequenceClassification.from_pretrained(local_certainty, local_files_only=True)
+    if int(model.config.num_labels) != 1:
+        raise RuntimeError("The loaded checkpoint is not the single-output sentence-level certainty estimator.")
+    model.eval()
+    measured = _certainty_on_scifact(tokenizer, model)
+    payload = {
+        "model_id": CERTAINTY,
+        "revision": "57bb19e0804a77689ca02f2b1d408d162413cdc2",
+        "established_path": str(local_certainty),
+        "revision_embedded_in_snapshot": False,
+        "num_labels": 1,
+        "scale": "raw_score_1_to_6",
+        "higher_means": "more_certain",
+        "not_the_aspect_model": True,
+        "scifact_development_claims": measured,
+        "this_is_not_labelled_accuracy": True,
+    }
+    workdir.mkdir(parents=True, exist_ok=True)
+    (workdir / "sentence_certainty.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    from schema_study.production_runtime import publish_scientific_status
+
+    publish_scientific_status(workdir, {"scientific": "inference_completed", "technical_preflight": True, "predictions_usable": True, "configuration_verified": True, "sentence_level_certainty": True})
+    return {"completed": True, "status": "inference_completed", "labelled_accuracy": False}
+
+
 def main() -> int:
+    import sys
+
+    if len(sys.argv) > 1 and sys.argv[1] == "evaluate-adapted":
+        print(json.dumps(evaluate_adapted_checkpoints(Path(sys.argv[2])), indent=2), flush=True)
+        return 0
     torch.set_num_threads(4)
     destination = get_paths().assert_output(get_paths().study / "reports" / "experimental_preparation")
     local_certainty = Path("/home/b5ac/freddieyu.b5ac/projects/project_1/cache/huggingface/pedropei-sentence-level-certainty")
