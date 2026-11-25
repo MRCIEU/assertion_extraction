@@ -75,25 +75,88 @@ def load_mesh_descriptors(path: Path) -> dict[str, dict]:
         trees: list[str] = []
         actions = 0
         seen_ui = False
+        name = ""
+        in_action = 0
         for event, element in ET.iterparse(handle, events=("start", "end")):
             if event == "start" and element.tag == "DescriptorRecord":
                 current = None
                 trees = []
                 actions = 0
                 seen_ui = False
+                name = ""
+                in_action = 0
+            elif event == "start" and element.tag == "PharmacologicalAction":
+                in_action += 1
             elif event == "end" and element.tag == "DescriptorUI" and not seen_ui:
                 current = (element.text or "").strip()
                 seen_ui = True
-            elif event == "end" and element.tag == "TreeNumber" and seen_ui:
+            elif event == "end" and element.tag == "String" and seen_ui and not name and in_action == 0:
+                name = (element.text or "").strip()
+            elif event == "end" and element.tag == "TreeNumber" and seen_ui and in_action == 0:
                 if element.text:
                     trees.append(element.text.strip())
             elif event == "end" and element.tag == "PharmacologicalAction":
                 actions += 1
+                in_action = max(0, in_action - 1)
             elif event == "end" and element.tag == "DescriptorRecord":
                 if current:
-                    index[current] = {"tree_numbers": list(trees), "n_pharmacological_actions": actions}
+                    index[current] = {
+                        "name": name,
+                        "tree_numbers": list(trees),
+                        "n_pharmacological_actions": actions,
+                    }
                 element.clear()
     return index
+
+
+def tree_labels(descriptors: dict[str, dict]) -> dict[str, str]:
+    """Map a MeSH tree number to the descriptor that owns that exact number."""
+    labels = {}
+    for record in descriptors.values():
+        for number in record.get("tree_numbers") or []:
+            labels.setdefault(number, record.get("name") or "")
+    return labels
+
+
+def concept_inventory(rows: list[dict]) -> dict:
+    """Group mentions by identifier without taking the first entity type."""
+    mentions_without_identifier = 0
+    grouped: dict[str, dict] = {}
+    for row in rows:
+        concept_id = str(row.get("concept_id") or "").strip()
+        if not concept_id or concept_id == "-":
+            mentions_without_identifier += 1
+            continue
+        slot = grouped.setdefault(concept_id, {"n_mentions": 0, "entity_types": set()})
+        slot["n_mentions"] += 1
+        slot["entity_types"].add(str(row.get("entity_type") or ""))
+    concepts = []
+    composites = 0
+    conflicts = 0
+    for concept_id, slot in grouped.items():
+        types = sorted(slot["entity_types"])
+        conflict = len(types) != 1
+        family = identifier_family(concept_id)
+        conflicts += int(conflict)
+        composites += int(family == "composite_mesh")
+        concepts.append(
+            {
+                "concept_id": concept_id,
+                "n_mentions": slot["n_mentions"],
+                "entity_types": types,
+                "entity_type": None if conflict else types[0],
+                "type_conflict": conflict,
+                "identifier_family": family,
+            }
+        )
+    return {
+        "n_mentions": len(rows),
+        "n_mentions_without_identifier": mentions_without_identifier,
+        "n_unique_nonempty_identifiers": len(concepts),
+        "n_composite_identifiers": composites,
+        "n_type_conflicts": conflicts,
+        "concepts": concepts,
+    }
 
 
 def top_levels(tree_numbers: list[str]) -> list[str]:

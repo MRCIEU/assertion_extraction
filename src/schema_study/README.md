@@ -14,5 +14,6 @@ Method: BioRED is one label plus No_Relation, with softmax cross-entropy. DrugPr
 | granularity | Measures label entropy of the frozen entity and predicate levels |
 | source_references | Builds sentence records and candidate passages without choosing findings |
 | representation_readiness | Checks those records and measures MeSH coverage and alternative partitions |
+| formal_protocol | Assembles the pre-training protocol without running a model |
 
 A failed or illegal answer stays in the scored population. It is not treated as a correct empty prediction.

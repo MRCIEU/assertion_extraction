@@ -122,7 +122,14 @@ def _entity_report(paths, descriptors: dict) -> dict:
             row = json.loads(line)
             mentions.append({"concept_id": row.get("concept_id", ""), "entity_type": row.get("entity_type", "")})
             concept_id = str(row.get("concept_id") or "")
-            concepts.setdefault(concept_id, {"concept_id": concept_id, "entity_type": row.get("entity_type", "")})
+            slot = concepts.setdefault(
+                concept_id,
+                {"concept_id": concept_id, "entity_type": row.get("entity_type", ""), "entity_types": set()},
+            )
+            slot["entity_types"].add(row.get("entity_type", ""))
+            if len(slot["entity_types"]) > 1:
+                slot["entity_type"] = "type_conflict"
+                slot["type_conflict"] = True
         report[corpus] = {
             "mentions": summarise_mappings(mentions, descriptors),
             "concepts": summarise_mappings(list(concepts.values()), descriptors),

@@ -12,6 +12,12 @@ are not rewritten.
 from __future__ import annotations
 
 SENTENCE_SEGMENTATION_VERSION = "abbreviation_decimal_v1"
+BIOMEDICAL_SEGMENTER_CANDIDATE = {
+    "name": "scispacy_en_core_sci_sm",
+    "status": "not_executed",
+    "reason": "The segmenter depends on a neural model asset. That asset was not downloaded, and neural inference is not part of this preparation.",
+    "agreement_is_not_correctness": True,
+}
 TERMINAL_PUNCTUATION_VERSION = "terminal_punctuation_v1"
 
 ABBREVIATIONS = frozenset(

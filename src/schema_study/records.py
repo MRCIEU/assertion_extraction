@@ -11,9 +11,11 @@ import json
 import os
 import platform
 import socket
+import subprocess
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable, Mapping, Sequence
+from typing import Callable, Iterable, Mapping, Sequence
 
 import pandas as pd
 import yaml
@@ -75,14 +77,22 @@ def environment_record() -> dict:
 
 
 def publish_file(path: Path, write) -> Path:
-    """Write to a temporary file and replace the destination only after success.
+    """Write to a unique temporary file and replace the destination only after success.
 
-    An exception leaves the previous destination in place and removes the
-    partial file. A reader therefore does not observe an unfinished result.
+    Concurrent writers do not share one temporary name. An exception leaves the
+    previous destination in place and removes the temporary file.
     """
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    temporary = destination.with_name(destination.name + ".partial")
+    handle = tempfile.NamedTemporaryFile(
+        mode="wb",
+        prefix=f".{destination.name}.",
+        suffix=".partial",
+        dir=destination.parent,
+        delete=False,
+    )
+    temporary = Path(handle.name)
+    handle.close()
     try:
         write(temporary)
         os.replace(temporary, destination)
@@ -91,6 +101,69 @@ def publish_file(path: Path, write) -> Path:
             temporary.unlink()
         raise
     return destination
+
+
+def publish_collection(directory: Path, files: Mapping[str, Callable[[Path], None]], manifest: Mapping) -> Path:
+    """Publish every member, then the completion manifest.
+
+    The previous manifest is moved aside before any member is replaced. A
+    failure leaves no manifest that describes a mixture of old and new files.
+    """
+    destination = Path(directory)
+    destination.mkdir(parents=True, exist_ok=True)
+    staged: list[tuple[Path, Path]] = []
+    manifest_path = destination / "completion.json"
+    previous = destination / "completion.json.previous"
+    try:
+        for name, write in files.items():
+            handle = tempfile.NamedTemporaryFile(
+                mode="wb",
+                prefix=f".{name}.",
+                suffix=".partial",
+                dir=destination,
+                delete=False,
+            )
+            temporary = Path(handle.name)
+            handle.close()
+            staged.append((destination / name, temporary))
+            write(temporary)
+        if manifest_path.exists():
+            os.replace(manifest_path, previous)
+        for final, temporary in staged:
+            os.replace(temporary, final)
+        write_json(manifest_path, dict(manifest))
+        if previous.exists():
+            previous.unlink()
+    except Exception:
+        for _final, temporary in staged:
+            if temporary.exists():
+                temporary.unlink()
+        raise
+    return manifest_path
+
+
+def repository_provenance(code_root: Path) -> dict:
+    """The revision that actually ran. A stored expected hash is not provenance."""
+
+    def _git(*args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["git", *args],
+            cwd=code_root,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+    revision = _git("rev-parse", "HEAD")
+    status = _git("status", "--porcelain")
+    lines = [line for line in status.stdout.splitlines() if line.strip()] if status.returncode == 0 else []
+    return {
+        "revision": revision.stdout.strip() if revision.returncode == 0 else None,
+        "revision_available": revision.returncode == 0,
+        "working_tree_dirty": bool(lines) if status.returncode == 0 else None,
+        "uncommitted_paths": lines[:80],
+        "hard_coded_commit_is_not_provenance": True,
+    }
 
 
 def write_json(path: Path, payload: Mapping | Sequence) -> None:
