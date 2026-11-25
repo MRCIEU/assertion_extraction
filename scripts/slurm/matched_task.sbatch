@@ -33,10 +33,13 @@ case "$1" in
   zero_shot|few_shot|adapter_inference|constrained|thinking|self_consistency|evidence|qualified|candidate_scoring|gpt_oss)
     export PYTHONPATH=/home/b5ac/freddieyu.b5ac/project_1/src
     export PYTHONNOUSERSITE=1
+    # Drop the training environment's compiler and header paths. FlashInfer
+    # JIT must use the CUDA toolkit shipped with this vLLM runtime.
+    unset CPATH C_INCLUDE_PATH CPLUS_INCLUDE_PATH LIBRARY_PATH CMAKE_PREFIX_PATH PKG_CONFIG_PATH
     CUDA_HOME=/home/b5ac/freddieyu.b5ac/projects/project_1/environments/vllm/lib/python3.12/site-packages/nvidia/cu13
     export CUDA_HOME
-    export PATH="${CUDA_HOME}/bin:/home/b5ac/freddieyu.b5ac/projects/project_1/environments/vllm/bin:${PATH}"
-    export LD_LIBRARY_PATH="${CUDA_HOME}/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+    export PATH="${CUDA_HOME}/bin:/home/b5ac/freddieyu.b5ac/projects/project_1/environments/vllm/bin:/usr/bin:/bin"
+    export LD_LIBRARY_PATH="${CUDA_HOME}/lib"
     exec /home/b5ac/freddieyu.b5ac/projects/project_1/environments/vllm/bin/python -m schema_study.production_dispatch run "$1" "$2"
     ;;
 esac
