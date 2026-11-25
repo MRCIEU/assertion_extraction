@@ -65,6 +65,17 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("prepare-representation-readiness")
     sub.add_parser("prepare-formal-protocol")
     sub.add_parser("prepare-study-records")
+    sub.add_parser("prepare-experimental-inputs")
+    matched = sub.add_parser("build-matched-inputs")
+    matched.add_argument("--corpus", required=True, choices=["biored", "bc8"])
+    matched.add_argument("--shard-index", type=int, required=True)
+    matched.add_argument("--shard-count", type=int, required=True)
+    matched.add_argument("--workers", type=int, default=8)
+    merge = sub.add_parser("merge-matched-inputs")
+    merge.add_argument("--corpus", required=True, choices=["biored", "bc8"])
+    merge.add_argument("--shard-count", type=int, default=8)
+    sub.add_parser("measure-qwen-lengths")
+    sub.add_parser("finalise-experimental-inputs")
     report_cmd = sub.add_parser("report")
     report_cmd.add_argument("--output", required=True)
     report_cmd.add_argument("--synthetic", action="store_true")
@@ -124,6 +135,27 @@ def main(argv: list[str] | None = None) -> int:
             from schema_study.study_records import prepare
 
             return prepare()
+        if args.command == "prepare-experimental-inputs":
+            from schema_study.experimental_preparation import prepare
+
+            return prepare()
+        if args.command == "build-matched-inputs":
+            from schema_study.experimental_preparation import build_matched_shard
+
+            return build_matched_shard(args.corpus, args.shard_index, args.shard_count, args.workers)
+        if args.command == "merge-matched-inputs":
+            from schema_study.experimental_preparation import merge_matched_inputs
+
+            print(json.dumps(merge_matched_inputs(args.corpus, args.shard_count), indent=2))
+            return 0
+        if args.command == "measure-qwen-lengths":
+            from schema_study.qwen_lengths import main as measure_qwen_lengths
+
+            return measure_qwen_lengths()
+        if args.command == "finalise-experimental-inputs":
+            from schema_study.experimental_preparation import finalise
+
+            return finalise()
         if args.command == "report":
             return _report(args.output, args.synthetic)
         if args.command == "train":

@@ -225,6 +225,48 @@ def fidelity(support: dict, completeness: dict) -> dict:
     return {"support": support, "completeness": completeness, "combined_score": None}
 
 
+def match_findings(references: list[dict], predictions: list[dict]) -> dict:
+    """Match on a specified key. One prediction is used once, in finding-identifier order."""
+    used = set()
+    pairs = []
+    for reference in sorted(references, key=lambda row: row["finding_id"]):
+        match = None
+        for prediction in predictions:
+            if prediction["prediction_id"] in used:
+                continue
+            if prediction.get("match_key") == reference.get("match_key"):
+                match = prediction
+                break
+        if match is None:
+            pairs.append({"finding_id": reference["finding_id"], "prediction_id": None, "status": "missing"})
+            continue
+        used.add(match["prediction_id"])
+        pairs.append({"finding_id": reference["finding_id"], "prediction_id": match["prediction_id"], "status": "matched"})
+    return {
+        "pairs": pairs,
+        "unmatched_predictions": [row["prediction_id"] for row in predictions if row["prediction_id"] not in used],
+        "denominator": len(references),
+        "recovered": sum(1 for row in pairs if row["status"] == "matched"),
+        "rule": "stable_finding_order_same_match_key_one_prediction_once",
+        "highest_score_selection": False,
+    }
+
+
+def match_multilabel(gold_labels: list[str], predicted_labels: list[str]) -> dict:
+    """Each gold label stays in the denominator. One predicted set does not multiply a finding."""
+    gold = list(dict.fromkeys(gold_labels))
+    predicted = list(dict.fromkeys(predicted_labels))
+    gold_set = set(gold)
+    predicted_set = set(predicted)
+    return {
+        "recovered": [label for label in gold if label in predicted_set],
+        "missed": [label for label in gold if label not in predicted_set],
+        "spurious": [label for label in predicted if label not in gold_set],
+        "denominator": len(gold),
+        "one_prediction_recovers_only_matching_labels": True,
+    }
+
+
 def measurement_identifier(record: dict) -> str:
     """Identical scientific inputs share one measurement. Distinct findings do not."""
     fields = (

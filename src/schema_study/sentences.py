@@ -13,10 +13,12 @@ from __future__ import annotations
 
 SENTENCE_SEGMENTATION_VERSION = "abbreviation_decimal_v1"
 BIOMEDICAL_SEGMENTER_CANDIDATE = {
-    "name": "scispacy_en_core_sci_sm",
-    "status": "not_executed",
-    "reason": "The segmenter depends on a neural model asset. That asset was not downloaded, and neural inference is not part of this preparation.",
+    "name": "en_core_sci_sm",
+    "release": "0.5.4",
+    "sentence_component": "parser",
+    "status": "compared_with_the_baseline_on_biored_development_documents",
     "agreement_is_not_correctness": True,
+    "independent_reference_available": False,
 }
 TERMINAL_PUNCTUATION_VERSION = "terminal_punctuation_v1"
 

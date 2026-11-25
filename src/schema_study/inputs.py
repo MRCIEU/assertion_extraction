@@ -55,6 +55,7 @@ class MentionView:
     role: str
     entity_type: str
     displayed_type: str | None = None
+    displayed_by_level: dict | None = None
 
 
 class TextEncoder(Protocol):
@@ -129,7 +130,11 @@ def render_marked_text(
                 if mention.role != role:
                     continue
                 pieces.append(MARKER_START[role])
-                shown = mapped_type(mention.entity_type, level, merge, getattr(mention, "displayed_type", None))
+                by_level = getattr(mention, "displayed_by_level", None) or {}
+                override = by_level.get(level)
+                if override is None and level not in {"E0", "E1", "E2", "native"}:
+                    override = getattr(mention, "displayed_type", None)
+                shown = mapped_type(mention.entity_type, level, merge, override)
                 if shown is not None:
                     pieces.append(type_token(shown))
         if index + 1 < len(positions):
@@ -194,7 +199,15 @@ def _render_views(
 
 def _shift(mentions: list[MentionView], start: int) -> list[MentionView]:
     return [
-        MentionView(mention.mention_id, mention.start - start, mention.end - start, mention.role, mention.entity_type)
+        MentionView(
+            mention.mention_id,
+            mention.start - start,
+            mention.end - start,
+            mention.role,
+            mention.entity_type,
+            mention.displayed_type,
+            mention.displayed_by_level,
+        )
         for mention in mentions
     ]
 

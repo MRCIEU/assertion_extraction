@@ -97,12 +97,14 @@ def build_context_tables(
     shard_count: int = 1,
     input_version: str | None = None,
     candidate_ids: set[str] | None = None,
+    views_override: dict | None = None,
+    display_by_mention: dict | None = None,
 ) -> dict:
     """Write contexts for prepared candidates. `limit` is only for a timed sample."""
     report = ValidationReport(name=f"{corpus}_inputs")
     documents = {row["document_id"]: row for row in read_jsonl(prepared_dir / "documents.jsonl")}
     mentions = {row["mention_id"]: row for row in read_jsonl(prepared_dir / "entities.jsonl")}
-    views = entity_views(code_root, corpus)
+    views = views_override if views_override is not None else entity_views(code_root, corpus)
     import pyarrow.parquet as pq
 
     candidate_path = prepared_dir / "candidates.parquet"
@@ -145,7 +147,7 @@ def build_context_tables(
     grouped: dict[str, list] = {}
     missing_rows = []
     for candidate in frame:
-        mention_views = _mentions_for_candidate(candidate, mentions, report)
+        mention_views = _mentions_for_candidate(candidate, mentions, report, display_by_mention)
         document = documents.get(candidate["document_id"])
         if document is None or not mention_views:
             missing_rows.append(_missing_record(candidate))
@@ -155,7 +157,10 @@ def build_context_tables(
             (
                 candidate["candidate_id"],
                 candidate["split"],
-                [(item.mention_id, item.start, item.end, item.role, item.entity_type) for item in mention_views],
+                [
+                    (item.mention_id, item.start, item.end, item.role, item.entity_type, item.displayed_type, item.displayed_by_level)
+                    for item in mention_views
+                ],
                 document["text"],
             )
         )
@@ -235,7 +240,7 @@ def build_context_tables(
     return summary
 
 
-def _mentions_for_candidate(candidate: dict, mentions: dict, report: ValidationReport) -> list[MentionView]:
+def _mentions_for_candidate(candidate: dict, mentions: dict, report: ValidationReport, display_by_mention: dict | None = None) -> list[MentionView]:
     views = []
     pairs = (
         (candidate["mention_ids_1"], candidate["argument_1_role"]),
@@ -254,6 +259,7 @@ def _mentions_for_candidate(candidate: dict, mentions: dict, report: ValidationR
                     int(mention["char_end"]),
                     role,
                     mention["entity_type"],
+                    displayed_by_level=(display_by_mention or {}).get(mention_id),
                 )
             )
     return views

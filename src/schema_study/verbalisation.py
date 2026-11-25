@@ -9,7 +9,7 @@ supporting evidence.
 
 from __future__ import annotations
 
-VERBALISATION_VERSION = "representation_verbalisation_v3"
+VERBALISATION_VERSION = "representation_verbalisation_v4"
 PREVIOUS_VERBALISATION_VERSION = "representation_verbalisation_v2"
 
 # Each entry is (proposition body, definition_status).
@@ -32,7 +32,7 @@ _PROPOSITIONS = {
         "defined",
     ),
     "Comparison": (
-        "A comparison involving {a} and {b} is reported. The annotation guideline does not state what is being compared.",
+        "A comparison is reported between {a} and {b}.",
         "unresolved_definition",
     ),
     "Cotreatment": (
@@ -60,7 +60,7 @@ _PROPOSITIONS = {
         "defined",
     ),
     "AGONIST": (
-        "The chemical {a} acts as an agonist of the gene or gene product {b}. The guideline does not give this label one direction of effect, so none is stated.",
+        "The chemical {a} acts as an agonist of the gene or gene product {b}.",
         "unresolved_direction",
     ),
     "AGONIST-ACTIVATOR": (
@@ -140,6 +140,8 @@ def verbalise(
         return _empty(label, condition, "not_produced")
     if label in {"No_Relation", "NO_RELATION"}:
         return _empty(label, condition, "no_positive_assertion")
+    if not str(argument_1 or "").strip() or not str(argument_2 or "").strip():
+        return _empty(label, condition, "unresolved_entity")
     native_members = list(members or [label])
     if len(native_members) == 1:
         member = native_members[0]

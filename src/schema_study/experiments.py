@@ -50,6 +50,7 @@ AUTHORISED_MODEL_EXECUTION_MODULES = (
     "smoke_biomedbert.py",
     "models/torch_backend.py",
     "models/qwen_backend.py",
+    "measurement_cpu.py",
 )
 
 

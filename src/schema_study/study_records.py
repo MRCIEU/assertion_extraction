@@ -217,10 +217,7 @@ def _classify(paths, resources: dict) -> tuple[list[dict], dict]:
                     for node in (classified.get("mesh_chain") or [])
                 ],
                 "database_type": classified.get("database_type"),
-                "displayed": {
-                    f"E{level}": displayed_type(native, chain, level, E1_MERGE)
-                    for level in range(0, 6)
-                },
+                "displayed": {},
             }
             records.append(record)
             status_counts[record["status"]] += 1
@@ -242,6 +239,12 @@ def _classify(paths, resources: dict) -> tuple[list[dict], dict]:
         }
     depth = proposed_global_depth(dict(biored_new))
     proposed = ["E0", "E1", "E2"] + [f"E{level}" for level in range(3, depth + 1)]
+    for record in records:
+        chain = record["chain"]
+        record["displayed"] = {
+            level_name: displayed_type(record["entity_type"], chain, int(level_name[1:]), E1_MERGE)
+            for level_name in proposed
+        }
     ic = information_content(biored_chains)
     top_ic = sorted(ic.items(), key=lambda item: -item[1])[:15]
     return records, {
