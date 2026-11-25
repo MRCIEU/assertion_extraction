@@ -629,7 +629,12 @@ def probe_readiness(task: dict) -> dict:
             from schema_study.production_assets import ENCODERS, GENERATIVE
 
             spec = GENERATIVE.get(model) or ENCODERS.get(model)
-            if spec:
+            if model == "deberta_base":
+                from schema_study.production_assets import DEBERTA_REVISION, MODELS
+
+                location = MODELS / "MoritzLaurer__DeBERTa-v3-base-mnli-fever-anli" / DEBERTA_REVISION
+                ready = location.is_dir() and task.get("model_revision") == DEBERTA_REVISION
+            elif spec:
                 location = Path(spec.get("path") or spec["model"])
                 ready = location.is_dir() and task.get("model_revision") == spec.get("revision")
         except Exception:
