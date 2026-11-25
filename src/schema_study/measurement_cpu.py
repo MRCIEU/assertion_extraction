@@ -318,6 +318,9 @@ def train_adapted_verifier(task: dict, workdir: Path) -> dict:
 
     if not torch.cuda.is_available() or not torch.cuda.is_bf16_supported():
         raise RuntimeError("Verifier adaptation requires a bf16 GPU.")
+    configuration = task.get("configuration") or {}
+    if int(configuration.get("max_epochs") or 0) != 5 or abs(float(configuration.get("learning_rate") or 0) - 2e-5) > 1e-12:
+        raise RuntimeError("The verifier task does not carry the authorised learning rate and epoch count.")
     local_verifier = Path("/home/b5ac/freddieyu.b5ac/projects/project_1/models") / "MoritzLaurer__DeBERTa-v3-base-mnli-fever-anli" / VERIFIER_REVISION
     tokenizer, _unused, id2label = _load(str(local_verifier))
     names = [id2label[str(index)] for index in range(len(id2label))]

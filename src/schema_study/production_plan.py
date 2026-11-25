@@ -291,6 +291,20 @@ def _configuration(task: dict) -> dict:
         "objective": task.get("loss") or task.get("adaptation") or "standard",
         "seed": task.get("seed"),
     }
+    if task.get("family") == "verifier_adaptation":
+        configuration.update({
+            "learning_rate": 2e-5,
+            "max_epochs": 5,
+            "effective_batch_size": 16,
+            "weight_decay": 0.01,
+            "warmup_ratio": 0.1,
+            "optimiser": "AdamW",
+            "schedule": "linear_decay",
+            "seeds": [13, 42, 2026],
+            "max_length": 512,
+            "selection_metric": "development_macro_f1",
+            "selection_population": "claim_grouped_ten_percent_of_official_training_claims",
+        })
     if task.get("fraction"):
         configuration["fraction"] = task["fraction"]
     if task.get("strategy"):
