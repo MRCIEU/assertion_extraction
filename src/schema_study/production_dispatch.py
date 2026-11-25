@@ -161,6 +161,7 @@ def _invoke_production(task: dict, workdir: Path) -> dict:
             corpus=corpus,
             batches=batches,
             score_fn=_hierarchical_development_score(task, evaluation, schema, corpus),
+            output_dir=workdir,
         )
     if executor.startswith("schema_study.production_inference:") or executor == "schema_study.formal_generate:generate":
         return _run_generation(task, workdir)
@@ -346,25 +347,131 @@ def _development_from_candidates(task: dict, schema=None, hierarchical: bool = F
     return rows
 
 
+def backend_specification(task: dict) -> dict:
+    """The scientific decoding settings. A generic call does not stand in for a named strategy."""
+    family = task.get("family")
+    specification = {
+        "model": task.get("model"),
+        "revision": task.get("model_revision"),
+        "adapter": task.get("adapter_path"),
+        "decoding": "greedy",
+        "max_new_tokens": 256,
+        "samples": 1,
+        "temperature": 0.0,
+    }
+    if family == "constrained":
+        specification.update({"decoding": "constrained", "structured_outputs": True})
+    elif family == "thinking":
+        specification.update({"decoding": "thinking", "enable_thinking": True})
+    elif family == "self_consistency":
+        specification.update({"decoding": "self_consistency", "samples": 5, "temperature": 0.7})
+    elif family == "candidate_scoring":
+        specification.update({"decoding": "candidate_scoring", "token_logprobs": True})
+    elif family == "evidence":
+        specification.update({"decoding": "evidence", "requires_spans": True})
+    elif family == "qualified":
+        specification.update({"decoding": "qualified", "requires_qualifications": True})
+    return specification
+
+
+def construct_backend(task: dict):
+    """Build the callable from the task record. The record itself is not a function."""
+    if task.get("backend_name") == "fixture":
+        responses = task.get("fixture_responses") or {}
+
+        def fixture(request):
+            found = responses.get(request["request_id"])
+            if found is None:
+                raise RuntimeError("retryable response missing")
+            return found
+
+        return fixture
+    specification = backend_specification(task)
+
+    def production(request):
+        from schema_study.production_inference import vllm_generate
+
+        sampling = {
+            "model_path": specification["model"],
+            "temperature": specification["temperature"],
+            "max_tokens": specification["max_new_tokens"],
+            "n": 1,
+        }
+        if specification.get("structured_outputs"):
+            sampling["structured_outputs"] = {"json": request.get("schema_json") or {"type": "object"}}
+        if specification.get("enable_thinking"):
+            sampling["enable_thinking"] = True
+        if specification.get("token_logprobs"):
+            legal = request.get("legal_labels") or []
+            if not legal:
+                raise RuntimeError("Candidate scoring has no legal output schema.")
+            collected = {}
+            for label in legal:
+                scored = vllm_generate(
+                    [(request.get("rendered") or request.get("prompt") or "") + str(label)],
+                    {**sampling, "max_tokens": 1, "prompt_logprobs": 1, "n": 1},
+                    lora_path=specification.get("adapter"),
+                )
+                collected[label] = scored[0].get("prompt_token_logprobs") or []
+            return {"raw": "", "labels": None, "token_logprobs": collected}
+        prompt = request.get("rendered") or request.get("prompt")
+        if specification.get("enable_thinking") and request.get("messages"):
+            from transformers import AutoTokenizer
+
+            from schema_study.production_assets import GENERATIVE
+
+            spec = GENERATIVE[specification["model"]]
+            tokenizer = AutoTokenizer.from_pretrained(spec["path"], local_files_only=True, revision=spec["revision"])
+            prompt = tokenizer.apply_chat_template(request["messages"], tokenize=False, add_generation_prompt=True, enable_thinking=True)
+        rows = vllm_generate([prompt], sampling, lora_path=specification.get("adapter"))
+        return rows[0]
+
+    return production
+
+
 def _run_generation(task: dict, workdir: Path) -> dict:
-    """Write rendered requests, then call the backend. A missing prompt is not a completed generation."""
+    """Read verified shards, call the constructed backend, and publish parsed records."""
     from schema_study.production_inference import (
+        apply_requests,
         candidate_scores,
         constrained_generate,
         evidence_generate,
+        pending_requests,
         qualified_generate,
         self_consistency,
         thinking_generate,
     )
-    from schema_study.production_runtime import generation_requests, write_shards
+    from schema_study.production_runtime import generation_requests, validate_request_shards, write_shards
 
-    prepared = generation_requests(task.get("requests") or [])
-    if not prepared:
-        return {"completed": False, "status": "failed", "reason": "The generation task has no rendered model input."}
-    shards = write_shards(prepared, workdir / "shards", int(task.get("shard_size") or 32))
-    backend = task.get("backend")
-    if backend is None:
-        return {"completed": False, "status": "ready", "shards": [str(path) for path in shards], "requests": len(prepared)}
+    if task.get("requests"):
+        import hashlib
+
+        prepared = generation_requests(task["requests"])
+        for row in prepared:
+            row["rendered"] = row.get("rendered") or row["prompt"]
+            row["rendered_sha256"] = row.get("rendered_sha256") or hashlib.sha256(row["rendered"].encode("utf-8")).hexdigest()
+        write_shards(prepared, workdir / "shards", int(task.get("shard_size") or 32))
+        marker = {"requests": len(prepared), "shards": sorted(path.name for path in (workdir / "shards").glob("shard_*.jsonl"))}
+        (workdir / "shards" / "COMPLETE").write_text(json.dumps(marker) + "\n", encoding="utf-8")
+    shard_dir = Path(task["shard_directory"]) if task.get("shard_directory") else workdir / "shards"
+    checked = validate_request_shards(shard_dir)
+    if not checked["ready"]:
+        return {"completed": False, "status": "incomplete_inputs", "validation": checked}
+    prepared = []
+    for path in sorted(shard_dir.glob("shard_*.jsonl")):
+        prepared.extend(json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip())
+    ledger_path = workdir / "predictions.jsonl"
+    completed_rows = {}
+    if ledger_path.is_file():
+        for line in ledger_path.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                row = json.loads(line)
+                completed_rows[row["request_id"]] = row.get("status", "valid")
+    pending = set(pending_requests([row["request_id"] for row in prepared], completed_rows))
+    runnable = [row for row in prepared if row["request_id"] in pending]
+    if not runnable and completed_rows:
+        return {"completed": True, "status": "inference_completed", "requests": len(prepared), "resumed": 0}
+    backend = construct_backend(task)
     runners = {
         "constrained": constrained_generate,
         "thinking": thinking_generate,
@@ -375,15 +482,23 @@ def _run_generation(task: dict, workdir: Path) -> dict:
     }
     family = task["family"]
     if family in runners:
-        result = runners[family](prepared, {}, backend)
+        result = runners[family](runnable, completed_rows, backend)
     else:
-        from schema_study.production_inference import apply_requests
-
-        ledger = apply_requests(prepared, {}, backend)
-        result = {"executed": True, "ledger": ledger}
-    statuses = list((result.get("ledger") or {}).values())
-    completed = bool(result.get("executed")) and statuses and all(status in {"valid", "valid_empty", "invalid"} for status in statuses)
-    return {"completed": completed, "status": "completed" if completed else "failed", "shards": [str(path) for path in shards], **result}
+        result = {"executed": True, "ledger": apply_requests(runnable, completed_rows, backend)}
+    published = []
+    for row in prepared:
+        status = (result.get("ledger") or {}).get(row["request_id"], completed_rows.get(row["request_id"]))
+        if status is None:
+            continue
+        published.append({**row, "status": status, "model": task.get("model"), "revision": task.get("model_revision"), "decoding": backend_specification(task)["decoding"]})
+    temporary = ledger_path.with_suffix(".jsonl.tmp")
+    temporary.write_text("".join(json.dumps(row, sort_keys=True) + "\n" for row in published), encoding="utf-8")
+    temporary.replace(ledger_path)
+    statuses = [row["status"] for row in published]
+    scientific_done = statuses and len(statuses) == len(prepared) and all(status in {"valid", "valid_empty", "invalid"} for status in statuses)
+    status_name = "inference_completed" if scientific_done else "valid_continuation_required"
+    (workdir / "scientific_status.json").write_text(json.dumps({"scientific": status_name, "requests": len(prepared)}) + "\n", encoding="utf-8")
+    return {"completed": scientific_done, "status": status_name, "requests": len(prepared), "ledger": result.get("ledger"), "backend": backend_specification(task)}
 
 
 def _resume_lora(workdir: Path, model, configuration: dict, fingerprints: dict):
@@ -446,25 +561,33 @@ def _lora_development_score(task: dict, evaluation: list[dict], tokenizer, predi
         model.eval()
         rows = []
         context = model.summon_full_params(writeback=False, rank0_only=True) if hasattr(model, "summon_full_params") else nullcontext()
-        with context, torch.no_grad():
-            if rank == 0:
-                for start in range(0, len(prompts), 4):
-                    chunk = prompts[start:start + 4]
-                    encoded = [tokenizer.apply_chat_template([{"role": "user", "content": user}], tokenize=True, add_generation_prompt=True, enable_thinking=False) for _record, _predicate, _historical, user in chunk]
-                    width = max(len(ids) for ids in encoded)
-                    tokens = torch.full((len(chunk), width), int(tokenizer.pad_token_id or 0), dtype=torch.long, device=device)
-                    mask = torch.zeros(len(chunk), width, dtype=torch.long, device=device)
-                    for index, ids in enumerate(encoded):
-                        tokens[index, : len(ids)] = torch.tensor(ids, device=device)
-                        mask[index, : len(ids)] = 1
-                    output = generator.generate(tokens, attention_mask=mask, max_new_tokens=256, do_sample=False)
-                    for index, (record, predicate, historical, _user) in enumerate(chunk):
-                        text = tokenizer.decode(output[index][len(encoded[index]):], skip_special_tokens=True)
-                        parsed = interpret_generation(text, record["candidate_id"], schema, historical)
-                        gold = (record.get("assistant") or {}).get("labels", [])
-                        rows.append({"gold": gold, "predicted": parsed["predicted_labels"], "status": "valid" if parsed["ledger_status"] in {"valid", "valid_empty"} else "invalid", "candidate_id": record["candidate_id"], "raw": text, "illegal_labels": parsed.get("illegal_labels", [])})
+
+        def _generate():
+            for start in range(0, len(prompts), 4):
+                chunk = prompts[start:start + 4]
+                encoded = [tokenizer.apply_chat_template([{"role": "user", "content": user}], tokenize=True, add_generation_prompt=True, enable_thinking=False) for _record, _predicate, _historical, user in chunk]
+                width = max(len(ids) for ids in encoded)
+                tokens = torch.full((len(chunk), width), int(tokenizer.pad_token_id or 0), dtype=torch.long, device=device)
+                mask = torch.zeros(len(chunk), width, dtype=torch.long, device=device)
+                for index, ids in enumerate(encoded):
+                    tokens[index, : len(ids)] = torch.tensor(ids, device=device)
+                    mask[index, : len(ids)] = 1
+                output = generator.generate(tokens, attention_mask=mask, max_new_tokens=256, do_sample=False)
+                for index, (record, predicate, historical, _user) in enumerate(chunk):
+                    text = tokenizer.decode(output[index][len(encoded[index]):], skip_special_tokens=True)
+                    parsed = interpret_generation(text, record["candidate_id"], schema, historical)
+                    gold = (record.get("assistant") or {}).get("labels", [])
+                    rows.append({"gold": gold, "predicted": parsed["predicted_labels"], "status": "valid" if parsed["ledger_status"] in {"valid", "valid_empty"} else "invalid", "candidate_id": record["candidate_id"], "raw": text, "illegal_labels": parsed.get("illegal_labels", [])})
+            return rows
+
+        def _barrier() -> None:
             if torch.distributed.is_available() and torch.distributed.is_initialized():
                 torch.distributed.barrier()
+
+        from schema_study.production_runtime import rank0_generation
+
+        with context, torch.no_grad():
+            rank0_generation(rank, _generate, _barrier)
         metric = float(positive_micro_f1(rows)["f1"]) if rank == 0 else 0.0
         if torch.distributed.is_available() and torch.distributed.is_initialized():
             value = torch.tensor([metric], dtype=torch.float64, device=device if device.type == "cuda" else "cpu")

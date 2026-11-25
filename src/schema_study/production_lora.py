@@ -9,6 +9,7 @@ rank, alpha, dropout or learning rate.
 from __future__ import annotations
 
 import json
+import math
 import random
 import signal
 from pathlib import Path
@@ -545,6 +546,25 @@ def fit(
             optimizer.step()
             losses.append(accumulated / accumulate)
             step += 1
+            if step == 1 and output_dir is not None and not configuration.get("skip_preflight_checkpoint"):
+                technical = _package(model, optimizer, step, position, configuration, fingerprints or {}, None)
+                save_checkpoint(output_dir, technical)
+                reloaded = torch.load(output_dir / "adapter_checkpoint.pt", map_location="cpu", weights_only=False)
+                if reloaded.get("full_base_weights_saved") is not False or not reloaded.get("adapter"):
+                    raise RuntimeError("The first checkpoint is not an adapter checkpoint.")
+                if any(not torch.isfinite(tensor).all() for tensor in reloaded["adapter"].values()):
+                    raise RuntimeError("The first checkpoint contains a non-finite adapter value.")
+                from schema_study.production_runtime import publish_scientific_status
+
+                publish_scientific_status(output_dir, {
+                    "technical_preflight": True,
+                    "model_loaded": True,
+                    "device": str(device),
+                    "optimiser_steps": 1,
+                    "loss_finite": True,
+                    "checkpoint_validated": True,
+                    "monitoring_guarantees_completion": False,
+                })
             interval = int(configuration.get("eval_interval") or total)
             if score_fn is not None and step % interval == 0:
                 model.eval()
@@ -570,6 +590,16 @@ def fit(
         if best and best.get("adapter"):
             save_checkpoint(output_dir / "best", {**package, "adapter": best["adapter"], "role": "best"})
             export_peft_adapter(output_dir / "best_adapter", best["adapter"], configuration)
+        from schema_study.production_runtime import publish_scientific_status
+
+        publish_scientific_status(output_dir, {
+            "scientific": status,
+            "preflight_passed": step >= 1 and all(math.isfinite(value) for value in losses),
+            "technical_preflight": step >= 1,
+            "monitoring_guarantees_completion": False,
+            "steps": step,
+            "total_steps": total,
+        })
     return {
         "losses": losses,
         "learning_rates": learning_rates,
@@ -673,6 +703,49 @@ def gpu_placements() -> dict:
         "qwen32b": {"precision": "bf16", "strategy": "fsdp_full_shard", "one_gpu": "single_process", "gpus": [1, 2, 4], "default_gpus": 2},
         "quantization": "none",
     }
+
+
+def _gloo_rank(rank: int, world: int, directory: str, port: int) -> None:
+    """CPU process-group check. This is not a GH200 or NCCL execution."""
+    import os
+
+    os.environ["MASTER_ADDR"] = "127.0.0.1"
+    os.environ["MASTER_PORT"] = str(port)
+    os.environ["RANK"] = str(rank)
+    os.environ["WORLD_SIZE"] = str(world)
+    import torch.distributed as dist
+
+    from schema_study.production_runtime import rank0_generation
+
+    dist.init_process_group("gloo", rank=rank, world_size=world)
+    calls = {"n": 0}
+
+    def generate():
+        calls["n"] += 1
+        return rank
+
+    produced = rank0_generation(rank, generate, dist.barrier)
+    value = torch.tensor([float(produced if produced is not None else -1)])
+    dist.broadcast(value, src=0)
+    Path(directory, f"rank{rank}.json").write_text(json.dumps({"generated": calls["n"], "broadcast": int(value.item())}) + "\n", encoding="utf-8")
+    dist.destroy_process_group()
+
+
+def cpu_collective_probe(directory: Path) -> dict:
+    """Two CPU ranks enter the same barrier and receive rank 0's value."""
+    import multiprocessing
+
+    directory.mkdir(parents=True, exist_ok=True)
+    context = multiprocessing.get_context("spawn")
+    processes = [context.Process(target=_gloo_rank, args=(rank, 2, str(directory), 29541)) for rank in (0, 1)]
+    for process in processes:
+        process.start()
+    for process in processes:
+        process.join(120)
+    if any(process.exitcode != 0 for process in processes):
+        raise RuntimeError("The CPU collective probe did not finish on every rank.")
+    ranks = [json.loads(Path(directory, f"rank{rank}.json").read_text(encoding="utf-8")) for rank in (0, 1)]
+    return {"ranks": ranks, "gh200": False, "backend": "gloo"}
 
 
 def publish_prediction(path: Path, rows: list[dict]) -> None:

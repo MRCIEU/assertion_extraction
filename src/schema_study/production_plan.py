@@ -314,6 +314,18 @@ def _walltime(task: dict) -> str:
     return "04:00:00"
 
 
+def task_directory(task: dict) -> str:
+    """The matched output directory. Historical formal_20261115 paths are not produced here."""
+    dataset = task.get("dataset") or "biored"
+    entity = task.get("entity", "all")
+    predicate = task.get("predicate", "all")
+    seed = task.get("seed", "none")
+    return (
+        "/home/b5ac/freddieyu.b5ac/projects/project_1/studies/schema_granularity_v1/runs/formal/"
+        f"formal_matched_e0_e7/{task['family']}/{dataset}/{entity}/{predicate}/seed{seed}/{task['task_id']}"
+    )
+
+
 def annotate_task(task: dict) -> dict:
     """A completed implementation is not authorisation. Executable stays false."""
     from schema_study.learning_conditions import HISTORICAL_PREDICATES
@@ -349,15 +361,25 @@ def annotate_task(task: dict) -> dict:
     entity = task.get("entity", "all")
     predicate = task.get("predicate", "all")
     seed = task.get("seed", "none")
-    root = f"/home/b5ac/freddieyu.b5ac/projects/project_1/studies/schema_granularity_v1/runs/formal/formal_matched_e0_e7/{task['family']}/{dataset}/{entity}/{predicate}/seed{seed}/{task['task_id']}"
+    root = task_directory(task)
     task["output"] = root
     task["checkpoint"] = root + "/checkpoints"
     task["validator"] = "completion record with rows_written true, finite loss, and the saved adapter or encoder state"
-    dependencies = ["inputs_prepared", "model_assets", "approval"]
+    info = task.get("input") or {}
+    dependencies = ["approval"]
+    if dataset in {"biored", "drugprot", "bc8"}:
+        dependencies.append(f"inputs:{dataset}:{info.get('kind', 'contexts')}")
+    if model:
+        dependencies.append(f"model:{model}")
     if task.get("new_training") is False:
-        dependencies.append("historical_drugprot_checkpoint")
+        dependencies.append(f"historical:{task.get('historical_predicate')}:{task.get('seed')}")
     if task.get("trains_from"):
         dependencies.append(task["trains_from"])
+        if task.get("adapter_path"):
+            dependencies.append(f"adapter:{task['trains_from']}")
+    if task["family"] in {"zero_shot", "few_shot", "adapter_inference", "constrained", "thinking", "self_consistency", "evidence", "qualified", "candidate_scoring", "gpt_oss"}:
+        source = "few_shot" if task["family"] == "few_shot" else "zero_shot"
+        dependencies.append(f"shards:{source}:{dataset}:{entity}:{predicate}")
     task["depends_on"] = dependencies
     task["resources"] = _resources(task)
     task["walltime"] = _walltime(task)
@@ -464,10 +486,12 @@ def _supplementary_tasks(training: list[dict]) -> list[dict]:
             tasks.append(_task("qwen36", dataset=dataset, entity="E2" if dataset == "biored" else "native", predicate="P3", model="qwen36", paradigm=paradigm))
     for source in training:
         if source.get("adaptation") == "lora_sft" or source["family"] in {"schema_conditioned_lora", "curriculum", "unseen_schema", "lora_sensitivity"}:
-            tasks.append(_task(
+            inference = _task(
                 "adapter_inference", dataset=source.get("dataset"), entity=source.get("entity"), predicate=source.get("predicate"),
                 model=source.get("model"), seed=source.get("seed"), trains_from=source["task_id"],
-            ))
+            )
+            inference["adapter_path"] = task_directory(source) + "/best_adapter"
+            tasks.append(inference)
     tasks.append(_task("verifier_adaptation", dataset="scifact", model="deberta_base", split="train_development_held_out_from_reported_baseline"))
     for dataset in ("biored", "drugprot", "bc8"):
         tasks.append(_task("analysis", dataset=dataset, statistic="corpus_micro_f1"))
@@ -479,7 +503,16 @@ def _supplementary_tasks(training: list[dict]) -> list[dict]:
 def execution_manifest(reuse_drugprot_encoder: bool = True) -> list[dict]:
     """Training, inference, measurement and analysis. Continuation segments are not extra training runs."""
     training = resolved_tasks(reuse_drugprot_encoder)
-    return training + [annotate_task(task) for task in _inference_tasks() + _supplementary_tasks(training)]
+    tasks = training + [annotate_task(task) for task in _inference_tasks() + _supplementary_tasks(training)]
+    inference_families = {"zero_shot", "few_shot", "adapter_inference", "constrained", "thinking", "self_consistency", "evidence", "qualified", "candidate_scoring", "gpt_oss"}
+    upstream = {}
+    for task in tasks:
+        if task.get("family") in inference_families and "blocked" not in task.get("statuses", []):
+            upstream.setdefault(task.get("dataset"), []).append(task["task_id"])
+    for task in tasks:
+        if task.get("family") == "analysis":
+            task["depends_on"] = list(task.get("depends_on", [])) + upstream.get(task.get("dataset"), [])
+    return tasks
 
 
 def manifest_sha256(commit: str, reuse_drugprot_encoder: bool = True) -> str:

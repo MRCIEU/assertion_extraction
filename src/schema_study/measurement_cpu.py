@@ -246,11 +246,14 @@ def adapt_verifier(*_args, **_kwargs) -> dict:
     """Prepare SciFact adaptation without training, and without reusing the reported development claims."""
     return {
         "started": False,
+        "authorised": False,
+        "interface": "prepared",
         "model": VERIFIER,
         "revision": VERIFIER_REVISION,
         "selection": "development slice carved from the SciFact training split",
         "reported_development_claims": "baseline reference only; not used to select the adapted verifier",
         "confirmation": "SciFact test claims, held out from selection",
+        "training_entrypoint": "schema_study.measurement_cpu:adapt_verifier",
         "reason": "formal verifier training is not authorised",
     }
 

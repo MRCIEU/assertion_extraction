@@ -390,6 +390,23 @@ def train(dataset: str, entity: str, predicate: str, seed: int, model_name: str 
             scheduler.step()
             book["optimizer_updates"] += 1
             losses.append(float(loss.detach().float()))
+            if book["optimizer_updates"] == 1 and "formal_20261115" not in str(output):
+                first = _package(encoder, dropout, head, optimizer, scheduler, book, order_rng, torch)
+                _save(output / "checkpoints/last/checkpoint.pt", first)
+                reloaded = torch.load(output / "checkpoints/last/checkpoint.pt", map_location="cpu", weights_only=False)
+                if not reloaded.get("encoder") or any(not torch.isfinite(tensor).all() for tensor in reloaded["encoder"].values()):
+                    raise RuntimeError("The first encoder checkpoint did not reload as finite weights.")
+                from schema_study.production_runtime import publish_scientific_status
+
+                publish_scientific_status(output, {
+                    "technical_preflight": True,
+                    "model_loaded": True,
+                    "device": "cuda",
+                    "optimiser_steps": 1,
+                    "loss_finite": True,
+                    "checkpoint_validated": True,
+                    "monitoring_guarantees_completion": False,
+                })
         metric, threshold, _labels, _probabilities = _score_split(encoder, dropout, head, dev_ids, dev_lengths, dev_rows, classes, dataset, schema, predicate, None, torch)
         book["completed_epochs"] = epoch
         improved = book["best_score"] is None or metric > book["best_score"] or (metric == book["best_score"] and epoch < book["best_epoch"])
@@ -408,6 +425,18 @@ def train(dataset: str, entity: str, predicate: str, seed: int, model_name: str 
             }) + "\n")
         print(f"epoch {epoch} dev_f1 {metric:.6f} seconds {time.perf_counter() - started:.1f}", flush=True)
     _record(output, "train", {"model_called": True, "epochs": book["completed_epochs"], "updates": book["optimizer_updates"], "best_epoch": book["best_epoch"], "best_score": book["best_score"]})
+    if "formal_20261115" not in str(output):
+        from schema_study.production_runtime import publish_scientific_status
+
+        finished = book["completed_epochs"] >= hyperparameters["max_epochs"] and book["best_score"] is not None
+        publish_scientific_status(output, {
+            "scientific": "training_completed" if finished else "valid_continuation_required",
+            "preflight_passed": book["optimizer_updates"] >= 1,
+            "technical_preflight": book["optimizer_updates"] >= 1,
+            "monitoring_guarantees_completion": False,
+            "steps": book["optimizer_updates"],
+            "total_steps": total_steps,
+        })
     return {"completed_epochs": book["completed_epochs"], "best_score": book["best_score"], "updates": book["optimizer_updates"]}
 
 

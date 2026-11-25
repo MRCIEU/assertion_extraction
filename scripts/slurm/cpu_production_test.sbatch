@@ -9,6 +9,7 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
 #SBATCH --time=02:00:00
+#SBATCH --output=/home/b5ac/freddieyu.b5ac/projects/project_1/job_logs/cpu_exec_%j.out
 #SBATCH --export=NIL
 
 set -euo pipefail

@@ -290,6 +290,21 @@ def test_torch_fixture_is_not_collected_without_torch(tmp_path: Path):
     os.environ.pop("WORLD_SIZE", None)
     with pytest.raises(RuntimeError, match="world size"):
         prepare_process(2)
+    status = json.loads((tmp_path / "selection" / "scientific_status.json").read_text(encoding="utf-8"))
+    assert status["scientific"] == "training_completed"
+    assert status["monitoring_guarantees_completion"] is False
+    continued = json.loads((tmp_path / "finger" / "scientific_status.json").read_text(encoding="utf-8"))
+    assert continued["scientific"] == "valid_continuation_required"
+    exported = json.loads((tmp_path / "selection" / "best_adapter" / "adapter_config.json").read_text(encoding="utf-8"))
+    assert exported["peft_type"] == "LORA"
+    assert not (tmp_path / "selection" / "best_adapter" / "adapter_checkpoint.pt").exists()
+    from schema_study.production_lora import cpu_collective_probe
+
+    collective = cpu_collective_probe(tmp_path / "gloo")
+    assert collective["gh200"] is False
+    assert collective["ranks"][0]["generated"] == 1
+    assert collective["ranks"][1]["generated"] == 0
+    assert collective["ranks"][0]["broadcast"] == 0 and collective["ranks"][1]["broadcast"] == 0
 
 
 def test_population_horizon_and_scheduler_are_distinct():
@@ -448,6 +463,136 @@ def test_population_horizon_and_scheduler_are_distinct():
     assert context_sources("drugprot") == ("drugprot",)
 
 
+def test_controller_requeue_preflight_and_backend(tmp_path: Path):
+    import threading
+
+    from schema_study.production_dispatch import _run_generation, backend_specification
+    from schema_study.production_runtime import (
+        controller_decisions,
+        controller_requeue,
+        controller_transaction,
+        coordinate_rank_evaluation,
+        interpret_slurm,
+        merge_group_block,
+        probe_readiness,
+        programme_remaining,
+        publish_validation,
+        reconcile_entry,
+        record_submission,
+        validate_request_shards,
+        verify_peft_adapter,
+    )
+
+    tasks = [
+        {"task_id": "rep", "family": "principal_training", "model": "qwen8b", "resources": {"gpus": 1}, "depends_on": ["approval"], "statuses": [], "representative": True, "representative_group": "g"},
+        {"task_id": "later", "family": "principal_training", "model": "qwen8b", "resources": {"gpus": 1}, "depends_on": ["approval"], "statuses": [], "representative": False, "representative_group": "g"},
+        {"task_id": "adapt", "family": "adapter_inference", "depends_on": ["rep"], "statuses": [], "trains_from": "rep", "representative": True, "representative_group": "adapt"},
+    ]
+    evidence = {"approval": {"ready": True}}
+    first = controller_decisions(tasks, {}, 0, 0, evidence)
+    assert [row["action"] for row in first] == ["submit", "skip", "skip"]
+    state = record_submission({}, "rep", "501", "rev")
+    assert programme_remaining(tasks, state) is True
+    command = controller_requeue("90", True, finished=False, active_job_ids=["501"])
+    assert "--begin=now+10minutes" in command and "afterany:90" in command[2]
+    assert "501" not in command[2]
+    state["rep"] = reconcile_entry(state["rep"], interpret_slurm("501", {"501": "RUNNING"}, None), None, task_id="rep", group="g")
+    second = controller_decisions(tasks, state, 1, 0, evidence)
+    assert [row["action"] for row in second] == ["skip", "skip", "skip"]
+    state["rep"] = reconcile_entry(state["rep"], "running", {"technical_preflight": True}, task_id="rep", group="g", elapsed_seconds=0)
+    waiting = controller_decisions(tasks, state, 1, 0, evidence)
+    assert waiting[1]["reason"] == "representative_pending"
+    state["rep"] = reconcile_entry(state["rep"], "running", {"technical_preflight": True}, task_id="rep", group="g", elapsed_seconds=600)
+    released = controller_decisions(tasks, state, 1, 0, evidence)
+    assert released[1]["action"] == "submit"
+    assert released[2]["action"] == "skip"
+    state = record_submission(state, "later", "502", "rev")
+    repeated = controller_decisions(tasks, state, 2, 0, evidence)
+    assert repeated[1]["reason"] == "submitted"
+    continued = reconcile_entry({"job_id": "501", "state": "running"}, "slurm_completed", {"scientific": "valid_continuation_required"}, task_id="rep", slurm_state="COMPLETED")
+    assert continued["state"] == "valid_continuation_required"
+    retried = reconcile_entry({"job_id": "9", "state": "running"}, "retryable", None, task_id="rep", slurm_state="TIMEOUT")
+    assert retried["state"] == "retryable_failure"
+    closed = reconcile_entry({"job_id": "9", "state": "running", "attempts": 2}, "retryable", None, task_id="rep", slurm_state="NODE_FAIL")
+    assert closed["state"] == "terminal_failure"
+    assert interpret_slurm("9", {}, None) == "unknown"
+    bare = reconcile_entry({"job_id": "9", "state": "running"}, "slurm_completed", None, task_id="rep", slurm_state="COMPLETED")
+    assert bare["reason"] == "slurm_completed_without_scientific_record"
+    oom = reconcile_entry({"job_id": "9", "state": "running"}, "terminal", None, task_id="rep", group="g", slurm_state="OUT_OF_MEMORY")
+    grouped = {}
+    merge_group_block(grouped, oom)
+    assert grouped["_groups"]["g"]["blocked"] == "OUT_OF_MEMORY"
+    finished = {"rep": {"state": "training_completed"}, "later": {"state": "training_completed"}, "adapt": {"state": "inference_completed"}}
+    assert programme_remaining(tasks, finished) is False
+    held = [{"task_id": "verifier", "family": "verifier_adaptation", "depends_on": [], "statuses": [], "representative": True, "representative_group": "verifier"}]
+    assert controller_decisions(held, {}, 0, 0, {})[0]["reason"] == "held_pending_independent_evidence"
+    assert programme_remaining(held, {}) is False
+    assert controller_requeue("90", True, finished=True) is None
+    held = controller_transaction(tmp_path / "state.json")
+    with held:
+        with pytest.raises(RuntimeError, match="Another controller"):
+            with controller_transaction(tmp_path / "state.json"):
+                pass
+    present = tmp_path / "input.jsonl"
+    present.write_text("{}\n", encoding="utf-8")
+    biored = probe_readiness({"dataset": "biored", "family": "analysis", "input": {"path": str(present), "fingerprint": "abc", "kind": "contexts"}})
+    drugprot = probe_readiness({"dataset": "drugprot", "family": "analysis", "input": {"path": str(tmp_path / "missing"), "fingerprint": "abc", "kind": "contexts"}})
+    assert biored["inputs:biored:contexts"]["ready"] is True
+    assert drugprot["inputs:drugprot:contexts"]["ready"] is False
+    specific = [
+        {"task_id": "bio", "family": "analysis", "depends_on": ["inputs:biored:contexts"], "statuses": [], "representative": True, "representative_group": "bio"},
+        {"task_id": "drug", "family": "analysis", "depends_on": ["inputs:drugprot:contexts"], "statuses": [], "representative": True, "representative_group": "drug"},
+    ]
+    chosen = controller_decisions(specific, {}, 0, 0, {**biored, **drugprot})
+    assert chosen[0]["action"] == "submit"
+    assert chosen[1]["reason"] == "prerequisite"
+    assert validate_request_shards(tmp_path / "shards")["ready"] is False
+    box = {}
+    barrier = threading.Barrier(2)
+    scores = []
+
+    def _rank(rank: int) -> None:
+        scores.append(coordinate_rank_evaluation(rank, lambda: 0.5, barrier.wait, box))
+
+    threads = [threading.Thread(target=_rank, args=(rank,)) for rank in (0, 1)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert scores == [0.5, 0.5]
+    assert backend_specification({"family": "self_consistency", "model": "qwen8b"})["samples"] == 5
+    assert backend_specification({"family": "constrained", "model": "qwen8b"})["structured_outputs"] is True
+    resumed = _run_generation({
+        "family": "zero_shot",
+        "requests": [
+            {"request_id": "keep", "candidate_id": "c", "prompt": "Read the passage.", "model": "qwen8b"},
+            {"request_id": "again", "candidate_id": "d", "prompt": "Read the other passage.", "model": "qwen8b"},
+        ],
+        "backend_name": "fixture",
+        "fixture_responses": {"keep": {"raw": '{"labels": []}', "labels": []}, "again": {"raw": "not json", "labels": None}},
+    }, tmp_path / "resume")
+    assert resumed["completed"] is True
+    second_pass = _run_generation({
+        "family": "zero_shot",
+        "shard_directory": str(tmp_path / "resume" / "shards"),
+        "backend_name": "fixture",
+        "fixture_responses": {},
+    }, tmp_path / "resume")
+    assert second_pass["completed"] is True and second_pass.get("resumed", 0) == 0
+    checked = publish_validation(tmp_path / "resume" / "shards")
+    assert checked["ready"] is True
+    assert probe_readiness({
+        "family": "zero_shot", "dataset": "biored", "entity": "E0", "predicate": "P9",
+        "input": {"path": str(present), "fingerprint": "abc", "kind": "contexts"},
+    })["shards:zero_shot:biored:E0:P9"]["ready"] is False
+    adapter = tmp_path / "best_adapter"
+    adapter.mkdir()
+    (adapter / "adapter_config.json").write_text(json.dumps({"peft_type": "LORA", "base_model_name_or_path": "rev"}) + "\n", encoding="utf-8")
+    (adapter / "adapter_model.bin").write_bytes(b"weights")
+    assert verify_peft_adapter(adapter, "rev")["ready"] is True
+    assert verify_peft_adapter(adapter, "other")["reason"] == "base_model_mismatch"
+
+
 def _rank_worker(rank: int, world: int, path: str, identifiers: list[str]) -> None:
     from schema_study.production_runtime import rank_partitions, resume_rank_examples
 
@@ -522,10 +667,13 @@ def test_device_partition_selection_and_controller(tmp_path: Path):
     generated = _run_generation({
         "family": "constrained",
         "requests": [{"request_id": "r", "candidate_id": "c", "prompt": "Read the passage.", "model": "qwen8b"}],
-        "backend": lambda _request: {"raw": '{"labels": []}', "labels": []},
+        "backend_name": "fixture",
+        "fixture_responses": {"r": {"raw": '{"labels": []}', "labels": []}},
     }, tmp_path / "generate")
     assert generated["completed"] is True
-    assert "Read the passage." in Path(generated["shards"][0]).read_text(encoding="utf-8")
+    assert generated["status"] == "inference_completed"
+    assert "Read the passage." in (tmp_path / "generate" / "predictions.jsonl").read_text(encoding="utf-8")
+    assert generated["backend"]["structured_outputs"] is True
     missing = _run_generation({"family": "zero_shot", "requests": []}, tmp_path / "empty")
     assert missing["completed"] is False
     from schema_study.production_dispatch import execute_task

@@ -153,6 +153,62 @@ def _priority(row: dict) -> tuple:
     return (3, row["task_id"])
 
 
+def _elapsed_seconds(token: str) -> int:
+    """Slurm elapsed time. A pending job contributes nothing to the observation window."""
+    days = 0
+    clock = token
+    if "-" in token:
+        day_text, clock = token.split("-", 1)
+        days = int(day_text)
+    parts = [int(item) for item in clock.split(":")]
+    if len(parts) == 2:
+        hours, minutes, seconds = 0, parts[0], parts[1]
+    else:
+        hours, minutes, seconds = parts
+    return ((days * 24 + hours) * 60 + minutes) * 60 + seconds
+
+
+def _queue_snapshot() -> tuple[dict[str, str] | None, dict]:
+    """Map job id to PENDING or RUNNING. A failed query is not an empty queue."""
+    result = subprocess.run(["squeue", "-u", os.environ.get("USER", ""), "-h", "-o", "%i %T %M"], capture_output=True, text=True)
+    if result.returncode != 0:
+        return None, {"running": 0, "pending": 0, "elapsed": {}}
+    queued = {}
+    elapsed = {}
+    running = pending = 0
+    for line in result.stdout.splitlines():
+        parts = line.split()
+        if len(parts) < 2:
+            continue
+        queued[parts[0]] = parts[1]
+        if parts[1] == "RUNNING":
+            running += 1
+            elapsed[parts[0]] = _elapsed_seconds(parts[2]) if len(parts) > 2 else 0
+        elif parts[1] == "PENDING":
+            pending += 1
+            elapsed[parts[0]] = 0
+    return queued, {"running": running, "pending": pending, "elapsed": elapsed}
+
+
+def _sacct_state(job_id: str) -> str | None:
+    result = subprocess.run(["sacct", "-j", job_id, "--format=JobID,State", "-P", "-n"], check=False, capture_output=True, text=True)
+    if result.returncode != 0 or not result.stdout.strip():
+        return None
+    for line in result.stdout.splitlines():
+        parts = line.split("|")
+        if len(parts) == 2 and parts[0] == job_id:
+            return parts[1]
+    return None
+
+
+def _scientific_output(task: dict) -> dict | None:
+    """Read the task's own completion record. A Slurm COMPLETED line is not this record."""
+    path = Path(task["output"]) / "scientific_status.json"
+    if not path.is_file():
+        return None
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
 def matched_plan() -> dict:
     """Resource groups for the new programme. This function does not call sbatch."""
     from schema_study.production_plan import execution_manifest, submission_allowed
@@ -203,7 +259,13 @@ def matched_main(arguments: list[str]) -> int:
     from schema_study.production_plan import executing_revision, execution_manifest
     from schema_study.production_runtime import (
         controller_decisions,
+        controller_transaction,
+        interpret_slurm,
         load_controller_state,
+        merge_group_block,
+        probe_readiness,
+        programme_remaining,
+        reconcile_entry,
         record_submission,
         save_controller_state,
         sbatch_argv,
@@ -211,31 +273,57 @@ def matched_main(arguments: list[str]) -> int:
 
     tasks = [task for task in execution_manifest() if "blocked" not in task["statuses"]]
     state_path = get_paths().study / "runs" / "formal" / "formal_matched_e0_e7" / "controller_state.json"
-    state = load_controller_state(state_path)
-    queue = subprocess.run(["squeue", "-u", os.environ.get("USER", ""), "-h", "-o", "%T"], capture_output=True, text=True)
-    if queue.returncode != 0:
-        print("formal_gpu_submission=queue_unreadable", flush=True)
+    transaction = controller_transaction(state_path)
+    try:
+        transaction.__enter__()
+    except RuntimeError:
+        print("formal_gpu_submission=controller_busy", flush=True)
         return 3
-    tokens = queue.stdout.split()
-    running = sum(item == "RUNNING" for item in tokens)
-    pending = sum(item == "PENDING" for item in tokens)
-    decisions = controller_decisions(tasks, state, running, pending, {"inputs_prepared", "model_assets", "approval", "historical_drugprot_checkpoint"})
-    by_id = {task["task_id"]: task for task in tasks}
-    revision = executing_revision(get_paths().code_root) or ""
-    submitted = 0
-    for decision in decisions:
-        if decision["action"] != "submit":
-            continue
-        command = sbatch_argv(by_id[decision["task_id"]], "scripts/slurm/matched_task.sbatch")
-        command.insert(1, "--parsable")
-        result = subprocess.run(command, check=True, capture_output=True, text=True)
-        record_submission(state, decision["task_id"], result.stdout.strip().split(";")[0], revision)
-        submitted += 1
-    save_controller_state(state_path, state)
-    requeue = controller_requeue(os.environ.get("SLURM_JOB_ID", "0"), True, finished=submitted == 0 and not any(item["action"] == "defer" for item in decisions))
+    try:
+        state = load_controller_state(state_path)
+        queued, occupancy = _queue_snapshot()
+        if queued is None:
+            print("formal_gpu_submission=queue_unreadable", flush=True)
+            return 3
+        for task in tasks:
+            entry = state.get(task["task_id"])
+            if not entry or not entry.get("job_id"):
+                continue
+            observed = None if entry["job_id"] in queued else _sacct_state(entry["job_id"])
+            scheduler = interpret_slurm(entry["job_id"], queued, observed)
+            updated = reconcile_entry(
+                entry, scheduler, _scientific_output(task), task_id=task["task_id"],
+                group=f"{task.get('family')}|{task.get('model')}|{(task.get('resources') or {}).get('gpus')}",
+                slurm_state=observed or "",
+                elapsed_seconds=int(occupancy["elapsed"].get(entry["job_id"], 0)),
+            )
+            state[task["task_id"]] = merge_group_block(state, updated)
+        evidence = {"approval": {"ready": True}}
+        for task in tasks:
+            evidence.update(probe_readiness(task))
+        running = occupancy["running"]
+        pending = occupancy["pending"]
+        decisions = controller_decisions(tasks, state, running, pending, evidence)
+        by_id = {task["task_id"]: task for task in tasks}
+        revision = executing_revision(get_paths().code_root) or ""
+        submitted = 0
+        for decision in decisions:
+            if decision["action"] != "submit":
+                continue
+            command = sbatch_argv(by_id[decision["task_id"]], "scripts/slurm/matched_task.sbatch")
+            command.insert(1, "--parsable")
+            result = subprocess.run(command, check=True, capture_output=True, text=True)
+            record_submission(state, decision["task_id"], result.stdout.strip().split(";")[0], revision)
+            save_controller_state(state_path, state, external_lock=True)
+            submitted += 1
+        save_controller_state(state_path, state, external_lock=True)
+    finally:
+        transaction.__exit__(None, None, None)
+    active_ids = [entry.get("job_id") for entry in state.values() if isinstance(entry, dict) and entry.get("state") in {"submitted", "pending", "running"}]
+    requeue = controller_requeue(os.environ.get("SLURM_JOB_ID", "0"), True, finished=not programme_remaining(tasks, state), active_job_ids=active_ids)
     if requeue is not None:
         subprocess.run(requeue, check=True)
-    print(json.dumps({"submitted": submitted}), flush=True)
+    print(json.dumps({"submitted": submitted, "remaining": programme_remaining(tasks, state)}), flush=True)
     return 0
 
 

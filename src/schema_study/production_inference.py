@@ -116,6 +116,7 @@ def vllm_generate(prompts: list[str], sampling: dict, lora_path: str | None = No
         max_tokens=sampling.get("max_tokens", 256),
         n=int(sampling.get("n", 1)),
         structured_outputs=StructuredOutputsParams(**structured) if structured else None,
+        prompt_logprobs=int(sampling["prompt_logprobs"]) if sampling.get("prompt_logprobs") else None,
     )
     lora = LoRARequest("adapter", 1, lora_path) if lora_path else None
     outputs = engine.generate(prompts, params, lora_request=lora)
@@ -128,7 +129,13 @@ def vllm_generate(prompts: list[str], sampling: dict, lora_path: str | None = No
             parsed = interpret_generation(raw, sampling["candidate_id"], sampling["schema"], sampling["level"])
             if parsed["ledger_status"] != "invalid":
                 labels = parsed["predicted_labels"]
-        rows.append({"raw": raw, "labels": labels, "parsed": parsed})
+        prompt_token_logprobs = []
+        for entry in output.prompt_logprobs or []:
+            if not entry:
+                continue
+            chosen = max(entry.values(), key=lambda item: getattr(item, "rank", 0) == 1)
+            prompt_token_logprobs.append(float(getattr(chosen, "logprob", chosen)))
+        rows.append({"raw": raw, "labels": labels, "parsed": parsed, "prompt_token_logprobs": prompt_token_logprobs})
     return rows
 
 

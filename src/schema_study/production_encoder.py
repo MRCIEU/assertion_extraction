@@ -147,7 +147,7 @@ def _batch(model: SchemaHierarchicalModel, step: int, schema) -> tuple[torch.Ten
     return token_ids, targets
 
 
-def train_hierarchical(model: SchemaHierarchicalModel | None = None, steps: int = 2, consistency: bool = False, corpus: str = "biored", batches=None, score_fn=None, total_steps: int | None = None) -> dict:
+def train_hierarchical(model: SchemaHierarchicalModel | None = None, steps: int = 2, consistency: bool = False, corpus: str = "biored", batches=None, score_fn=None, total_steps: int | None = None, output_dir=None) -> dict:
     """Train the hierarchical objective. A supplied batch iterator is the production population; the default is a schema-width fixture."""
     from schema_study.production_runtime import training_status
 
@@ -181,6 +181,18 @@ def train_hierarchical(model: SchemaHierarchicalModel | None = None, steps: int 
                 for name, parameter in model.named_parameters()
                 if parameter.grad is not None
             }
+            if output_dir is not None and torch.isfinite(objective):
+                from schema_study.production_runtime import publish_scientific_status
+
+                publish_scientific_status(Path(output_dir), {
+                    "technical_preflight": True,
+                    "model_loaded": True,
+                    "device": str(next(model.parameters()).device),
+                    "optimiser_steps": 1,
+                    "loss_finite": True,
+                    "checkpoint_validated": False,
+                    "monitoring_guarantees_completion": False,
+                })
         if score_fn is not None and step % max(1, horizon) == 0:
             metric = float(score_fn(model))
             if best is None or metric > best["development_micro_f1"]:
@@ -188,6 +200,17 @@ def train_hierarchical(model: SchemaHierarchicalModel | None = None, steps: int 
     head_gradients = {name: value for name, value in gradients.items() if name.startswith("heads.")}
     production = batches is not None
     status = training_status(step, horizon, best is not None) if production else "fixture"
+    if output_dir is not None and production:
+        from schema_study.production_runtime import publish_scientific_status
+
+        publish_scientific_status(Path(output_dir), {
+            "scientific": status,
+            "preflight_passed": step >= 1,
+            "technical_preflight": step >= 1,
+            "monitoring_guarantees_completion": False,
+            "steps": step,
+            "total_steps": horizon,
+        })
     return {
         "steps": step,
         "consistency": consistency,

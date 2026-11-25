@@ -394,6 +394,254 @@ def resume_rank_examples(rank_examples: list[str], position: int) -> list[str]:
 
 
 ACTIVE_CONTROLLER_STATES = {"submitted", "pending", "running"}
+GROUP_RELEASE_STATES = {"preflight_passed", "training_completed", "inference_completed", "completed"}
+SCIENTIFIC_COMPLETE = {"training_completed", "inference_completed", "completed"}
+RETRYABLE_SLURM = {"TIMEOUT", "NODE_FAIL", "PREEMPTED", "DEADLINE"}
+TERMINAL_SLURM = {"FAILED", "CANCELLED", "OUT_OF_MEMORY", "BOOT_FAIL"}
+MONITORING_SECONDS = 300
+HELD_FAMILIES = {"verifier_adaptation", "certainty", "nli"}
+
+
+def _group_released(entry: dict) -> bool:
+    """A passed preflight releases the group. Adapter inference still waits for the selected checkpoint."""
+    return entry.get("scientific") in GROUP_RELEASE_STATES or entry.get("state") in GROUP_RELEASE_STATES
+
+
+def _ready_name(name: str, evidence) -> bool:
+    if evidence is None:
+        return False
+    if isinstance(evidence, dict):
+        return bool((evidence.get(name) or {}).get("ready"))
+    return name in evidence
+
+
+def unresolved_prerequisites(task: dict, state: dict, evidence=None) -> list[str]:
+    """A named input is ready only when its own evidence says so. Another corpus does not satisfy it."""
+    missing = []
+    for name in task.get("depends_on", []):
+        if _ready_name(name, evidence):
+            continue
+        dependency = state.get(name, {})
+        if name == task.get("trains_from") or name not in {"approval", "inputs_prepared", "model_assets", "historical_drugprot_checkpoint"} and dependency:
+            if dependency.get("state") in SCIENTIFIC_COMPLETE or dependency.get("scientific") in SCIENTIFIC_COMPLETE:
+                continue
+        missing.append(name)
+    return missing
+
+
+def interpret_slurm(job_id: str, queued: dict[str, str], sacct_state: str | None) -> str:
+    """A missing queue entry is not completion. sacct must name a terminal state."""
+    if job_id in queued:
+        observed = queued[job_id]
+        if observed == "RUNNING":
+            return "running"
+        return "pending"
+    if not sacct_state:
+        return "unknown"
+    base = sacct_state.split()[0]
+    if base == "COMPLETED":
+        return "slurm_completed"
+    if base in RETRYABLE_SLURM:
+        return "retryable"
+    if base in TERMINAL_SLURM:
+        return "terminal"
+    if base in {"PENDING", "RUNNING", "CONFIGURING", "SUSPENDED"}:
+        return "running" if base == "RUNNING" else "pending"
+    return "unknown"
+
+
+def _failure_entry(current: dict, task_id: str, reason: str, *, systematic: bool = False, group: str | None = None) -> dict:
+    """Apply the bounded recovery policy and keep a systematic group block with the entry."""
+    failed = record_failure({task_id: current}, task_id, reason, systematic=systematic, group=group)
+    entry = failed[task_id]
+    entry["job_id"] = current.get("job_id")
+    if "_groups" in failed:
+        entry["_group_block"] = failed["_groups"]
+    return entry
+
+
+def merge_group_block(state: dict, entry: dict) -> dict:
+    """Copy a systematic block into the persistent state. The entry itself stays one task."""
+    block = entry.pop("_group_block", None)
+    if block:
+        for key, value in block.items():
+            state.setdefault("_groups", {}).setdefault(key, {}).update(value)
+    return entry
+
+
+def reconcile_entry(entry: dict, scheduler: str, output: dict | None, *, task_id: str = "", group: str | None = None, slurm_state: str = "", elapsed_seconds: int = 0) -> dict:
+    """Join one Slurm observation with the scientific output. COMPLETED without that output is not success."""
+    current = dict(entry)
+    if slurm_state:
+        current["slurm_state"] = slurm_state.split()[0]
+    if scheduler == "pending":
+        current["state"] = "pending"
+        return current
+    if scheduler == "running":
+        current["state"] = "running"
+        technical = bool(output and (output.get("technical_preflight") or output.get("scientific") == "preflight_passed"))
+        if technical and elapsed_seconds >= MONITORING_SECONDS:
+            current["scientific"] = "preflight_passed"
+            current["monitoring_guarantees_completion"] = False
+        return current
+    if scheduler == "unknown":
+        current["scheduler"] = "unknown"
+        return current
+    if scheduler == "retryable":
+        return _failure_entry(current, task_id, current.get("slurm_state", "retryable"), group=group)
+    if scheduler == "terminal":
+        return _failure_entry(current, task_id, current.get("slurm_state", "terminal"), systematic=current.get("slurm_state") == "OUT_OF_MEMORY", group=group)
+    status = (output or {}).get("scientific")
+    if status in {"preflight_passed", "training_completed", "inference_completed", "valid_continuation_required"}:
+        current["state"] = status
+        if status == "valid_continuation_required" and (output.get("preflight_passed") or output.get("technical_preflight") or current.get("scientific") == "preflight_passed"):
+            current["scientific"] = "preflight_passed"
+        else:
+            current["scientific"] = status
+        current["monitoring_guarantees_completion"] = False
+        return current
+    if status == "invalid":
+        return _failure_entry(current, task_id, "scientific_invalid", systematic=True, group=group)
+    return _failure_entry(current, task_id, "slurm_completed_without_scientific_record", group=group)
+
+
+def programme_remaining(tasks: list[dict], state: dict) -> bool:
+    """True while any approved task is unfinished. An idle submission turn does not clear it."""
+    for task in tasks:
+        if "blocked" in task.get("statuses", []) or task.get("family") in HELD_FAMILIES:
+            continue
+        current = state.get(task["task_id"], {}).get("state", "unsubmitted")
+        if current not in SCIENTIFIC_COMPLETE | {"terminal_failure"}:
+            return True
+    return False
+
+
+def rank0_generation(rank: int, generate, barrier):
+    """Rank 0 generates locally. Every rank enters the barrier before anyone leaves the collective."""
+    produced = generate() if rank == 0 else None
+    barrier()
+    return produced
+
+
+def coordinate_rank_evaluation(rank: int, compute, barrier, box: dict) -> float:
+    """Every rank waits before the score is read. Rank 0 does not publish early."""
+    if rank == 0:
+        box["score"] = float(compute())
+    barrier()
+    if "score" not in box:
+        raise RuntimeError("Development evaluation broadcast started before every rank had entered the collective.")
+    return float(box["score"])
+
+
+def validate_request_shards(directory: Path) -> dict:
+    """Reject a shard directory that has no completion record, a bad checksum, or a repeated request."""
+    import hashlib
+
+    marker = directory / "COMPLETE"
+    if not marker.is_file():
+        return {"ready": False, "reason": "incomplete_shards"}
+    record = json.loads(marker.read_text(encoding="utf-8"))
+    identifiers = []
+    mismatches = 0
+    for name in record.get("shards") or []:
+        path = directory / name
+        if not path.is_file():
+            return {"ready": False, "reason": "missing_shard", "shard": name}
+        for line in path.open(encoding="utf-8"):
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            digest = hashlib.sha256(row["rendered"].encode("utf-8")).hexdigest()
+            if digest != row.get("rendered_sha256"):
+                mismatches += 1
+            identifiers.append(row["request_id"])
+    duplicate = len(identifiers) - len(set(identifiers))
+    expected = int(record.get("requests", -1))
+    ready = mismatches == 0 and duplicate == 0 and len(identifiers) == expected
+    return {
+        "ready": ready,
+        "requests": len(identifiers),
+        "expected": expected,
+        "duplicate_requests": duplicate,
+        "checksum_failures": mismatches,
+        "reason": "ok" if ready else "population_mismatch",
+    }
+
+
+def publish_validation(directory: Path) -> dict:
+    """Write the checksum record beside the shards. A directory without one is not ready."""
+    result = validate_request_shards(directory)
+    temporary = directory / ".VALIDATION.json.tmp"
+    temporary.write_text(json.dumps(result, sort_keys=True) + "\n", encoding="utf-8")
+    temporary.replace(directory / "VALIDATION.json")
+    return result
+
+
+def publish_scientific_status(directory: Path, payload: dict) -> None:
+    """Publish the task's own status. A Slurm accounting line is not this record."""
+    directory.mkdir(parents=True, exist_ok=True)
+    temporary = directory / ".scientific_status.json.tmp"
+    temporary.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+    temporary.replace(directory / "scientific_status.json")
+
+
+def verify_peft_adapter(directory: Path, expected_base: str | None = None) -> dict:
+    """The exported adapter must be a PEFT LoRA directory for the pinned base revision."""
+    config_path = directory / "adapter_config.json"
+    weights = directory / "adapter_model.bin"
+    if not config_path.is_file() or not weights.is_file() or weights.stat().st_size <= 0:
+        return {"ready": False, "reason": "adapter_export_missing"}
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    if config.get("peft_type") != "LORA":
+        return {"ready": False, "reason": "unsupported_peft_type"}
+    base = config.get("base_model_name_or_path")
+    if expected_base and base != expected_base:
+        return {"ready": False, "reason": "base_model_mismatch", "base_model_name_or_path": base}
+    return {"ready": True, "peft_type": "LORA", "base_model_name_or_path": base}
+
+
+def probe_readiness(task: dict) -> dict:
+    """Check this task's own files. A ready BioRED input does not mark DrugProt ready."""
+    evidence = {}
+    info = task.get("input") or {}
+    if task.get("dataset"):
+        key = f"inputs:{task['dataset']}:{info.get('kind', 'contexts')}"
+        path = Path(info["path"]) if info.get("path") else None
+        evidence[key] = {"ready": bool(path and path.is_file() and info.get("fingerprint")), "fingerprint": info.get("fingerprint")}
+    model = task.get("model")
+    if model:
+        ready = False
+        try:
+            from schema_study.production_assets import ENCODERS, GENERATIVE
+
+            spec = GENERATIVE.get(model) or ENCODERS.get(model)
+            if spec:
+                location = Path(spec.get("path") or spec["model"])
+                ready = location.is_dir() and task.get("model_revision") == spec.get("revision")
+        except Exception:
+            ready = False
+        evidence[f"model:{model}"] = {"ready": ready, "revision": task.get("model_revision")}
+    if task.get("new_training") is False:
+        from schema_study.production_plan import drugprot_checkpoint_reusable
+
+        historical = task.get("historical_predicate")
+        directory = Path("/home/b5ac/freddieyu.b5ac/projects/project_1/studies/schema_granularity_v1/runs/formal/formal_20261115/train/drugprot/native") / str(historical) / f"seed{task.get('seed')}"
+        evidence[f"historical:{historical}:{task.get('seed')}"] = {
+            "ready": drugprot_checkpoint_reusable(directory),
+            "fingerprint": None,
+            "provenance": "reconstructed_completion_record",
+        }
+    if task["family"] in {"zero_shot", "few_shot", "adapter_inference", "constrained", "thinking", "self_consistency", "evidence", "qualified", "candidate_scoring", "gpt_oss"}:
+        source = "few_shot" if task["family"] == "few_shot" else "zero_shot"
+        directory = Path("/home/b5ac/freddieyu.b5ac/projects/project_1/studies/schema_granularity_v1/runs/formal/formal_matched_e0_e7/generation_inputs") / source / str(task.get("dataset")) / str(task.get("entity")) / str(task.get("predicate"))
+        validation = directory / "VALIDATION.json"
+        ready = False
+        if validation.is_file():
+            ready = json.loads(validation.read_text(encoding="utf-8")).get("ready") is True
+        evidence[f"shards:{source}:{task.get('dataset')}:{task.get('entity')}:{task.get('predicate')}"] = {"ready": ready}
+    if task.get("adapter_path"):
+        evidence[f"adapter:{task.get('trains_from')}"] = verify_peft_adapter(Path(task["adapter_path"]), task.get("model_revision"))
+    return evidence
 
 
 def controller_decisions(tasks: list[dict], state: dict, running: int, pending: int, verified_external: set[str] | None = None) -> list[dict]:
@@ -415,14 +663,17 @@ def controller_decisions(tasks: list[dict], state: dict, running: int, pending: 
     ready_representatives = {
         task.get("representative_group")
         for task in tasks
-        if task.get("representative") and state.get(task["task_id"], {}).get("state") == "completed"
+        if task.get("representative") and _group_released(state.get(task["task_id"], {}))
     }
     decisions = []
     proposed = 0
     for task in tasks:
         current = state.get(task["task_id"], {}).get("state", "unsubmitted")
-        if current in ACTIVE_CONTROLLER_STATES or current == "completed":
+        if current in ACTIVE_CONTROLLER_STATES or current in SCIENTIFIC_COMPLETE:
             decisions.append({"task_id": task["task_id"], "action": "skip", "reason": current})
+            continue
+        if task.get("family") in HELD_FAMILIES:
+            decisions.append({"task_id": task["task_id"], "action": "skip", "reason": "held_pending_independent_evidence"})
             continue
         if current in {"terminal_failure", "blocked"} or "blocked" in task.get("statuses", []):
             decisions.append({"task_id": task["task_id"], "action": "skip", "reason": current if current != "unsubmitted" else "blocked"})
@@ -434,9 +685,7 @@ def controller_decisions(tasks: list[dict], state: dict, running: int, pending: 
         if task.get("representative") is False and task.get("representative_group") not in ready_representatives:
             decisions.append({"task_id": task["task_id"], "action": "skip", "reason": "representative_pending"})
             continue
-        missing = [item for item in task.get("depends_on", []) if item not in verified and state.get(item, {}).get("state") != "completed"]
-        external = {"inputs_prepared", "model_assets", "approval", "historical_drugprot_checkpoint"}
-        missing = [item for item in missing if not (item in external and item in verified)]
+        missing = unresolved_prerequisites(task, state, verified)
         if missing:
             decisions.append({"task_id": task["task_id"], "action": "skip", "reason": "prerequisite", "missing": missing})
             continue
@@ -451,7 +700,7 @@ def controller_decisions(tasks: list[dict], state: dict, running: int, pending: 
 def record_submission(state: dict, task_id: str, job_id: str, manifest_revision: str) -> dict:
     """Persist one Slurm identifier. A second submission of an active task is rejected."""
     current = state.get(task_id, {}).get("state", "unsubmitted")
-    if current in ACTIVE_CONTROLLER_STATES or current == "completed":
+    if current in ACTIVE_CONTROLLER_STATES or current in SCIENTIFIC_COMPLETE:
         raise RuntimeError(f"{task_id} is already {current}.")
     previous = state.get(task_id, {})
     state[task_id] = {
@@ -461,6 +710,8 @@ def record_submission(state: dict, task_id: str, job_id: str, manifest_revision:
         "attempts": int(previous.get("attempts", 0)),
         "group": previous.get("group"),
     }
+    if previous.get("scientific"):
+        state[task_id]["scientific"] = previous["scientific"]
     return state
 
 
@@ -482,20 +733,45 @@ def record_failure(state: dict, task_id: str, reason: str, *, systematic: bool =
     return state
 
 
-def save_controller_state(path: Path, state: dict) -> None:
+def controller_transaction(path: Path):
+    """Hold one lock across reconciliation and submission, not only across the last write."""
+    from contextlib import contextmanager
+
+    @contextmanager
+    def _locked():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        lock = path.with_suffix(".transaction.lock")
+        try:
+            descriptor = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError as exc:
+            raise RuntimeError("Another controller invocation is reconciling this programme.") from exc
+        try:
+            os.write(descriptor, str(os.getpid()).encode("ascii"))
+            yield
+        finally:
+            os.close(descriptor)
+            lock.unlink(missing_ok=True)
+
+    return _locked()
+
+
+def save_controller_state(path: Path, state: dict, *, external_lock: bool = False) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     lock = path.with_suffix(".lock")
-    try:
-        descriptor = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-    except FileExistsError as exc:
-        raise RuntimeError("Another controller is writing the task state.") from exc
+    descriptor = None
+    if not external_lock:
+        try:
+            descriptor = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError as exc:
+            raise RuntimeError("Another controller is writing the task state.") from exc
     temporary = path.with_suffix(".json.tmp")
     try:
         temporary.write_text(json.dumps(state, sort_keys=True) + "\n", encoding="utf-8")
         temporary.replace(path)
     finally:
-        os.close(descriptor)
-        lock.unlink(missing_ok=True)
+        if descriptor is not None:
+            os.close(descriptor)
+            lock.unlink(missing_ok=True)
 
 
 def load_controller_state(path: Path) -> dict:
@@ -650,13 +926,25 @@ def sbatch_argv(task: dict, script: str) -> list[str]:
     return command
 
 
-def controller_requeue(job_id: str, authorised: bool, finished: bool) -> list[str] | None:
-    """Requeue only after approval and only while work remains. This does not call sbatch."""
+def controller_requeue(job_id: str, authorised: bool, finished: bool, active_job_ids: list[str] | None = None) -> list[str] | None:
+    """Schedule another bounded step while work remains. A quiet submission turn is not completion."""
     from schema_study.formal_launch import requeue_permitted
 
     if not requeue_permitted(authorised, finished):
         return None
-    return ["sbatch", f"--dependency=afterany:{job_id}", "--account=brics.b5ac", "--partition=workq", "--qos=normal", "scripts/slurm/programme_controller.sbatch"]
+    command = [
+        "sbatch",
+        "--parsable",
+        "--begin=now+10minutes",
+        "--account=brics.b5ac",
+        "--partition=workq",
+        "--qos=normal",
+        "--time=01:00:00",
+        "scripts/slurm/programme_controller.sbatch",
+    ]
+    if job_id and job_id != "0":
+        command.insert(2, f"--dependency=afterany:{job_id}")
+    return command
 
 
 def context_sources(corpus: str) -> tuple[str, ...]:
