@@ -571,6 +571,59 @@ def _harmony_final(raw: str | None) -> str | None:
     return final.strip()
 
 
+def reparse_harmony_ledger(source: Path, destination: Path) -> dict:
+    """Repair derived GPT-OSS records from stored responses. The original ledger is not rewritten."""
+    from collections import Counter
+
+    from schema_study.paths import get_paths
+    from schema_study.production_runtime import interpret_generation
+    from schema_study.schemas import default_schema_path, load_schema
+
+    schema = load_schema(default_schema_path(get_paths().code_root, "biored"))
+    counts: Counter = Counter()
+    reasons: Counter = Counter()
+    records = []
+    for line in source.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            reasons["partial_trailing_record"] += 1
+            break
+        raw = row.get("raw") or ""
+        extracted = _harmony_final(raw)
+        if extracted == raw and "final{" not in raw and "<|channel|>final" not in raw:
+            if len(raw) > 1500:
+                reason = "output_length_termination"
+            elif not raw.strip():
+                reason = "empty_response"
+            else:
+                reason = "missing_final_answer"
+            records.append({**row, "parser_version": "harmony_final_channel_v2", "status": "invalid", "failure_class": reason})
+            counts["invalid"] += 1
+            reasons[reason] += 1
+            continue
+        interpreted = interpret_generation(extracted, row.get("candidate_id") or "", schema, "P4")
+        status = interpreted.get("ledger_status") or "invalid"
+        failure = None if status in {"valid", "valid_empty"} else (interpreted.get("output_status") or "invalid_json")
+        records.append({
+            **row,
+            "raw": raw,
+            "parsed_final": extracted,
+            "labels": interpreted.get("predicted_labels"),
+            "status": status,
+            "parser_version": "harmony_final_channel_v2",
+            "failure_class": failure,
+            "original_status": row.get("status"),
+        })
+        counts[status] += 1
+        if failure:
+            reasons[failure] += 1
+    destination.write_text("".join(json.dumps(row, ensure_ascii=False) + "\n" for row in records), encoding="utf-8")
+    return {"records": len(records), "status": dict(counts), "invalid_reasons": dict(reasons), "original_ledger": source.name}
+
+
 def _resume_compatible(task: dict, record: dict) -> bool:
     """A completed ordinary generation is not a thinking trace or a five-sample vote."""
     if task.get("family") == "thinking":
@@ -826,7 +879,8 @@ def _run_generation(task: dict, workdir: Path) -> dict:
 
                     interpreted = interpret_contract(task, request, shaped.get("raw"))
                     shaped = {**shaped, "labels": interpreted["labels"] if interpreted.get("complete") else None, "parsed": interpreted, "evidence": interpreted.get("evidence")}
-                status = classify_output(shaped.get("raw"), shaped.get("labels"), failed=bool(shaped.get("failed")))
+                parsed_status = (shaped.get("parsed") or {}).get("ledger_status")
+                status = parsed_status if parsed_status in {"valid", "valid_empty", "invalid"} else classify_output(shaped.get("raw"), shaped.get("labels"), failed=bool(shaped.get("failed")))
                 record = prediction_record(request, shaped, task, session.specification, status)
                 if task.get("family") == "thinking":
                     record["thinking_enabled"] = True
@@ -839,6 +893,7 @@ def _run_generation(task: dict, workdir: Path) -> dict:
                 if task.get("family") == "gpt_oss":
                     record["harmony_final_channel"] = True
                     record["max_new_tokens"] = session.specification.get("max_new_tokens")
+                    record["parser_version"] = "harmony_final_channel_v2"
                 if shaped.get("samples"):
                     record["samples"] = shaped["samples"]
                 if shaped.get("evidence"):
