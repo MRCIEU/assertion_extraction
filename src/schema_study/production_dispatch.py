@@ -383,6 +383,8 @@ def backend_specification(task: dict) -> dict:
         "samples": 1,
         "temperature": 0.0,
     }
+    if task.get("model") == "gpt_oss_20b":
+        specification["max_new_tokens"] = 2048
     if family == "constrained":
         specification.update({"decoding": "constrained", "structured_outputs": True})
     elif family == "thinking":
@@ -525,12 +527,35 @@ def construct_backend(task: dict) -> GenerationSession:
     return GenerationSession(task)
 
 
+def _harmony_final(raw: str | None) -> str | None:
+    """Use the Harmony final channel when the model emits one. The analysis channel is not the label."""
+    if not raw:
+        return raw
+    if "<|channel|>final<|message|>" in raw:
+        final = raw.split("<|channel|>final<|message|>", 1)[1]
+    else:
+        final = None
+        for marker in ("final{", "final\n{", "final\r\n{"):
+            index = raw.rfind(marker)
+            if index >= 0:
+                final = raw[index + len("final"):]
+                break
+        if final is None:
+            return raw
+    for stop in ("<|return|>", "<|end|>"):
+        if stop in final:
+            final = final.split(stop, 1)[0]
+    return final.strip()
+
+
 def _resume_compatible(task: dict, record: dict) -> bool:
     """A completed ordinary generation is not a thinking trace or a five-sample vote."""
     if task.get("family") == "thinking":
         return record.get("thinking_enabled") is True
     if task.get("family") == "self_consistency":
         return isinstance(record.get("samples"), list) and len(record["samples"]) == 5
+    if task.get("family") == "gpt_oss":
+        return record.get("harmony_final_channel") is True
     return True
 
 
@@ -570,7 +595,8 @@ def _parse_generated(task: dict, request: dict, result: dict, schema) -> dict:
     level = task.get("schema_predicate") or HISTORICAL_PREDICATES.get(task.get("predicate"), task.get("predicate")) or request.get("predicate_level")
     if not level:
         return result
-    interpreted = interpret_generation(result.get("raw"), request["candidate_id"], schema, level)
+    raw = _harmony_final(result.get("raw")) if task.get("model") == "gpt_oss_20b" else result.get("raw")
+    interpreted = interpret_generation(raw, request["candidate_id"], schema, level)
     return {
         **result,
         "raw": result.get("raw"),
@@ -734,6 +760,9 @@ def _run_generation(task: dict, workdir: Path) -> dict:
                 record = prediction_record(request, shaped, task, session.specification, status)
                 if task.get("family") == "thinking":
                     record["thinking_enabled"] = True
+                if task.get("family") == "gpt_oss":
+                    record["harmony_final_channel"] = True
+                    record["max_new_tokens"] = session.specification.get("max_new_tokens")
                 if shaped.get("samples"):
                     record["samples"] = shaped["samples"]
                 if prediction_usable(record):

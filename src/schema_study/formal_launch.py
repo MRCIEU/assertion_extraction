@@ -299,15 +299,19 @@ def matched_main(arguments: list[str]) -> int:
                 elapsed_seconds=int(occupancy["elapsed"].get(entry["job_id"], 0)),
             )
             if (
-                task.get("family") in {"thinking", "self_consistency"}
+                task.get("family") in {"thinking", "self_consistency", "gpt_oss"}
                 and updated.get("state") == "inference_completed"
                 and not (output or {}).get("configuration_verified")
             ):
-                state.setdefault("_recovery", {}).setdefault(task["task_id"], []).append({
+                recovery = state.setdefault("_recovery", {})
+                prior = recovery.get(task["task_id"])
+                events = prior if isinstance(prior, list) else ([] if prior is None else [prior])
+                events.append({
                     "reason": "completed_output_did_not_use_the_corrected_decoding_configuration",
                     "job_id": entry.get("job_id"),
                     "preserved": "predictions_previous.jsonl",
                 })
+                recovery[task["task_id"]] = events
                 updated = {
                     "state": "unsubmitted",
                     "attempts": int(entry.get("attempts", 0)),
