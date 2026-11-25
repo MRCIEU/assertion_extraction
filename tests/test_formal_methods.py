@@ -26,10 +26,10 @@ class FormalMethodTests(unittest.TestCase):
             distributed_accumulation(3, 1)
 
     def test_only_the_assistant_span_is_supervised(self):
-        labels = assistant_labels([1, 2, 3, 0], prompt_tokens=2, pad_id=0)
-        self.assertEqual(labels, [-100, -100, 3, -100])
+        labels = assistant_labels([1, 2, 3, 0, 0], prompt_tokens=2, pad_positions={4})
+        self.assertEqual(labels, [-100, -100, 3, 0, -100])
         with self.assertRaises(ValueError):
-            assistant_labels([0, 0], prompt_tokens=1, pad_id=0)
+            assistant_labels([0, 0], prompt_tokens=2, pad_positions=set())
 
     def test_losses_use_frozen_definitions(self):
         self.assertEqual(combine_head_losses({"existence": 1.0, "coarse": 2.0, "native": 3.0}), 6.0)
@@ -51,7 +51,7 @@ class FormalMethodTests(unittest.TestCase):
         self.assertEqual(training_requirement("drugprot", "native", 0, True), "reuse_historical_checkpoint")
         self.assertEqual(training_requirement("biored", "E2", 710, True), "retrain")
         saved = {
-            "model_state": {}, "optimizer_state": {}, "scheduler_state": {}, "scaler_state": {},
+            "model_state": {"weight": 1}, "optimizer_state": {"step": 10}, "scheduler_state": {}, "scaler_state": {},
             "rng_state": {}, "step": 10, "epoch": 1, "data_fingerprint": "data", "configuration_fingerprint": "config",
         }
         self.assertTrue(checkpoint_can_resume(saved, "config", "data"))

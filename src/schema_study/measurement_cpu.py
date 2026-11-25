@@ -19,7 +19,9 @@ from schema_study.records import publish_file
 
 HF_HOME = Path("/home/b5ac/freddieyu.b5ac/projects/project_1/cache/huggingface")
 CERTAINTY = "pedropei/sentence-level-certainty"
-VERIFIER = "MoritzLaurer/DeBERTa-v3-xsmall-mnli-fever-anli-ling-wanli"
+VERIFIER = "MoritzLaurer/DeBERTa-v3-base-mnli-fever-anli"
+VERIFIER_REVISION = "6f5cf0a2b59cabb106aca4c287eed12e357e90eb"
+XSMALL_VERIFIER = "MoritzLaurer/DeBERTa-v3-xsmall-mnli-fever-anli-ling-wanli"
 SCIFACT_LABELS = {"SUPPORT": "entailment", "CONTRADICT": "contradiction", "NEI": "neutral"}
 
 
@@ -249,11 +251,23 @@ def main() -> int:
     certainty = AutoModelForSequenceClassification.from_pretrained(local_certainty, local_files_only=True)
     certainty.eval()
     certainty_labels = {str(key): value for key, value in dict(certainty.config.id2label).items()}
-    verifier_status = {
-        "id": VERIFIER,
-        "executed": False,
-        "reason": "Anonymous retrieval returned HTTP 401, Invalid username or password, for the checkpoint and its configuration.",
-    }
+    local_verifier = Path("/home/b5ac/freddieyu.b5ac/projects/project_1/models") / "MoritzLaurer__DeBERTa-v3-base-mnli-fever-anli" / VERIFIER_REVISION
+    if (local_verifier / "config.json").is_file():
+        print("Loading the base verifier.", flush=True)
+        verifier_tokenizer, verifier_model, verifier_labels = _load(str(local_verifier))
+        verifier_status = _scifact(verifier_tokenizer, verifier_model, verifier_labels)
+        verifier_status["id"] = VERIFIER
+        verifier_status["revision"] = VERIFIER_REVISION
+        verifier_status["executed"] = True
+    else:
+        verifier_status = {
+            "id": VERIFIER,
+            "revision": VERIFIER_REVISION,
+            "executed": False,
+            "reason": "The base checkpoint is not in local storage yet.",
+            "xsmall_checkpoint": XSMALL_VERIFIER,
+            "xsmall_anonymous_access": "HTTP 401",
+        }
     payload = {
         "environment": "hf-hpc",
         "cuda_available": bool(torch.cuda.is_available()),

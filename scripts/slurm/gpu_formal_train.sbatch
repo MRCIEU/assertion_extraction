@@ -15,24 +15,19 @@
 set -euo pipefail
 set +x
 
-INSPECT=/home/b5ac/freddieyu.b5ac/projects/project_1/environments/training/bin/python
-"$INSPECT" /home/b5ac/freddieyu.b5ac/project_1/scripts/slurm/inspect_env.py gpu
-status=$?
-if [[ "$status" -ne 0 ]]; then
-  echo "credential_check=stop" >&2
-  exit "$status"
-fi
+source /home/b5ac/freddieyu.b5ac/miniforge3/etc/profile.d/conda.sh
+conda activate hf-hpc
 
 if [[ -z "${CUDA_VISIBLE_DEVICES:-}" && -z "${SLURM_GPUS_ON_NODE:-}" ]]; then
   echo "This training job did not receive a GPU." >&2
   exit 2
 fi
 
-export PATH=/usr/bin:/bin
 export PYTHONDONTWRITEBYTECODE=1
 export PYTHONNOUSERSITE=1
 export PYTHONPATH=/home/b5ac/freddieyu.b5ac/project_1/src
 export SCHEMA_STUDY_STORAGE_ROOT=/home/b5ac/freddieyu.b5ac/projects/project_1
+export SCHEMA_STUDY_PROGRAMME=formal_matched_e0_e7
 export OMP_NUM_THREADS=8
 export MKL_NUM_THREADS=8
 export TOKENIZERS_PARALLELISM=false
@@ -41,7 +36,6 @@ export TRANSFORMERS_OFFLINE=1
 export HF_HUB_DISABLE_IMPLICIT_TOKEN=1
 export MPLCONFIGDIR=/home/b5ac/freddieyu.b5ac/projects/project_1/cache/matplotlib
 
-PYTHON=/home/b5ac/freddieyu.b5ac/projects/project_1/environments/training/bin/python
 cd /home/b5ac/freddieyu.b5ac/project_1
-"$PYTHON" -m schema_study.formal_train train "$1" "$2" "$3" "$4"
-"$PYTHON" -m schema_study.formal_train predict "$1" "$2" "$3" "$4"
+python -m schema_study.formal_train train "$1" "$2" "$3" "$4"
+python -m schema_study.formal_train predict "$1" "$2" "$3" "$4"

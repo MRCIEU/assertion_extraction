@@ -51,6 +51,7 @@ AUTHORISED_MODEL_EXECUTION_MODULES = (
     "models/torch_backend.py",
     "models/qwen_backend.py",
     "measurement_cpu.py",
+    "formal_optim.py",
 )
 
 

@@ -147,7 +147,7 @@ def _targets(dataset: str, rows: list[dict], classes: list[str]) -> np.ndarray:
 
 
 def _capture(torch) -> dict:
-    state = {"python": random.getstate(), "torch": torch.get_rng_state()}
+    state = {"python": random.getstate(), "numpy": np.random.get_state(), "torch": torch.get_rng_state()}
     if torch.cuda.is_available():
         state["cuda"] = torch.cuda.get_rng_state_all()
     return state
@@ -155,6 +155,8 @@ def _capture(torch) -> dict:
 
 def _restore(state: dict, torch) -> None:
     random.setstate(state["python"])
+    if "numpy" in state:
+        np.random.set_state(state["numpy"])
     torch.set_rng_state(state["torch"])
     if "cuda" in state and torch.cuda.is_available():
         torch.cuda.set_rng_state_all(state["cuda"])
@@ -237,7 +239,9 @@ def _score_split(encoder, dropout, head, ids, lengths, rows, classes, dataset, s
             if dataset == "drugprot":
                 probabilities.extend(torch.sigmoid(logits).cpu().tolist())
             else:
-                chosen = torch.softmax(logits, dim=-1).argmax(dim=-1).tolist()
+                probabilities_tensor = torch.softmax(logits, dim=-1)
+                probabilities.extend(probabilities_tensor.cpu().tolist())
+                chosen = probabilities_tensor.argmax(dim=-1).tolist()
                 for index in chosen:
                     label = classes[index]
                     predicted.append([] if label == schema.no_relation_id else [label])
@@ -257,13 +261,13 @@ def _score_split(encoder, dropout, head, ids, lengths, rows, classes, dataset, s
             from schema_study.evaluation import summarize_counts
             scored_rows = [{"gold": gold, "predicted": labels, "status": "valid", "illegal_labels": []} for gold, labels in zip(gold_sets, predicted)]
             metric = summarize_counts(scored_rows, classes)["f1"]
-        return metric, selected_threshold, predicted
+        return metric, selected_threshold, predicted, maps
     predictions = [
         {"candidate_id": row["candidate_id"], "document_id": row["document_id"], "split": row["split"], "output_status": "valid", "predicted_labels": labels, "illegal_labels": []}
         for row, labels in zip(rows, predicted)
     ]
     scored = score_predictions(rows, predictions, schema, predicate, allowed_splits={row["split"] for row in rows}, data_version=VERSIONS[dataset], input_version="target_anchored_v1", prediction_version="formal", mapping_version=schema.schema_id)
-    return scored["summary"]["f1"], None, predicted
+    return scored["summary"]["f1"], None, predicted, probabilities
 
 
 def train(dataset: str, entity: str, predicate: str, seed: int) -> None:
@@ -333,7 +337,7 @@ def train(dataset: str, entity: str, predicate: str, seed: int) -> None:
             scheduler.step()
             book["optimizer_updates"] += 1
             losses.append(float(loss.detach().float()))
-        metric, threshold, _labels = _score_split(encoder, dropout, head, dev_ids, dev_lengths, dev_rows, classes, dataset, schema, predicate, None, torch)
+        metric, threshold, _labels, _probabilities = _score_split(encoder, dropout, head, dev_ids, dev_lengths, dev_rows, classes, dataset, schema, predicate, None, torch)
         book["completed_epochs"] = epoch
         improved = book["best_score"] is None or metric > book["best_score"] or (metric == book["best_score"] and epoch < book["best_epoch"])
         if improved:
@@ -419,11 +423,11 @@ def predict(dataset: str, entity: str, predicate: str, seed: int) -> None:
             if [label.stable_id for label in target_schema.level_labels(predicate)] + ([] if dataset == "drugprot" else [target_schema.no_relation_id]) != classes:
                 raise RuntimeError("Prediction label space does not match the trained head.")
             ids, lengths = _encode(tokenizer, rows)
-            _metric, _threshold, labels = _score_split(
+            _metric, _threshold, labels, probabilities = _score_split(
                 encoder, dropout, head, ids, lengths, rows, classes, "drugprot" if dataset == "drugprot" else "biored",
                 target_schema, predicate, saved["threshold"], torch,
             )
-            for row, predicted in zip(rows, labels):
+            for row, predicted, scores in zip(rows, labels, probabilities):
                 handle.write(json.dumps({
                     "candidate_id": row["candidate_id"],
                     "document_id": row["document_id"],
@@ -434,6 +438,7 @@ def predict(dataset: str, entity: str, predicate: str, seed: int) -> None:
                     "seed": seed,
                     "output_status": "valid",
                     "predicted_labels": predicted,
+                    "label_probabilities": scores,
                     "illegal_labels": [],
                     "threshold": saved["threshold"],
                     "checkpoint": "best",
@@ -443,8 +448,25 @@ def predict(dataset: str, entity: str, predicate: str, seed: int) -> None:
     _record(output, "predict", {"model_called": True, "checkpoint": "best", "best_epoch": saved["best_epoch"]})
 
 
+def apply_programme() -> str:
+    """Point a new run at the matched E0–E7 inputs without moving the frozen 2026-11-15 run."""
+    global ROOT
+    programme = os.environ.get("SCHEMA_STUDY_PROGRAMME", "formal_20261115")
+    if programme == "formal_matched_e0_e7":
+        ROOT = STORAGE / "studies/schema_granularity_v1/runs/formal/formal_matched_e0_e7"
+        CONTEXTS["biored"] = STORAGE / "data/inputs/biored/target_anchored_v2__biomedbert_e1354b7a_matched_e0_e7/contexts.jsonl"
+        CONTEXTS["bc8"] = STORAGE / "data/inputs/bc8/target_anchored_v2__biomedbert_e1354b7a_matched_e0_e7/contexts.jsonl"
+    return programme
+
+
 def main() -> None:
     import sys
+    from schema_study.paths import get_paths
+    from schema_study.production_plan import gpu_authorised
+
+    if not gpu_authorised(get_paths().study, os.environ.get("SCHEMA_STUDY_COMMIT", "")):
+        raise SystemExit(3)
+    apply_programme()
     if len(sys.argv) != 6 or sys.argv[1] not in {"train", "predict"}:
         raise SystemExit("Usage: formal_train train|predict dataset entity predicate seed")
     action, dataset, entity, predicate, seed = sys.argv[1:]

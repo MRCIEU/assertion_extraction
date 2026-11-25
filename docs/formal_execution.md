@@ -24,6 +24,18 @@ The designed supervised matrix has 324 runs: 288 BioRED runs across three traina
 
 Supplementary configurations, including BioLinkBERT revision `b71f5d70f063d1c8f1124070ce86f1ee463ca1fe` and the public DeBERTa base verifier revision `6f5cf0a2b59cabb106aca4c287eed12e357e90eb`, are listed separately. Their weights have not been downloaded. The verifier label map is entailment, neutral, contradiction. The previously selected xsmall verifier still returns HTTP 401 to anonymous access.
 
+Public checkpoints that resolve without an access token, and whose weights are not yet local, are BioLinkBERT-base `b71f5d70f063d1c8f1124070ce86f1ee463ca1fe` (Apache-2.0), DeBERTa-v3-base-mnli-fever-anli `6f5cf0a2b59cabb106aca4c287eed12e357e90eb` (MIT), GPT-OSS-20B `6cee5e81ee83917806bbde320786a8fb61efebee` (Apache-2.0) and Qwen3.6-27B `1cda14dd71a3f47115850eb790f416f165da1cb5` (Apache-2.0). They are not described as execution-ready until the files are stored under the project model directory. The twelve historical DrugProt BiomedBERT conditions each have a non-empty best checkpoint and a completion record, so they are the reused encoder runs.
+
+A CPU fixture in `hf-hpc` trained a four-head encoder for four steps, resumed from a real checkpoint at step two, and matched the uninterrupted weights. Every head and the shared embedding received a gradient. This is not a Qwen result. Few-shot and supervised token-length distributions have not yet been measured.
+
+## Production path
+
+`production_plan.py` enumerates the agreed conditions. With the twelve completed DrugProt BiomedBERT checkpoints reused, the new principal training count is 312 of 324 designed runs. BioLinkBERT has 48 runs, each hierarchical comparison has 12, schema-conditioned LoRA has 24, and the Qwen3-8B curriculum has 27. Sensitivity runs are counted separately and do not repeat the standard-loss or full-population baselines.
+
+The multi-task loss used by the trainer is an equal mean of the four predicate-head losses and stays on the autograd graph. DrugProt consistency uses a squared hinge that requires each parent probability to be at least its child. The mapped native distribution is a detached target for the BioRED divergence.
+
+`formal_train.py` refuses to start unless `formal_execution_approval.json` names the manifest checksum, the repository commit and account `brics.b5ac`. When `SCHEMA_STUDY_PROGRAMME=formal_matched_e0_e7`, BioRED and BC8 read the matched input collection and write to a new run directory. The frozen November run is left in place. GPU batch scripts activate `hf-hpc`. No approval file has been written.
+
 ## What remains blocked
 
 Assistant-only loss masking, distributed accumulation, hierarchical losses, schema sampling, curriculum order and nested subsets are implemented and tested with fixtures. They have not been run on a GPU. Few-shot and supervised token lengths have not been measured; the existing Qwen lengths are zero-shot. Human certainty and support judgements remain unfilled. No formal job will be submitted until `formal_execution_approval.json` is written in the study directory and the remaining node-hour balance is known.

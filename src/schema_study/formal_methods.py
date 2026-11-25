@@ -49,11 +49,11 @@ def distributed_accumulation(micro_batch: int, world_size: int, effective_batch:
     return effective_batch // per_update
 
 
-def assistant_labels(token_ids: list[int], prompt_tokens: int, pad_id: int) -> list[int]:
-    """Supervise the assistant span only. Prompt and padding receive the ignore index."""
+def assistant_labels(token_ids: list[int], prompt_tokens: int, pad_positions: set[int]) -> list[int]:
+    """Supervise the assistant span. Padding is a set of positions, so an end-of-sequence id is kept when it is also the pad id."""
     if prompt_tokens < 0 or prompt_tokens > len(token_ids):
         raise ValueError("The prompt length is outside the token sequence.")
-    labels = [-100 if index < prompt_tokens or token == pad_id else token for index, token in enumerate(token_ids)]
+    labels = [-100 if index < prompt_tokens or index in pad_positions else token for index, token in enumerate(token_ids)]
     if all(label == -100 for label in labels):
         raise ValueError("The supervised span is empty.")
     return labels
@@ -134,7 +134,7 @@ def training_requirement(dataset: str, entity_level: str, changed_training_input
 def checkpoint_can_resume(saved: dict, configuration_fingerprint: str, data_fingerprint: str) -> bool:
     """A continuation is the same run only when both fingerprints and the step agree."""
     missing = [field for field in CHECKPOINT_FIELDS if field not in saved]
-    if missing:
+    if missing or not saved.get("model_state") or not saved.get("optimizer_state"):
         return False
     return saved["configuration_fingerprint"] == configuration_fingerprint and saved["data_fingerprint"] == data_fingerprint and int(saved["step"]) >= 0
 
@@ -145,19 +145,17 @@ def node_hours(gpu_hours: float) -> float:
 
 
 def supplementary_inventory() -> list[dict]:
-    """Supplementary runs stay outside the 324-run principal design."""
+    """Counts come from the condition iterators. They are not the earlier planning estimates."""
+    from schema_study.production_plan import family_counts
+
+    counts = family_counts(True)
     return [
-        {"id": "biolinkbert", "priority": "supplementary", "purpose": "Encoder replication at E0, E2 and E7, plus native DrugProt.", "new_training_runs": 60, "weights_local": False},
-        {"id": "hierarchical_encoder", "priority": "supplementary", "purpose": "Shared encoder with existence, coarse and native heads.", "new_training_runs": 12, "loss_weights": dict(MULTITASK_LOSS_WEIGHTS)},
-        {"id": "hierarchical_consistency", "priority": "supplementary", "purpose": "The multi-task model plus a frozen consistency term.", "new_training_runs": 12, "consistency_weight": CONSISTENCY_WEIGHT},
-        {"id": "schema_conditioned_lora", "priority": "supplementary", "purpose": "One adapter per corpus and model size, not 32 independent adapters.", "new_training_runs": 4},
-        {"id": "curriculum", "priority": "supplementary", "purpose": "Coarse-to-fine, fine-to-coarse and mixed order, with a shared final native block.", "new_training_runs": 9},
-        {"id": "class_imbalance", "priority": "sensitivity", "purpose": "Weighted and focal losses against the unchanged principal objective.", "replaces_principal_loss": False},
-        {"id": "negative_sampling", "priority": "sensitivity", "purpose": "DrugProt training subsamples. The evaluation population stays complete.", "evaluation_population_changed": False},
-        {"id": "data_efficiency", "priority": "sensitivity", "purpose": "Nested 10, 25, 50 and 100 percent document subsets. The 100 percent run is the principal run.", "duplicate_full_run": False},
-        {"id": "unseen_schema", "priority": "sensitivity", "purpose": "A withheld schema instruction. Native distinctions may still have been seen under another view."},
-        {"id": "gpt_oss_20b", "priority": "external", "purpose": "Zero-shot and few-shot at representative conditions. Not the full factorial.", "weights_local": False, "full_matrix": False},
-        {"id": "qwen36_27b", "priority": "optional", "purpose": "Cross-generation check if the checkpoint, licence and budget are later approved.", "weights_local": False},
+        {"id": "biolinkbert", "new_training_runs": counts["biolinkbert"]},
+        {"id": "hierarchical_multitask", "new_training_runs": counts["hierarchical_multitask"], "loss": "equal_mean_of_four_normalised_head_losses"},
+        {"id": "hierarchical_consistency", "new_training_runs": counts["hierarchical_consistency"], "consistency_weight": CONSISTENCY_WEIGHT, "drugprot_penalty": "squared_hinge_parent_at_least_child"},
+        {"id": "schema_conditioned_lora", "new_training_runs": counts["schema_conditioned_lora"], "includes_resource_efficient_and_exposure_controlled": True},
+        {"id": "curriculum", "new_training_runs": counts["curriculum"], "final_block": "P3"},
+        {"id": "sensitivity", "new_training_runs": counts["sensitivity"], "standard_and_full_population_runs_reused": True},
     ]
 
 
