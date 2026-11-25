@@ -148,7 +148,7 @@ def hierarchical_objective(outputs: dict[str, torch.Tensor], targets: dict[str, 
         for coarse, historical in (("P0", "P1"), ("P1", "P2"), ("P2", "P3")):
             from schema_study.production_plan import membership_rows
 
-            membership = torch.tensor(membership_rows(schema, historical, "P4"), dtype=native.dtype)
+            membership = torch.tensor(membership_rows(schema, historical, "P4"), dtype=native.dtype, device=native.device)
             mapped = map_native_distribution(native, membership)
             terms.append(consistency_kl(F.log_softmax(outputs[coarse], dim=-1), mapped, detach_target=True))
         objective = objective + 0.1 * torch.stack(terms).mean()

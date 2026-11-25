@@ -291,12 +291,28 @@ def matched_main(arguments: list[str]) -> int:
                 continue
             observed = None if entry["job_id"] in queued else _sacct_state(entry["job_id"])
             scheduler = interpret_slurm(entry["job_id"], queued, observed)
+            output = _scientific_output(task)
             updated = reconcile_entry(
-                entry, scheduler, _scientific_output(task), task_id=task["task_id"],
+                entry, scheduler, output, task_id=task["task_id"],
                 group=f"{task.get('family')}|{task.get('model')}|{(task.get('resources') or {}).get('gpus')}",
                 slurm_state=observed or "",
                 elapsed_seconds=int(occupancy["elapsed"].get(entry["job_id"], 0)),
             )
+            if (
+                task.get("family") in {"thinking", "self_consistency"}
+                and updated.get("state") == "inference_completed"
+                and not (output or {}).get("configuration_verified")
+            ):
+                state.setdefault("_recovery", {}).setdefault(task["task_id"], []).append({
+                    "reason": "completed_output_did_not_use_the_corrected_decoding_configuration",
+                    "job_id": entry.get("job_id"),
+                    "preserved": "predictions_previous.jsonl",
+                })
+                updated = {
+                    "state": "unsubmitted",
+                    "attempts": int(entry.get("attempts", 0)),
+                    "scientific": None,
+                }
             state[task["task_id"]] = merge_group_block(state, updated)
         evidence = {"approval": {"ready": True}}
         for task in tasks:

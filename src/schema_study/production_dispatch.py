@@ -453,11 +453,10 @@ class GenerationSession:
         self._load_tokenizer()
         prompts = []
         for request in requests:
-            messages = request.get("messages")
-            if messages:
-                prompts.append(self.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True, enable_thinking=True))
-            else:
-                prompts.append(request.get("rendered") or request.get("prompt") or "")
+            user = request.get("prompt") or ""
+            prompts.append(self.tokenizer.apply_chat_template(
+                [{"role": "user", "content": user}], tokenize=False, add_generation_prompt=True, enable_thinking=True,
+            ))
         return prompts
 
     def generate_batch(self, requests: list[dict], *, batch_size: int = 8) -> list[dict]:
@@ -492,7 +491,7 @@ class GenerationSession:
         if self.specification.get("structured_outputs"):
             sampling["structured_outputs"] = {"json": requests[0].get("schema_json") or {"type": "object"}}
         if self.specification.get("token_logprobs"):
-            return self._score_labels(requests, engine, sampling)
+            return self._score_labels(requests, engine, sampling, _generation_schema(self.task))
         rows = vllm_generate(self._prompts(requests), sampling, lora_path=self.specification.get("adapter"), engine=engine)
         if self.specification["decoding"] == "self_consistency":
             for row in rows:
@@ -501,12 +500,14 @@ class GenerationSession:
                     raise RuntimeError("Self-consistency did not retain five samples from the loaded engine.")
         return rows
 
-    def _score_labels(self, requests: list[dict], engine, sampling: dict) -> list[dict]:
+    def _score_labels(self, requests: list[dict], engine, sampling: dict, schema) -> list[dict]:
         from schema_study.production_inference import vllm_generate
 
         pairs = []
         for request in requests:
-            legal = request.get("legal_labels") or []
+            legal = list(request.get("legal_labels") or [])
+            if not legal:
+                legal = _legal_output_labels(self.task, schema)
             if not legal:
                 raise RuntimeError("Candidate scoring has no legal output schema.")
             prompt = request.get("rendered") or request.get("prompt") or ""
@@ -522,6 +523,27 @@ class GenerationSession:
 def construct_backend(task: dict) -> GenerationSession:
     """Build one session from the task record. The record itself is not a function."""
     return GenerationSession(task)
+
+
+def _resume_compatible(task: dict, record: dict) -> bool:
+    """A completed ordinary generation is not a thinking trace or a five-sample vote."""
+    if task.get("family") == "thinking":
+        return record.get("thinking_enabled") is True
+    if task.get("family") == "self_consistency":
+        return isinstance(record.get("samples"), list) and len(record["samples"]) == 5
+    return True
+
+
+def _legal_output_labels(task: dict, schema) -> list[str]:
+    """Positive display names for the schema predicate, plus the empty decision."""
+    if schema is None:
+        return []
+    from schema_study.learning_conditions import HISTORICAL_PREDICATES
+
+    level = task.get("schema_predicate") or HISTORICAL_PREDICATES.get(task.get("predicate"), task.get("predicate"))
+    if not level or level not in getattr(schema, "levels", {}):
+        return []
+    return [*schema.positive_display_names(level), "[]"]
 
 
 def _generation_schema(task: dict):
@@ -543,6 +565,8 @@ def _parse_generated(task: dict, request: dict, result: dict, schema) -> dict:
 
     from schema_study.learning_conditions import HISTORICAL_PREDICATES
 
+    if result.get("evidence") and not result["evidence"].get("complete"):
+        return {**result, "labels": None}
     level = task.get("schema_predicate") or HISTORICAL_PREDICATES.get(task.get("predicate"), task.get("predicate")) or request.get("predicate_level")
     if not level:
         return result
@@ -556,7 +580,7 @@ def _parse_generated(task: dict, request: dict, result: dict, schema) -> dict:
     }
 
 
-def _family_result(family: str, request: dict, result: dict) -> dict:
+def _family_result(family: str, request: dict, result: dict, schema=None, level: str | None = None) -> dict:
     """Apply one named decoding rule to a result that a shared engine already produced."""
     if family == "thinking":
         raw = result.get("raw") or ""
@@ -575,22 +599,29 @@ def _family_result(family: str, request: dict, result: dict) -> dict:
         complete = record["complete"] and bool(qualifications)
         return {**result, "labels": result.get("labels") if complete else None, "qualifications": qualifications, "evidence": record}
     if family == "self_consistency":
-        from schema_study.production_runtime import self_consistency as aggregate
+        from schema_study.production_runtime import interpret_generation, self_consistency as aggregate
 
-        samples = result.get("samples") or []
-        for sample in samples:
-            sample.setdefault("ledger_status", "valid" if sample.get("labels") is not None else "invalid")
-            sample.setdefault("predicted_labels", sample.get("labels") or [])
-        if len(samples) == 5:
-            aggregated = aggregate(samples, bool(request.get("multi")))
-            return {**result, "raw": result.get("raw") or json.dumps(samples), "labels": aggregated["labels"], "samples": samples}
-        return result
+        samples = []
+        for sample in result.get("samples") or []:
+            raw = sample.get("raw") if isinstance(sample, dict) else str(sample)
+            interpreted = interpret_generation(raw, request["candidate_id"], schema, level) if schema is not None and level else {}
+            samples.append({
+                "raw": raw,
+                "predicted_labels": interpreted.get("predicted_labels", sample.get("labels") or []),
+                "ledger_status": interpreted.get("ledger_status", "invalid"),
+                "illegal_labels": interpreted.get("illegal_labels", []),
+            })
+        if len(samples) != 5:
+            raise RuntimeError("Self-consistency did not retain five samples from the loaded engine.")
+        aggregated = aggregate(samples, bool(request.get("multi")))
+        return {**result, "raw": result.get("raw") or json.dumps([sample["raw"] for sample in samples]), "labels": aggregated["labels"], "samples": samples, "scores": {"valid_samples": aggregated["valid_samples"], "aggregation": aggregated["aggregation"]}}
     if family == "candidate_scoring":
         from schema_study.production_runtime import require_legal_scores, sequence_logprobs
 
-        legal = request.get("legal_labels") or []
+        legal = list(request.get("legal_labels") or []) or list((result.get("token_logprobs") or {}).keys())
         scored = require_legal_scores(sequence_logprobs(result["token_logprobs"]), legal, bool(request.get("multi")))
-        return {"raw": json.dumps({"labels": scored["labels"]}), "labels": scored["labels"], "scores": scored, "token_logprobs": result["token_logprobs"]}
+        labels = [] if scored["labels"] == ["[]"] else scored["labels"]
+        return {"raw": json.dumps({"labels": labels}), "labels": labels, "scores": scored, "token_logprobs": result["token_logprobs"]}
     return result
 
 
@@ -668,11 +699,20 @@ def _run_generation(task: dict, workdir: Path) -> dict:
     ledger_path = workdir / "predictions.jsonl"
     published: dict[str, dict] = {}
     if ledger_path.is_file():
+        retained = []
         for line in ledger_path.read_text(encoding="utf-8").splitlines():
             if line.strip():
                 row = json.loads(line)
                 if prediction_usable(row):
-                    published[row["request_id"]] = row
+                    retained.append(row)
+        compatible = [row for row in retained if _resume_compatible(task, row)]
+        if retained and len(compatible) != len(retained):
+            archive = ledger_path.with_name("predictions_previous.jsonl")
+            if not archive.exists():
+                ledger_path.replace(archive)
+            retained = []
+        for row in retained:
+            published[row["request_id"]] = row
     statuses = {key: row["status"] for key, row in published.items()}
     session = construct_backend(task)
     schema = _generation_schema(task)
@@ -687,10 +727,15 @@ def _run_generation(task: dict, workdir: Path) -> dict:
             if not runnable:
                 continue
             for request, result in zip(runnable, session.generate_batch(runnable)):
-                shaped = _family_result(task["family"], request, result)
+                level = task.get("schema_predicate")
+                shaped = _family_result(task["family"], request, result, schema, level)
                 shaped = _parse_generated(task, request, shaped, schema)
                 status = classify_output(shaped.get("raw"), shaped.get("labels"), failed=bool(shaped.get("failed")))
                 record = prediction_record(request, shaped, task, session.specification, status)
+                if task.get("family") == "thinking":
+                    record["thinking_enabled"] = True
+                if shaped.get("samples"):
+                    record["samples"] = shaped["samples"]
                 if prediction_usable(record):
                     published[request["request_id"]] = record
                     statuses[request["request_id"]] = status
@@ -703,6 +748,9 @@ def _run_generation(task: dict, workdir: Path) -> dict:
         "requests": len(expected),
         "predictions_usable": scientific_done,
         "engine_loads": session.loads,
+        "configuration_verified": True,
+        "thinking_enabled": task.get("family") == "thinking",
+        "samples_retained": 5 if task.get("family") == "self_consistency" else None,
     }) + "\n", encoding="utf-8")
     return {
         "completed": scientific_done,
