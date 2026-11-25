@@ -74,18 +74,45 @@ def environment_record() -> dict:
     }
 
 
+def publish_file(path: Path, write) -> Path:
+    """Write to a temporary file and replace the destination only after success.
+
+    An exception leaves the previous destination in place and removes the
+    partial file. A reader therefore does not observe an unfinished result.
+    """
+    destination = Path(path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_name(destination.name + ".partial")
+    try:
+        write(temporary)
+        os.replace(temporary, destination)
+    except Exception:
+        if temporary.exists():
+            temporary.unlink()
+        raise
+    return destination
+
+
 def write_json(path: Path, payload: Mapping | Sequence) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    text = json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+
+    def _write(temporary: Path) -> None:
+        temporary.write_text(text, encoding="utf-8")
+
+    publish_file(path, _write)
 
 
 def write_jsonl(path: Path, rows: Iterable[Mapping]) -> int:
-    path.parent.mkdir(parents=True, exist_ok=True)
     count = 0
-    with path.open("w", encoding="utf-8") as handle:
-        for row in rows:
-            handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True, default=str) + "\n")
-            count += 1
+
+    def _write(temporary: Path) -> None:
+        nonlocal count
+        with temporary.open("w", encoding="utf-8") as handle:
+            for row in rows:
+                handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True, default=str) + "\n")
+                count += 1
+
+    publish_file(path, _write)
     return count
 
 
@@ -104,15 +131,21 @@ def write_yaml(path: Path, payload: Mapping) -> None:
 
 
 def write_parquet(path: Path, rows: Sequence[Mapping], columns: Sequence[str]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
     frame = pd.DataFrame(list(rows), columns=list(columns))
-    frame.to_parquet(path, index=False)
+
+    def _write(temporary: Path) -> None:
+        frame.to_parquet(temporary, index=False)
+
+    publish_file(path, _write)
 
 
 def write_tsv(path: Path, rows: Sequence[Mapping], columns: Sequence[str]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
     frame = pd.DataFrame(list(rows), columns=list(columns))
-    frame.to_csv(path, sep="\t", index=False)
+
+    def _write(temporary: Path) -> None:
+        frame.to_csv(temporary, sep="\t", index=False)
+
+    publish_file(path, _write)
 
 
 def write_run_skeleton(

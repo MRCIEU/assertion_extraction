@@ -1,0 +1,29 @@
+# Alternative partitions of the native labels. They do not replace P1–P4.
+alternatives:
+  - id: biored_relation_family
+    corpus: biored
+    question: Whether chemical co-administration, chemical transformation, binding, and residual association should remain separate rather than share one residual parent.
+    groups:
+      - {display_name: Directional_correlation, members: [BR01_POSITIVE_CORRELATION, BR02_NEGATIVE_CORRELATION]}
+      - {display_name: Physical_binding, members: [BR04_BIND]}
+      - {display_name: Residual_association, members: [BR03_ASSOCIATION]}
+      - {display_name: Coadministration, members: [BR06_COTREATMENT, BR07_DRUG_INTERACTION]}
+      - {display_name: Chemical_transformation, members: [BR08_CONVERSION]}
+      - {display_name: Unresolved_comparison, members: [BR05_COMPARISON]}
+    preserves: Direction is kept together but the positive and negative labels are no longer separate. Binding stays outside association.
+    omits: The positive versus negative distinction. The distinction between combination therapy and a pharmacodynamic interaction.
+    semantic_status: interpretable_with_omissions
+    direction: Directional_correlation mixes positive and negative members. The other groups are nonpolar.
+  - id: drugprot_route
+    corpus: drugprot
+    question: Whether the guideline's route of action is a more appropriate abstraction than the current direction groups.
+    groups:
+      - {display_name: Direct_binding_regulation, members: [DP01_ACTIVATOR, DP09_INHIBITOR, DP06_DIRECT_REGULATOR]}
+      - {display_name: Indirect_regulation, members: [DP08_INDIRECT_UPREGULATOR, DP07_INDIRECT_DOWNREGULATOR]}
+      - {display_name: Receptor_modulation, members: [DP02_AGONIST, DP03_AGONIST_ACTIVATOR, DP04_AGONIST_INHIBITOR, DP05_ANTAGONIST]}
+      - {display_name: Metabolic_role, members: [DP12_SUBSTRATE, DP11_PRODUCT_OF, DP13_SUBSTRATE_PRODUCT_OF]}
+      - {display_name: Structural_inclusion, members: [DP10_PART_OF]}
+    preserves: Direct binding stays apart from indirect regulation, receptor modulation, metabolic role, and structural inclusion.
+    omits: Increase versus decrease, and the distinction between agonism and antagonism.
+    semantic_status: interpretable_with_omissions
+    direction: Direct binding, indirect regulation, and receptor modulation each mix guideline directions. They are not direction-preserving groups.

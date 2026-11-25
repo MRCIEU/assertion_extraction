@@ -638,6 +638,33 @@ def _shortest_intervals(first_ids: set[str], second_ids: set[str], index: dict[s
     return sorted(set(pairs))
 
 
+def source_spans(by_id: dict, sentence_ids: list[str]) -> list[list[int]]:
+    """Character spans of selected sentences.
+
+    Adjacent selected sentences form one span. A sentence that was not selected
+    remains outside the spans rather than being absorbed into the gap.
+    """
+    selected = set(sentence_ids)
+    rows = sorted((by_id[sentence_id] for sentence_id in sentence_ids), key=lambda row: (row["char_start"], row["char_end"]))
+    if not rows:
+        return []
+    spans = [[int(rows[0]["char_start"]), int(rows[0]["char_end"])]]
+    covered_until = int(rows[0]["char_end"])
+    for row in rows[1:]:
+        start = int(row["char_start"])
+        end = int(row["char_end"])
+        interrupted = any(
+            other["sentence_id"] not in selected and int(other["char_end"]) > covered_until and int(other["char_start"]) < start
+            for other in by_id.values()
+        )
+        if interrupted:
+            spans.append([start, end])
+        else:
+            spans[-1][1] = end
+        covered_until = end
+    return spans
+
+
 def _passage(kind: str, selections: list[list[str]], by_id: dict, fragments: list[dict], document_length: int) -> dict:
     alternatives = []
     seen = set()
@@ -648,8 +675,7 @@ def _passage(kind: str, selections: list[list[str]], by_id: dict, fragments: lis
         else:
             if not sentence_ids:
                 continue
-            rows = [by_id[sentence_id] for sentence_id in sentence_ids]
-            spans = [[rows[0]["char_start"], rows[-1]["char_end"]]]
+            spans = source_spans(by_id, sentence_ids)
             key = (tuple(sentence_ids), tuple(map(tuple, spans)))
         if key in seen:
             continue

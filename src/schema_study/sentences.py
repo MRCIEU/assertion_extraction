@@ -11,6 +11,9 @@ are not rewritten.
 
 from __future__ import annotations
 
+SENTENCE_SEGMENTATION_VERSION = "abbreviation_decimal_v1"
+TERMINAL_PUNCTUATION_VERSION = "terminal_punctuation_v1"
+
 ABBREVIATIONS = frozenset(
     {
         "dr", "mr", "mrs", "ms", "prof", "jr", "sr", "vs", "etc", "al", "fig", "figs",
@@ -141,6 +144,64 @@ def segmentation_diagnostics(text: str) -> dict:
         "abbreviation_before_capital": abbreviations,
         "initial_before_capital": initials,
     }
+
+
+def terminal_punctuation_sentences(document: dict) -> list[dict]:
+    """Split on terminal punctuation without the abbreviation list.
+
+    Decimal points remain inside a sentence. This is a comparison method, not
+    a replacement for the recorded sentence version.
+    """
+    text = document["text"]
+    title_end = int(document["title_char_end"])
+    abstract_start = int(document["abstract_char_start"])
+    rows = []
+    rows.extend(_terminal_section(document, "title", text[:title_end], 0))
+    rows.extend(_terminal_section(document, "abstract", text[abstract_start:], abstract_start))
+    return rows
+
+
+def _terminal_section(document: dict, section: str, text: str, origin: int) -> list[dict]:
+    spans = []
+    start = 0
+    index = 0
+    while index < len(text):
+        if text[index] in ".!?" and _terminal_boundary(text, index):
+            spans.append((start, index + 1))
+            next_start = index + 1
+            while next_start < len(text) and text[next_start] in " \t":
+                next_start += 1
+            start = next_start
+            index = next_start
+            continue
+        index += 1
+    if start < len(text):
+        spans.append((start, len(text)))
+    rows = []
+    for position, (left, right) in enumerate(span for span in spans if span[0] < span[1]):
+        rows.append(
+            {
+                "sentence_id": f"{document['document_id']}:{section}:{position:04d}:{TERMINAL_PUNCTUATION_VERSION}",
+                "document_id": str(document["document_id"]),
+                "split": document["split"],
+                "section": section,
+                "char_start": origin + left,
+                "char_end": origin + right,
+                "text": text[left:right],
+                "segmentation_version": TERMINAL_PUNCTUATION_VERSION,
+            }
+        )
+    return rows
+
+
+def _terminal_boundary(text: str, index: int) -> bool:
+    if text[index] == "." and index > 0 and index + 1 < len(text) and text[index - 1].isdigit() and text[index + 1].isdigit():
+        return False
+    following = _next_significant(text, index)
+    if following is None:
+        return True
+    nxt = text[following]
+    return nxt.isupper() or nxt.isdigit() or nxt in "(\"'["
 
 
 def mention_sentences(mention: dict, sentences: list[dict]) -> list[str]:
