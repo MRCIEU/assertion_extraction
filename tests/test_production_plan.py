@@ -235,8 +235,190 @@ def test_torch_fixture_is_not_collected_without_torch(tmp_path: Path):
 
         tokenizer = AutoTokenizer.from_pretrained(tokenizer_path, local_files_only=True)
         rendered = render_conversation(tokenizer, "Name the relation.", '{"labels": ["Association"]}')
+        prompt = list(tokenizer.apply_chat_template(
+            [{"role": "user", "content": "Name the relation."}], tokenize=True, add_generation_prompt=True, enable_thinking=False,
+        ))
         rendered_labels = assistant_supervision(torch.tensor([rendered["input_ids"]]), torch.ones(1, len(rendered["input_ids"])), [rendered["prompt_tokens"]])
         assert int((rendered_labels[0, rendered["prompt_tokens"]:] != -100).sum()) > 0
+        if rendered["boundary"] == "prefix":
+            assert rendered["input_ids"][: len(prompt)] == prompt
+        else:
+            assert rendered["boundary"] == "assistant_mask"
     weighted = train_encoder(ProductionHierarchicalEncoder(), loss_name="class_weighted")
     focal = train_encoder(ProductionHierarchicalEncoder(), loss_name="focal")
     assert weighted["finite"] is True and focal["finite"] is True
+    from schema_study.production_lora import FixtureCausalModel, _fixture_batches, fit, prepare_process
+
+    configuration = production_configuration(micro_batch_size=2, world_size=1)
+    configuration["effective_batch_size"] = 16
+    configuration["eval_interval"] = 1
+    batches = _fixture_batches(32)
+    stopped = fit(FixtureCausalModel(), batches, configuration=configuration, steps=4, total_steps=4, stop_after=2)
+    assert stopped["steps"] == 2
+    assert stopped["completed"] is False
+    assert stopped["status"] == "valid_continuation_required"
+    scores = iter((0.9, 0.1))
+    selected = fit(FixtureCausalModel(), batches, configuration=configuration, steps=2, total_steps=2, score_fn=lambda _model: next(scores), output_dir=tmp_path / "selection")
+    assert selected["completed"] is True
+    assert selected["best"]["development_micro_f1"] == 0.9
+    assert selected["best"]["step"] == 1
+    assert (tmp_path / "selection" / "best" / "adapter_checkpoint.pt").is_file()
+    partial = fit(
+        FixtureCausalModel(), batches, configuration=configuration, steps=1, total_steps=2,
+        fingerprints={"input": "population-a"}, output_dir=tmp_path / "finger",
+    )
+    saved = torch.load(tmp_path / "finger" / "adapter_checkpoint.pt", map_location="cpu", weights_only=False)
+    fresh = FixtureCausalModel()
+    with pytest.raises(RuntimeError, match="fingerprint"):
+        fit(fresh, batches, configuration=configuration, steps=2, total_steps=2, resume=saved, fresh=fresh, fingerprints={"input": "population-b"})
+    import os
+    os.environ.pop("WORLD_SIZE", None)
+    with pytest.raises(RuntimeError, match="world size"):
+        prepare_process(2)
+
+
+def test_population_horizon_and_scheduler_are_distinct():
+    from schema_study.formal_launch import matched_main
+    from schema_study.production_inference import candidate_scores, constrained_generate, evidence_generate, self_consistency
+    from schema_study.production_runtime import (
+        assert_runtime_world,
+        constrained_sampling,
+        evaluation_released,
+        external_model_convention,
+        generation_requests,
+        horizon_for_task,
+        interpret_generation,
+        optimiser_horizon,
+        placement,
+        sbatch_argv,
+        select_population,
+        sensitivity_changes,
+        training_status,
+        write_shards,
+    )
+    from schema_study.schemas import default_schema_path, load_schema
+
+    horizon = optimiser_horizon(20, 3, 1, 1)
+    assert horizon["remainder_dropped"] == 4
+    assert horizon["total_updates"] == 3
+    with pytest.raises(RuntimeError, match="world size"):
+        assert_runtime_world(2, 1)
+    qwen32 = placement("qwen32b", 2)
+    assert qwen32["method"] == "fsdp_full_shard" and qwen32["parameter_sharding"] is True
+    qwen8 = placement("qwen8b", 2)
+    assert qwen8["replicates_full_parameters"] is True and qwen8["parameter_sharding"] is False
+    rows = []
+    for split in ("train", "dev"):
+        for entity in ("E0", "E2"):
+            for predicate in ("P0", "P3"):
+                rows.append({
+                    "candidate_id": f"{split}-{entity}",
+                    "entity": entity,
+                    "predicate": predicate,
+                    "split": split,
+                    "document_id": "d1" if entity == "E0" else "d2",
+                    "assistant": {"labels": ["Association"] if predicate == "P3" and entity == "E0" else []},
+                })
+    independent = select_population({"family": "principal_training", "entity": "E2", "predicate": "P3"}, rows)
+    other = select_population({"family": "principal_training", "entity": "E0", "predicate": "P0"}, rows)
+    assert {row["candidate_id"] for row in independent["rows"]} == {"train-E2"}
+    assert independent["rows"] != other["rows"]
+    drugprot_rows = []
+    for predicate in ("P0", "P1", "P2", "P3"):
+        drugprot_rows.append({"candidate_id": "c", "entity": "native", "predicate": predicate, "split": "train", "assistant": {"labels": []}, "document_id": "d"})
+    one = select_population({"family": "schema_conditioned_lora", "dataset": "drugprot", "exposure": "resource_efficient_one_view", "seed": 13}, drugprot_rows)
+    every = select_population({"family": "schema_conditioned_lora", "dataset": "drugprot", "exposure": "exposure_controlled_all_views", "seed": 13}, drugprot_rows)
+    assert len(one["rows"]) == 3
+    assert len(every["rows"]) == 4
+    assert all(row["entity"] == "native" for row in one["rows"])
+    biored_rows = [
+        {"candidate_id": "c", "entity": entity, "predicate": predicate, "split": "train", "assistant": {"labels": []}, "document_id": "d"}
+        for entity in tuple(f"E{level}" for level in range(8))
+        for predicate in ("P0", "P1", "P2", "P3")
+    ]
+    shared = select_population({"family": "schema_conditioned_lora", "dataset": "biored", "exposure": "resource_efficient_one_view", "seed": 13}, biored_rows)
+    assert shared["rows"][0]["entity"] != "native"
+    curriculum_rows = [
+        {"candidate_id": f"{entity}-{predicate}-{copy}", "entity": entity, "predicate": predicate, "split": "train", "assistant": {"labels": []}, "document_id": "d"}
+        for entity in ("E2", "E7")
+        for predicate in ("P0", "P1", "P2", "P3")
+        for copy in (1, 2)
+    ]
+    coarse = select_population({"family": "curriculum", "entity": "E2", "order": "coarse_to_fine"}, curriculum_rows)
+    mixed = select_population({"family": "curriculum", "entity": "E2", "order": "mixed"}, curriculum_rows)
+    assert [row["predicate"] for row in coarse["rows"] if row["phase"] == "exposure"] != [row["predicate"] for row in mixed["rows"] if row["phase"] == "exposure"]
+    assert coarse["rows"][-1]["predicate"] == "P3"
+    assert all(row["entity"] == "E2" for row in coarse["rows"])
+    unseen_rows = [
+        {"candidate_id": f"{entity}", "entity": entity, "predicate": "P3", "split": "train", "assistant": {"labels": []}, "document_id": entity}
+        for entity in tuple(f"E{level}" for level in range(8))
+    ]
+    unseen_rows.append({"candidate_id": "E3-dev", "entity": "E3", "predicate": "P3", "split": "dev", "assistant": {"labels": []}, "document_id": "dev"})
+    held = select_population({"family": "unseen_schema", "withheld": "E3"}, unseen_rows)
+    assert all(row["entity"] != "E3" for row in held["rows"])
+    assert held["evaluation"]
+    documents = []
+    for index in range(10):
+        documents.append({"candidate_id": f"c{index}", "entity": "E2", "predicate": "P3", "split": "train", "document_id": f"doc{index}", "assistant": {"labels": []}})
+    documents.append({"candidate_id": "dev", "entity": "E2", "predicate": "P3", "split": "dev", "document_id": "held", "assistant": {"labels": []}})
+    subset = select_population({"family": "data_efficiency", "entity": "E2", "predicate": "P3", "fraction": 10, "seed": 13}, documents)
+    allowed = set(subset["documents"])
+    assert subset["rows"] and all(row["document_id"] in allowed for row in subset["rows"])
+    assert all(row["split"] == "dev" for row in subset["evaluation"])
+    negatives = select_population(
+        {"family": "negative_sampling", "entity": "native", "predicate": "P3", "strategy": "hard_negative", "seed": 13},
+        [
+            {"candidate_id": "p", "entity": "native", "predicate": "P3", "split": "train", "document_id": "d", "assistant": {"labels": ["Activation"]}},
+            {"candidate_id": "h", "entity": "native", "predicate": "P3", "split": "train", "document_id": "d", "assistant": {"labels": []}},
+            {"candidate_id": "r", "entity": "native", "predicate": "P3", "split": "train", "document_id": "other", "assistant": {"labels": []}},
+            {"candidate_id": "eval", "entity": "native", "predicate": "P3", "split": "dev", "document_id": "other", "assistant": {"labels": []}},
+        ],
+    )
+    assert negatives["negative_ids"] == ["h"]
+    assert [row["candidate_id"] for row in negatives["evaluation"]] == ["eval"]
+    with pytest.raises(ValueError, match="identical"):
+        sensitivity_changes({"learning_rate": 1e-4, "rank": 16}, {"learning_rate": 1e-4, "rank": 16})
+    assert sensitivity_changes({"learning_rate": 1e-4, "rank": 16}, {"learning_rate": 2e-4, "rank": 16})["learning_rate"] == 2e-4
+    assert training_status(1, 10, False) == "valid_continuation_required"
+    assert training_status(10, 10, False) == "valid_continuation_required"
+    assert training_status(10, 10, True) == "training_completed"
+    schema = load_schema(default_schema_path(Path("/home/b5ac/freddieyu.b5ac/project_1"), "biored"))
+    empty = interpret_generation('{"labels": []}', "c1", schema, "P4")
+    assert empty["ledger_status"] == "valid_empty" and empty["retry"] is False
+    invalid = interpret_generation("not json", "c1", schema, "P4")
+    assert invalid["ledger_status"] == "invalid" and invalid["retry"] is False
+    with pytest.raises(ValueError, match="model input"):
+        generation_requests([{"request_id": "r", "candidate_id": "c", "prompt": "c", "model": "qwen8b"}])
+    requests = generation_requests([{"request_id": "r", "candidate_id": "c", "prompt": "Read this passage.", "model": "qwen8b"}])
+    shards = write_shards(requests, Path("/tmp/schema-study-shards-test"), 1)
+    assert "Read this passage." in shards[0].read_text(encoding="utf-8")
+    assert "structured_outputs" in constrained_sampling({"type": "object"})
+    constrained = constrained_generate([{"request_id": "r", "prompt": "Read this passage."}])
+    assert constrained["submitted"] is False and constrained["requests"][0]["decoding"] == "constrained"
+    calls = []
+
+    def _sample(request):
+        calls.append(request["sample_index"])
+        return {"raw": "{}", "labels": ["A"]}
+
+    aggregated = self_consistency([{"request_id": "r", "multi": False}], {}, backend=_sample)
+    assert calls == [0, 1, 2, 3, 4]
+    assert aggregated["executed"] is True
+    scored = candidate_scores([{"request_id": "r", "multi": False}], {}, backend=lambda _request: {"scores": {"A": 0.2, "B": 0.8}})
+    assert scored["executed"] is True
+    evidence = evidence_generate([{"request_id": "r", "source_text": "No span here."}], {}, backend=lambda _request: {"raw": '{"labels": ["A"]}', "labels": ["A"], "spans": []})
+    assert evidence["executed"] is True
+    command = sbatch_argv({"family": "principal_training", "task_id": "t", "resources": {"gpus": 1}, "walltime": "04:00:00"}, "scripts/slurm/matched_task.sbatch")
+    assert command[0] == "sbatch" and "--account=brics.b5ac" in command and command[-3].endswith("matched_task.sbatch")
+    assert evaluation_released("valid_continuation_required") is False
+    assert evaluation_released("training_completed") is True
+    assert matched_main(["--submit"]) == 3
+    assert external_model_convention("qwen36")["executable"] is False
+    assert external_model_convention("gpt_oss_20b")["uses_qwen_chat_template"] is False
+    curriculum = horizon_for_task({"family": "curriculum"}, 32, 1, 1, sequence_examples=32)
+    assert curriculum["epochs"] == 1 and curriculum["total_updates"] == 2
+    thirty_two = [task for task in resolved_tasks() if task.get("model") == "qwen32b" and task["family"] == "principal_training"]
+    assert thirty_two and thirty_two[0]["resources"]["strategy"] == "fsdp_full_shard"
+    curriculum_tasks = [task for task in resolved_tasks() if task["family"] == "curriculum"]
+    assert curriculum_tasks[0]["configuration"]["max_epochs"] == 1
+    assert curriculum_tasks[0]["configuration"]["data_schedule"] == "single_matched_curriculum_pass"

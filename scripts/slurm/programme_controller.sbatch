@@ -22,11 +22,8 @@ export PYTHONPATH=/home/b5ac/freddieyu.b5ac/project_1/src
 export SCHEMA_STUDY_STORAGE_ROOT=/home/b5ac/freddieyu.b5ac/projects/project_1
 
 cd /home/b5ac/freddieyu.b5ac/project_1
-/home/b5ac/freddieyu.b5ac/miniforge3/envs/hf-hpc/bin/python -m schema_study.formal_launch matched
+# --control submits only when the approval file matches this checkout.
+# Until then it exits 3 and this script does not requeue and does not call sbatch.
+/home/b5ac/freddieyu.b5ac/miniforge3/envs/hf-hpc/bin/python -m schema_study.formal_launch matched --control
 status=$?
-if [[ "$status" -ne 0 ]]; then
-  exit "$status"
-fi
-# Requeue is deliberately not issued here. formal_launch returns 3 until approval,
-# and a later authorised controller is what calls sbatch --dependency=afterany.
-exit 0
+exit "$status"

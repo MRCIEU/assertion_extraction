@@ -103,15 +103,34 @@ def write_ledger(path: Path, completed: dict[str, str], rows: list[dict]) -> Non
 
 
 def vllm_generate(prompts: list[str], sampling: dict, lora_path: str | None = None) -> list[dict]:
-    """Call the installed vLLM 0.13 `LLM.generate` interface. Tests inject a backend instead."""
+    """Call the installed vLLM 0.13 `LLM.generate` interface and parse each answer."""
     from vllm import LLM, SamplingParams
     from vllm.lora.request import LoRARequest
+    from vllm.sampling_params import StructuredOutputsParams
+
+    from schema_study.production_runtime import interpret_generation
 
     engine = LLM(model=sampling["model_path"], dtype="bfloat16", enable_lora=lora_path is not None)
-    params = SamplingParams(temperature=sampling.get("temperature", 0.0), max_tokens=sampling.get("max_tokens", 256))
+    structured = sampling.get("structured_outputs")
+    params = SamplingParams(
+        temperature=sampling.get("temperature", 0.0),
+        max_tokens=sampling.get("max_tokens", 256),
+        n=int(sampling.get("n", 1)),
+        structured_outputs=StructuredOutputsParams(**structured) if structured else None,
+    )
     lora = LoRARequest("adapter", 1, lora_path) if lora_path else None
     outputs = engine.generate(prompts, params, lora_request=lora)
-    return [{"raw": output.outputs[0].text if output.outputs else "", "labels": None} for output in outputs]
+    rows = []
+    for output in outputs:
+        raw = output.outputs[0].text if output.outputs else ""
+        labels = None
+        parsed = None
+        if sampling.get("schema") is not None and sampling.get("candidate_id") and sampling.get("level"):
+            parsed = interpret_generation(raw, sampling["candidate_id"], sampling["schema"], sampling["level"])
+            if parsed["ledger_status"] != "invalid":
+                labels = parsed["predicted_labels"]
+        rows.append({"raw": raw, "labels": labels, "parsed": parsed})
+    return rows
 
 
 def _run(name: str, requests: list[dict], completed: dict[str, str], backend, ledger: Path | None) -> dict:
@@ -124,24 +143,90 @@ def _run(name: str, requests: list[dict], completed: dict[str, str], backend, le
 
 
 def constrained_generate(requests, completed=None, backend=None, ledger=None) -> dict:
-    return _run("constrained", requests, completed or {}, backend, ledger)
+    from schema_study.production_runtime import constrained_sampling
+
+    prepared = []
+    for request in requests:
+        schema_json = request.get("schema_json") or {"type": "object", "properties": {"labels": {"type": "array"}}, "required": ["labels"]}
+        prepared.append({**request, "sampling": constrained_sampling(schema_json), "decoding": "constrained"})
+    if backend is None:
+        return {"family": "constrained", "submitted": False, "reason": "formal_gpu_execution_is_not_authorised", "requests": prepared}
+    return _run("constrained", prepared, completed or {}, backend, ledger)
 
 
 def thinking_generate(requests, completed=None, backend=None, ledger=None) -> dict:
-    return _run("thinking", requests, completed or {}, backend, ledger)
+    from schema_study.production_runtime import thinking_request
+
+    prepared = [{**request, **thinking_request(request.get("prompt") or request.get("user") or "")} for request in requests]
+
+    def generate(request):
+        result = backend(request)
+        raw = result.get("raw") or ""
+        final = raw.split("</think>")[-1].strip() if "</think>" in raw else raw
+        return {**result, "raw": final, "reasoning": raw, "final_answer_separated": True}
+
+    if backend is None:
+        return {"family": "thinking", "submitted": False, "reason": "formal_gpu_execution_is_not_authorised", "requests": prepared}
+    return _run("thinking", prepared, completed or {}, generate, ledger)
 
 
 def self_consistency(requests, completed=None, backend=None, ledger=None) -> dict:
-    return _run("self_consistency", requests, completed or {}, backend, ledger)
+    from schema_study.production_runtime import self_consistency as aggregate
+
+    if backend is None:
+        return {"family": "self_consistency", "submitted": False, "reason": "formal_gpu_execution_is_not_authorised", "samples": 5}
+
+    def generate(request):
+        samples = [backend({**request, "sample_index": index}) for index in range(5)]
+        for sample in samples:
+            sample.setdefault("ledger_status", "valid" if sample.get("labels") is not None else "invalid")
+            sample.setdefault("predicted_labels", sample.get("labels") or [])
+        aggregated = aggregate(samples, bool(request.get("multi")))
+        return {"raw": json.dumps(samples), "labels": aggregated["labels"], "samples": samples}
+
+    return _run("self_consistency", requests, completed or {}, generate, ledger)
 
 
 def evidence_generate(requests, completed=None, backend=None, ledger=None) -> dict:
-    return _run("evidence", requests, completed or {}, backend, ledger)
+    from schema_study.production_runtime import evidence_record
+
+    if backend is None:
+        return {"family": "evidence", "submitted": False, "reason": "formal_gpu_execution_is_not_authorised"}
+
+    def generate(request):
+        result = backend(request)
+        record = evidence_record(result.get("raw") or "", request.get("source_text") or "", result.get("spans") or request.get("spans") or [])
+        labels = result.get("labels") if record["complete"] else None
+        return {**result, "labels": labels, "evidence": record}
+
+    return _run("evidence", requests, completed or {}, generate, ledger)
 
 
 def qualified_generate(requests, completed=None, backend=None, ledger=None) -> dict:
-    return _run("qualified", requests, completed or {}, backend, ledger)
+    from schema_study.production_runtime import evidence_record
+
+    if backend is None:
+        return {"family": "qualified", "submitted": False, "reason": "formal_gpu_execution_is_not_authorised"}
+
+    def generate(request):
+        result = backend(request)
+        record = evidence_record(result.get("raw") or "", request.get("source_text") or "", result.get("spans") or [])
+        qualifications = result.get("qualifications") or []
+        complete = record["complete"] and bool(qualifications)
+        return {**result, "labels": result.get("labels") if complete else None, "qualifications": qualifications, "evidence": record}
+
+    return _run("qualified", requests, completed or {}, generate, ledger)
 
 
 def candidate_scores(requests, completed=None, backend=None, ledger=None) -> dict:
-    return _run("candidate_scoring", requests, completed or {}, backend, ledger)
+    from schema_study.production_runtime import score_candidates
+
+    if backend is None:
+        return {"family": "candidate_scoring", "submitted": False, "reason": "formal_gpu_execution_is_not_authorised"}
+
+    def generate(request):
+        result = backend(request)
+        scored = score_candidates(result.get("scores") or {}, bool(request.get("multi")))
+        return {"raw": json.dumps(scored["scores"]), "labels": scored["labels"], "scores": scored}
+
+    return _run("candidate_scoring", requests, completed or {}, generate, ledger)

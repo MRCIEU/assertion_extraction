@@ -143,38 +143,60 @@ def _batch(model: SchemaHierarchicalModel, step: int, schema) -> tuple[torch.Ten
     return token_ids, targets
 
 
-def train_hierarchical(model: SchemaHierarchicalModel | None = None, steps: int = 2, consistency: bool = False, corpus: str = "biored") -> dict:
-    """Train the hierarchical objective. The fixture uses schema widths and real membership rows."""
+def train_hierarchical(model: SchemaHierarchicalModel | None = None, steps: int = 2, consistency: bool = False, corpus: str = "biored", batches=None, score_fn=None, total_steps: int | None = None) -> dict:
+    """Train the hierarchical objective. A supplied batch iterator is the production population; the default is a schema-width fixture."""
+    from schema_study.production_runtime import training_status
+
     if model is None:
         model = ProductionHierarchicalEncoder(corpus)
     schema = _schema(model.corpus)
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-2)
     gradients = {}
     detail = {}
-    for step in range(steps):
-        token_ids, targets = _batch(model, step, schema)
+    best = None
+    horizon = int(total_steps or steps)
+    produced = _production_batches(model, schema, steps) if batches is None else batches
+    step = 0
+    for token_ids, targets in produced:
+        if step >= steps:
+            break
         outputs = model(token_ids)
         objective, detail = hierarchical_objective(outputs, targets, model.corpus, schema, consistency)
         optimizer.zero_grad(set_to_none=True)
         objective.backward()
         optimizer.step()
-        if step == 0:
+        step += 1
+        if step == 1:
             gradients = {
                 name: float(parameter.grad.detach().abs().sum())
                 for name, parameter in model.named_parameters()
                 if parameter.grad is not None
             }
+        if score_fn is not None and step % max(1, horizon) == 0:
+            metric = float(score_fn(model))
+            if best is None or metric > best["development_micro_f1"]:
+                best = {"step": step, "development_micro_f1": metric}
     head_gradients = {name: value for name, value in gradients.items() if name.startswith("heads.")}
+    production = batches is not None
+    status = training_status(step, horizon, best is not None) if production else "fixture"
     return {
-        "steps": steps,
+        "steps": step,
         "consistency": consistency,
         "corpus": model.corpus,
         "head_sizes": {name: int(layer.out_features) for name, layer in model.heads.items()},
         "all_heads_receive_gradient": len({name.split(".")[1] for name in head_gradients}) == 4 and all(value > 0 for value in head_gradients.values()),
         "shared_encoder_gradient": any(name.startswith("encoder.") and value > 0 for name, value in gradients.items()),
         "detail": detail,
+        "status": status,
+        "completed": status == "training_completed",
+        "best": best,
         "empirical_result": False,
     }
+
+
+def _production_batches(model: SchemaHierarchicalModel, schema, steps: int):
+    for step in range(steps):
+        yield _batch(model, step, schema)
 
 
 def train_encoder(model: nn.Module, steps: int = 1, loss_name: str = "standard", corpus: str = "biored", counts: list[int] | None = None) -> dict:

@@ -127,19 +127,33 @@ def batches_from_records(records: list[dict], tokenizer, micro_batch: int):
 
 
 def render_conversation(tokenizer, user: str, assistant: str) -> dict:
-    """Tokenise one conversation with the model's own chat template."""
-    prompt = tokenizer.apply_chat_template(
-        [{"role": "user", "content": user}], tokenize=False, add_generation_prompt=True, enable_thinking=False,
-    )
-    full = tokenizer.apply_chat_template(
-        [{"role": "user", "content": user}, {"role": "assistant", "content": assistant}],
-        tokenize=False, add_generation_prompt=False, enable_thinking=False,
-    )
-    prompt_ids = tokenizer(prompt, add_special_tokens=False)["input_ids"]
-    full_ids = tokenizer(full, add_special_tokens=False)["input_ids"]
-    if len(full_ids) <= len(prompt_ids):
+    """Tokenise one conversation. The prompt must be a token prefix, or the assistant mask must mark the completion."""
+    messages = [{"role": "user", "content": user}, {"role": "assistant", "content": assistant}]
+    prompt_ids = list(tokenizer.apply_chat_template(
+        [{"role": "user", "content": user}], tokenize=True, add_generation_prompt=True, enable_thinking=False,
+    ))
+    full_ids = list(tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=False, enable_thinking=False))
+    boundary = None
+    if full_ids[: len(prompt_ids)] == prompt_ids and len(full_ids) > len(prompt_ids):
+        boundary = len(prompt_ids)
+        method = "prefix"
+    else:
+        try:
+            masked = tokenizer.apply_chat_template(
+                messages, tokenize=True, return_dict=True, return_assistant_tokens_mask=True, enable_thinking=False,
+            )
+            mask = list(masked["assistant_masks"])
+            full_ids = list(masked["input_ids"])
+        except (TypeError, KeyError, ValueError):
+            mask = []
+        if mask and any(mask) and len(mask) == len(full_ids):
+            boundary = mask.index(1)
+            method = "assistant_mask"
+        else:
+            raise ValueError("The rendered prompt is not a prefix of the conversation and no assistant mask is available.")
+    if boundary is None or boundary >= len(full_ids):
         raise ValueError("The assistant completion did not add a supervised token.")
-    return {"input_ids": full_ids, "prompt_tokens": len(prompt_ids), "pad_id": tokenizer.pad_token_id or 0}
+    return {"input_ids": full_ids, "prompt_tokens": boundary, "pad_id": int(tokenizer.pad_token_id or 0), "boundary": method}
 
 
 def attach_lora(model: nn.Module, configuration: dict | None = None) -> list[str]:
@@ -211,13 +225,30 @@ def _adapter_state(model: nn.Module) -> dict:
 
 
 def save_checkpoint(directory: Path, package: dict) -> Path:
+    """Publish one checkpoint. A second writer for the same directory is rejected."""
+    import os
+
+    if int(os.environ.get("RANK", "0")) != 0:
+        return directory / "adapter_checkpoint.pt"
+    directory.mkdir(parents=True, exist_ok=True)
+    lock = directory / ".writer.lock"
+    try:
+        descriptor = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError as exc:
+        raise RuntimeError("Another process is writing this checkpoint.") from exc
     destination = directory / "adapter_checkpoint.pt"
-    temporary = destination.with_suffix(".pt.tmp")
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    torch.save(package, temporary)
-    if not temporary.is_file() or temporary.stat().st_size <= 0:
-        raise RuntimeError("The checkpoint was not published.")
-    temporary.replace(destination)
+    temporary = directory / f".adapter_checkpoint.{os.getpid()}.tmp"
+    try:
+        os.write(descriptor, str(os.getpid()).encode("ascii"))
+        torch.save(package, temporary)
+        if not temporary.is_file() or temporary.stat().st_size <= 0:
+            raise RuntimeError("The checkpoint was not published.")
+        temporary.replace(destination)
+    finally:
+        os.close(descriptor)
+        lock.unlink(missing_ok=True)
+        if temporary.exists():
+            temporary.unlink()
     return destination
 
 
@@ -247,13 +278,23 @@ def _package(model, optimizer, step: int, position: int, configuration: dict, fi
     }
 
 
-def restore_into_new_model(saved: dict, model: nn.Module, optimizer) -> tuple[int, int]:
-    """Load an adapter file into a newly constructed model. The old object is not reused."""
+def restore_into_new_model(saved: dict, model: nn.Module, optimizer, expected: dict | None = None) -> tuple[int, int]:
+    """Load an adapter file into a newly constructed model. Missing adapter tensors are not filled with a new initialisation."""
     adapter = saved["adapter"]
     if any("lora_" not in name for name in adapter):
         raise RuntimeError("The checkpoint contains a parameter that is not an adapter weight.")
+    required = [name for name, parameter in model.named_parameters() if parameter.requires_grad and "lora_" in name]
+    missing = [name for name in required if name not in adapter]
+    if missing:
+        raise RuntimeError("The checkpoint is missing adapter parameters: " + ", ".join(missing[:5]))
+    if expected:
+        for key in ("input", "configuration", "base_revision", "tokenizer_revision"):
+            if expected.get(key) is not None and saved.get("fingerprints", {}).get(key) != expected.get(key):
+                raise RuntimeError(f"The checkpoint {key} fingerprint does not match the task.")
+        if expected.get("total_steps") is not None and int(saved.get("scheduler", {}).get("total_steps", -1)) != int(expected["total_steps"]):
+            raise RuntimeError("The checkpoint belongs to a different training horizon.")
     current = model.state_dict()
-    current.update(adapter)
+    current.update({name: adapter[name] for name in required})
     model.load_state_dict(current)
     optimizer.load_state_dict(saved["optimizer"])
     _restore_rng(saved["rng"])
@@ -298,6 +339,8 @@ def fit(
     output_dir: Path | None = None,
     fingerprints: dict | None = None,
     fresh: nn.Module | None = None,
+    score_fn=None,
+    stop_after: int | None = None,
 ) -> dict:
     """Optimise adapter parameters. `steps` is the optimiser-step horizon of this segment."""
     configuration = dict(configuration or production_configuration())
@@ -321,28 +364,35 @@ def fit(
             attach_lora(model, configuration)
         trainable = [parameter for parameter in model.parameters() if parameter.requires_grad]
         optimizer = torch.optim.AdamW(trainable, lr=float(configuration["learning_rate"]))
-        step, position = restore_into_new_model(resume, model, optimizer)
+        step, position = restore_into_new_model(resume, model, optimizer, expected={**(fingerprints or {}), "total_steps": total})
     losses = []
     learning_rates = []
     consumed = []
+    if int(configuration.get("world_size", 1)) > 1:
+        import os
+
+        if not torch.cuda.is_available() or not (torch.distributed.is_available() and torch.distributed.is_initialized()):
+            raise RuntimeError("Distributed training requires an initialised CUDA process group. A requested GPU count is not a world size.")
+        local = int(os.environ.get("LOCAL_RANK", "0"))
+        model = model.to(torch.device("cuda", local))
+        if configuration.get("placement") == "fsdp_full_shard":
+            from torch.distributed.fsdp import FullyShardedDataParallel, ShardingStrategy
+
+            model = FullyShardedDataParallel(model, sharding_strategy=ShardingStrategy.FULL_SHARD)
+        else:
+            model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[local])
     cursor = BatchCursor(batches)
     cursor.skip(position)
     stop = {"requested": False}
 
-    def _checkpoint() -> None:
-        if output_dir is not None:
-            package = _package(model, optimizer, step, position, configuration, fingerprints or {}, best)
-            save_checkpoint(output_dir, package)
-
     def _handle(signum, frame) -> None:
         stop["requested"] = True
-        _checkpoint()
 
     previous = signal.getsignal(signal.SIGUSR1)
     signal.signal(signal.SIGUSR1, _handle)
     try:
         while step < steps:
-            if stop["requested"]:
+            if stop["requested"] or (stop_after is not None and step >= stop_after):
                 break
             learning_rate = learning_rate_at_step(step, total, float(configuration["learning_rate"]), float(configuration["warmup_ratio"]))
             for group in optimizer.param_groups:
@@ -352,6 +402,11 @@ def fit(
             accumulated = 0.0
             for _offset in range(accumulate):
                 batch = cursor.next()
+                if torch.cuda.is_available() and int(configuration.get("world_size", 1)) > 1:
+                    import os
+
+                    device = torch.device("cuda", int(os.environ.get("LOCAL_RANK", "0")))
+                    batch = {key: value.to(device) if torch.is_tensor(value) else value for key, value in batch.items()}
                 position = cursor.index
                 consumed.append([int(value) for value in batch["input_ids"].reshape(-1)[:8].tolist()])
                 loss = sequence_loss(model, batch)
@@ -365,12 +420,26 @@ def fit(
             optimizer.step()
             losses.append(accumulated / accumulate)
             step += 1
-            best = {"step": step, "loss": losses[-1]}
+            interval = int(configuration.get("eval_interval") or total)
+            if score_fn is not None and step % interval == 0:
+                model.eval()
+                metric = float(score_fn(model))
+                model.train()
+                if best is None or metric > float(best.get("development_micro_f1", -1)):
+                    best = {"step": step, "development_micro_f1": metric, "adapter": _adapter_state(model)}
     finally:
         signal.signal(signal.SIGUSR1, previous)
-    package = _package(model, optimizer, step, position, configuration, fingerprints or {}, best)
+    from schema_study.production_runtime import training_status
+
+    selection_recorded = bool(best and "development_micro_f1" in best)
+    status = training_status(step, total, selection_recorded)
+    public_best = None if not best else {key: value for key, value in best.items() if key != "adapter"}
+    package = _package(model, optimizer, step, position, configuration, fingerprints or {}, public_best)
+    package["status"] = status
     if output_dir is not None:
         save_checkpoint(output_dir, package)
+        if best and best.get("adapter"):
+            save_checkpoint(output_dir / "best", {**package, "adapter": best["adapter"], "role": "best"})
     return {
         "losses": losses,
         "learning_rates": learning_rates,
@@ -379,6 +448,9 @@ def fit(
         "steps": step,
         "position": position,
         "accumulation": accumulate,
+        "status": status,
+        "completed": status == "training_completed",
+        "best": {key: value for key, value in (best or {}).items() if key != "adapter"},
         "empirical_qwen_result": False,
         "model": model,
     }
@@ -441,6 +513,27 @@ def compare_interrupted_run(directory: Path | None = None, steps: int = 4, inter
         "empirical_qwen_result": False,
         "checkpoint": str(directory / "partial" / "adapter_checkpoint.pt"),
     }
+
+
+def prepare_process(requested_gpus: int) -> dict:
+    """Bind this process to its rank. A requested GPU count is accepted only when it is the world size."""
+    import os
+
+    from schema_study.production_runtime import assert_runtime_world
+
+    world = int(os.environ.get("WORLD_SIZE", "1"))
+    rank = int(os.environ.get("RANK", "0"))
+    local = int(os.environ.get("LOCAL_RANK", "0"))
+    assert_runtime_world(requested_gpus, world)
+    if world > 1 and not (torch.distributed.is_available() and torch.distributed.is_initialized()):
+        if not torch.cuda.is_available():
+            raise RuntimeError("Multi-GPU training requires an initialised process group. This process will not treat the GPU request as a world size.")
+        torch.distributed.init_process_group("nccl")
+    if torch.cuda.is_available():
+        device = torch.device("cuda", local)
+    else:
+        device = torch.device("cpu")
+    return {"rank": rank, "world": world, "device": str(device), "requested_gpus": requested_gpus}
 
 
 def gpu_placements() -> dict:

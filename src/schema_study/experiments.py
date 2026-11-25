@@ -56,6 +56,7 @@ AUTHORISED_MODEL_EXECUTION_MODULES = (
     "production_encoder.py",
     "production_inference.py",
     "production_assets.py",
+    "production_dispatch.py",
 )
 
 

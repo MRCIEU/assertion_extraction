@@ -309,18 +309,21 @@ def _criterion(dataset: str, objective: str, target, torch):
     return BCEWithLogitsLoss() if dataset == "drugprot" else CrossEntropyLoss()
 
 
-def train(dataset: str, entity: str, predicate: str, seed: int, model_name: str = "biomedbert", objective: str = "standard", fraction: int = 100, negative_strategy: str | None = None, learning_rate: float | None = None) -> None:
+def train(dataset: str, entity: str, predicate: str, seed: int, model_name: str = "biomedbert", objective: str = "standard", fraction: int = 100, negative_strategy: str | None = None, learning_rate: float | None = None, output_dir: Path | None = None) -> dict:
     import torch
     from transformers import get_linear_schedule_with_warmup
 
-    output = _output(dataset, entity, predicate, seed)
+    apply_programme()
+    output = Path(output_dir) if output_dir is not None else _output(dataset, entity, predicate, seed)
+    if "formal_20261115" in str(output) and os.environ.get("SCHEMA_STUDY_PROGRAMME") == "formal_matched_e0_e7":
+        raise RuntimeError("The matched programme must not write into formal_20261115.")
     output.mkdir(parents=True, exist_ok=True)
     last_path = output / "checkpoints/last/checkpoint.pt"
     if last_path.is_file():
         saved = torch.load(last_path, map_location="cpu", weights_only=False)
         if saved.get("completed_epochs", 0) >= 10:
             _record(output, "train", {"model_called": False, "reason": "training_already_complete", "calls": 0})
-            return
+            return {"completed_epochs": saved["completed_epochs"], "best_score": saved.get("best_score"), "updates": saved.get("optimizer_updates", 0)}
     if model_name == "biomedbert":
         tokenizer = load_biomedbert_tokenizer(str(TOKENIZER_DIR))
         observed = [tokenizer.convert_tokens_to_ids(marker) for marker in SPECIAL_MARKERS]
@@ -405,6 +408,7 @@ def train(dataset: str, entity: str, predicate: str, seed: int, model_name: str 
             }) + "\n")
         print(f"epoch {epoch} dev_f1 {metric:.6f} seconds {time.perf_counter() - started:.1f}", flush=True)
     _record(output, "train", {"model_called": True, "epochs": book["completed_epochs"], "updates": book["optimizer_updates"], "best_epoch": book["best_epoch"], "best_score": book["best_score"]})
+    return {"completed_epochs": book["completed_epochs"], "best_score": book["best_score"], "updates": book["optimizer_updates"]}
 
 
 def _package(encoder, dropout, head, optimizer, scheduler, book, order_rng, torch) -> dict:

@@ -267,7 +267,19 @@ def _configuration(task: dict) -> dict:
         elif task.get("change") == "lr_2e-4":
             configuration["learning_rate"] = 2e-4
         configuration["seed"] = task.get("seed")
-        return {key: configuration[key] for key in ("precision", "quantization", "rank", "alpha", "dropout", "learning_rate", "warmup_ratio", "max_epochs", "effective_batch_size", "seed")}
+        configuration["incomplete_groups"] = "dropped"
+        configuration["schedule_scope"] = "full_intended_horizon"
+        if task["family"] == "curriculum":
+            configuration["max_epochs"] = 1
+            configuration["data_schedule"] = "single_matched_curriculum_pass"
+        elif task["family"] == "schema_conditioned_lora":
+            configuration["data_schedule"] = task.get("exposure")
+        else:
+            configuration["data_schedule"] = "independent_epochs"
+        return {key: configuration[key] for key in (
+            "precision", "quantization", "rank", "alpha", "dropout", "learning_rate", "warmup_ratio",
+            "max_epochs", "effective_batch_size", "seed", "schedule", "incomplete_groups", "schedule_scope", "data_schedule",
+        ) if key in configuration}
     configuration = {
         "precision": "bf16",
         "learning_rate": task.get("learning_rate", STUDY_HYPERPARAMETERS["learning_rate"]),
@@ -288,7 +300,7 @@ def _configuration(task: dict) -> dict:
 def _resources(task: dict) -> dict:
     model = task.get("model", "")
     if str(model).startswith("qwen32") or model == "qwen32b":
-        return {"gpus": 2, "gpu_options": [1, 2, 4], "cpus": 8, "strategy": "distributed_data_parallel", "partition": "workq", "qos": "normal"}
+        return {"gpus": 2, "gpu_options": [1, 2, 4], "cpus": 8, "strategy": "fsdp_full_shard", "parameter_sharding": True, "partition": "workq", "qos": "normal"}
     if str(model).startswith("qwen") or model in {"gpt_oss_20b", "qwen36"}:
         return {"gpus": 1, "gpu_options": [1, 2, 4], "cpus": 8, "strategy": "distributed_data_parallel", "partition": "workq", "qos": "normal"}
     return {"gpus": 1, "gpu_options": [1], "cpus": 8, "strategy": "single_gpu", "partition": "workq", "qos": "normal"}

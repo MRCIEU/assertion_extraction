@@ -7,6 +7,7 @@ when the allocated-time estimate would pass 1000 GPU hours.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import time
@@ -174,19 +175,38 @@ def requeue_permitted(authorised: bool, finished: bool) -> bool:
     return bool(authorised) and not finished
 
 
+def submission_commands(limit: int = 256) -> list[list[str]]:
+    """Commands for ready, unblocked tasks. Building this list does not call sbatch."""
+    from schema_study.production_plan import execution_manifest, submission_allowed
+    from schema_study.production_runtime import sbatch_argv
+
+    tasks = [task for task in execution_manifest() if "blocked" not in task["statuses"]]
+    allowed, reason = submission_allowed(0, 0, min(len(tasks), limit))
+    if not allowed:
+        raise RuntimeError(reason)
+    return [sbatch_argv(task, "scripts/slurm/matched_task.sbatch") for task in tasks[:limit]]
+
+
 def matched_main(arguments: list[str]) -> int:
-    """Plan the matched programme. Submission stays closed until the approval file matches."""
+    """Plan the matched programme. sbatch runs only after the approval file matches this checkout."""
     from schema_study.paths import get_paths
     from schema_study.production_plan import gpu_authorised
+    from schema_study.production_runtime import controller_requeue
 
     plan = matched_plan()
-    print(json.dumps({"tasks": plan["tasks"], "submitted": False}), flush=True)
-    if "--submit" in arguments:
-        if not gpu_authorised(get_paths().study, get_paths().code_root):
-            print("formal_gpu_submission=blocked", flush=True)
-            return 3
-        print("formal_gpu_submission=refused_in_this_entry_until_the_operator_confirms", flush=True)
+    print(json.dumps({"tasks": plan["tasks"], "submitted": False, "groups": len(plan["groups"])}), flush=True)
+    if "--submit" not in arguments and "--control" not in arguments:
+        return 0
+    if not gpu_authorised(get_paths().study, get_paths().code_root):
+        print("formal_gpu_submission=blocked", flush=True)
         return 3
+    commands = submission_commands()
+    for command in commands:
+        subprocess.run(command, check=True)
+    requeue = controller_requeue(os.environ.get("SLURM_JOB_ID", "0"), True, finished=not commands)
+    if requeue is not None:
+        subprocess.run(requeue, check=True)
+    print(json.dumps({"submitted": len(commands)}), flush=True)
     return 0
 
 
