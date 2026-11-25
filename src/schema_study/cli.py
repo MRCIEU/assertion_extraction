@@ -75,6 +75,7 @@ def main(argv: list[str] | None = None) -> int:
     merge.add_argument("--corpus", required=True, choices=["biored", "bc8"])
     merge.add_argument("--shard-count", type=int, default=8)
     sub.add_parser("measure-qwen-lengths")
+    sub.add_parser("prepare-formal-manifest")
     sub.add_parser("finalise-experimental-inputs")
     report_cmd = sub.add_parser("report")
     report_cmd.add_argument("--output", required=True)
@@ -147,6 +148,24 @@ def main(argv: list[str] | None = None) -> int:
             from schema_study.experimental_preparation import merge_matched_inputs
 
             print(json.dumps(merge_matched_inputs(args.corpus, args.shard_count), indent=2))
+            return 0
+        if args.command == "prepare-formal-manifest":
+            from schema_study.formal_methods import execution_authorised, manifest_payload
+            from schema_study.paths import get_paths
+            from schema_study.records import publish_file
+
+            paths = get_paths()
+            destination = paths.study / "reports" / "experimental_preparation" / "formal_manifest.json"
+            paths.assert_output(destination)
+            payload = manifest_payload()
+            payload["approval_file_present"] = execution_authorised(paths.study)
+            encoded = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+
+            def _write(temporary):
+                temporary.write_bytes(encoded)
+
+            publish_file(destination, _write)
+            print(json.dumps({"wrote": str(destination), "gpu_submission": "blocked"}, sort_keys=True))
             return 0
         if args.command == "measure-qwen-lengths":
             from schema_study.qwen_lengths import main as measure_qwen_lengths
