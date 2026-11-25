@@ -302,7 +302,7 @@ def _criterion(dataset: str, objective: str, target, torch):
         return lambda logits, gold: focal_loss(logits, gold.view(-1))
     if objective == "class_weighted":
         from schema_study.production_records import class_weight_from_counts
-        counts = torch.bincount(target.view(-1)).tolist()
+        counts = torch.bincount(torch.as_tensor(target).reshape(-1)).tolist()
         counts = [count if count else 1 for count in counts]
         weight = torch.tensor(class_weight_from_counts(counts), dtype=torch.float32)
         return lambda logits, gold: torch.nn.functional.cross_entropy(logits, gold.view(-1), weight=weight.to(logits.device))

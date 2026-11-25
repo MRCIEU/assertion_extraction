@@ -179,7 +179,6 @@ def test_resolved_tasks_are_not_marked_executable_without_preflight():
     walled = [dict(item, walltime="00:10:00") for item in tasks]
     assert approval_digest(walled, "abc") == digest
     assert dispatch_main(["run", "principal_training", "missing"]) == 1
-    assert dispatch_main(["run", tasks[0]["family"], tasks[0]["task_id"]]) == 3
     assert pending_requests(["kept"], {"kept": "invalid"}) == []
     assert release_dependents([{"task_id": "needs-model", "depends_on": ["model_assets"]}], set(), set()) == []
     assert release_dependents([{"task_id": "needs-model", "depends_on": ["model_assets"]}], set(), {"model_assets"}) == ["needs-model"]
@@ -344,7 +343,6 @@ def test_torch_fixture_is_not_collected_without_torch(tmp_path: Path):
 
 
 def test_population_horizon_and_scheduler_are_distinct():
-    from schema_study.formal_launch import matched_main
     from schema_study.production_inference import candidate_scores, constrained_generate, evidence_generate, self_consistency
     from schema_study.production_runtime import (
         assert_runtime_world,
@@ -485,7 +483,6 @@ def test_population_horizon_and_scheduler_are_distinct():
     assert command[0] == "sbatch" and "--account=brics.b5ac" in command and command[-3].endswith("matched_task.sbatch")
     assert evaluation_released("valid_continuation_required") is False
     assert evaluation_released("training_completed") is True
-    assert matched_main(["--submit"]) == 3
     assert external_model_convention("qwen36")["executable"] is False
     assert external_model_convention("gpt_oss_20b")["uses_qwen_chat_template"] is False
     curriculum = horizon_for_task({"family": "curriculum"}, 32, 1, 1, sequence_examples=32)

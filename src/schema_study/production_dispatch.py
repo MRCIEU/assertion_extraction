@@ -325,6 +325,17 @@ def _development_from_candidates(task: dict, schema=None, hierarchical: bool = F
     found = _candidates(dataset, {"dev"})
     if not found:
         raise RuntimeError("The development population is empty.")
+    if task["family"] == "unseen_schema":
+        withheld = task["withheld"]
+        entities = [withheld] if str(withheld).startswith("E") else [f"E{level}" for level in range(8)]
+        predicates = [withheld] if str(withheld).startswith("P") else list(RESEARCH_PREDICATES)
+        rows = []
+        for item in found.values():
+            for entity in entities:
+                for predicate in predicates:
+                    labels = gold_groups(schema, item["gold_labels"], HISTORICAL_PREDICATES[predicate])
+                    rows.append({**item, "entity": entity, "predicate": predicate, "split": "dev", "assistant": {"labels": labels}})
+        return rows
     if task["family"] == "schema_conditioned_lora":
         from schema_study.production_records import all_view_records, one_view_records, view_names
 

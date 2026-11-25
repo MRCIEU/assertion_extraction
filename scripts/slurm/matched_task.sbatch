@@ -27,7 +27,16 @@ export SCHEMA_STUDY_PROGRAMME=formal_matched_e0_e7
 
 cd /home/b5ac/freddieyu.b5ac/project_1
 gpus="${SLURM_GPUS_ON_NODE:-${SLURM_GPUS:-1}}"
-if [[ "$gpus" -gt 1 ]]; then
+distributed=0
+case "$1" in
+  zero_shot|few_shot|adapter_inference|constrained|thinking|self_consistency|evidence|qualified|candidate_scoring|gpt_oss|certainty|nli|analysis|verifier_adaptation)
+    distributed=0
+    ;;
+  *)
+    distributed=1
+    ;;
+esac
+if [[ "$distributed" == 1 && "$gpus" -gt 1 ]]; then
   exec /home/b5ac/freddieyu.b5ac/miniforge3/envs/hf-hpc/bin/torchrun --nproc_per_node="$gpus" -m schema_study.production_dispatch run "$1" "$2"
 fi
 exec /home/b5ac/freddieyu.b5ac/miniforge3/envs/hf-hpc/bin/python -m schema_study.production_dispatch run "$1" "$2"
