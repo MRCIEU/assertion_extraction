@@ -302,7 +302,7 @@ def _resources(task: dict) -> dict:
     if str(model).startswith("qwen32") or model == "qwen32b":
         return {"gpus": 2, "gpu_options": [1, 2, 4], "cpus": 8, "strategy": "fsdp_full_shard", "parameter_sharding": True, "partition": "workq", "qos": "normal"}
     if str(model).startswith("qwen") or model in {"gpt_oss_20b", "qwen36"}:
-        return {"gpus": 1, "gpu_options": [1, 2, 4], "cpus": 8, "strategy": "distributed_data_parallel", "partition": "workq", "qos": "normal"}
+        return {"gpus": 1, "gpu_options": [1, 2, 4], "cpus": 8, "strategy": "single_process", "partition": "workq", "qos": "normal"}
     return {"gpus": 1, "gpu_options": [1], "cpus": 8, "strategy": "single_gpu", "partition": "workq", "qos": "normal"}
 
 

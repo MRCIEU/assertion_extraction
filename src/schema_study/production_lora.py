@@ -669,8 +669,8 @@ def prepare_process(requested_gpus: int) -> dict:
 def gpu_placements() -> dict:
     """Training placements. Inference device maps are not used for distributed training."""
     return {
-        "qwen8b": {"precision": "bf16", "strategy": "distributed_data_parallel", "gpus": [1, 2, 4], "default_gpus": 1},
-        "qwen32b": {"precision": "bf16", "strategy": "distributed_data_parallel", "gpus": [1, 2, 4], "default_gpus": 2},
+        "qwen8b": {"precision": "bf16", "strategy": "single_process", "multi_gpu": "distributed_data_parallel", "gpus": [1, 2, 4], "default_gpus": 1},
+        "qwen32b": {"precision": "bf16", "strategy": "fsdp_full_shard", "one_gpu": "single_process", "gpus": [1, 2, 4], "default_gpus": 2},
         "quantization": "none",
     }
 
