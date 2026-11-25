@@ -122,6 +122,7 @@ def _scifact(tokenizer, model, id2label: dict[str, str]) -> dict:
             claims.append(json.loads(line))
     pairs = []
     gold = []
+    origins = []
     rationale_counts = Counter()
     for claim in claims:
         evidence = claim.get("evidence") or {}
@@ -133,6 +134,7 @@ def _scifact(tokenizer, model, id2label: dict[str, str]) -> dict:
                 premise = " ".join(document.get("abstract") or [])
                 pairs.append((premise, claim["claim"]))
                 gold.append("neutral")
+                origins.append({"claim_id": claim.get("id"), "doc_id": str(document_id), "sentence_indexes": [], "evidence_empty": True})
             continue
         for document_id, items in evidence.items():
             document = corpus.get(str(document_id))
@@ -148,14 +150,17 @@ def _scifact(tokenizer, model, id2label: dict[str, str]) -> dict:
                     continue
                 pairs.append((premise, claim["claim"]))
                 gold.append(label)
+                origins.append({"claim_id": claim.get("id"), "doc_id": str(document_id), "sentence_indexes": indexes, "evidence_empty": False})
     scored = _probabilities(model, tokenizer, pairs, int(model.config.max_position_embeddings))
     confusion = {label: Counter() for label in ("entailment", "neutral", "contradiction")}
     assessable = unassessable = 0
     probabilities = []
     correct_flags = []
-    for truth, result in zip(gold, scored):
+    examples = []
+    for truth, result, origin in zip(gold, scored, origins):
         if result["status"] != "assessable":
             unassessable += 1
+            examples.append({**origin, "reference": truth, "predicted": None, "probabilities": None, "assessable": False})
             continue
         assessable += 1
         mapping = {names[index]: value for index, value in enumerate(result["probabilities"])}
@@ -163,6 +168,7 @@ def _scifact(tokenizer, model, id2label: dict[str, str]) -> dict:
         confusion[truth][predicted] += 1
         probabilities.append(mapping[predicted])
         correct_flags.append(predicted == truth)
+        examples.append({**origin, "reference": truth, "predicted": predicted, "probabilities": mapping, "assessable": True})
     bins = []
     for lower in (index / 10 for index in range(10)):
         chosen = [flag for probability, flag in zip(probabilities, correct_flags) if lower <= probability < lower + 0.1 or (lower == 0.9 and probability == 1)]
@@ -178,7 +184,9 @@ def _scifact(tokenizer, model, id2label: dict[str, str]) -> dict:
         "assessable": assessable,
         "unassessable_context": unassessable,
         "metrics": metrics,
+        "macro_f1": sum(metrics["per_class"][label]["f1"] for label in ("entailment", "neutral", "contradiction")) / 3,
         "calibration_bins": bins,
+        "examples": examples,
         "entailment_is_biological_truth": False,
     }
 
@@ -523,6 +531,11 @@ def evaluate_adapted_checkpoints(workdir: Path) -> dict:
         model.to("cuda" if torch.cuda.is_available() else "cpu")
         model.eval()
         official = _scifact(tokenizer, model, id2label)
+        examples = official.pop("examples", [])
+        example_path = workdir / f"seed{seed}" / "official_development_examples.jsonl"
+        example_path.write_text("".join(json.dumps(row) + "\n" for row in examples), encoding="utf-8")
+        official["per_example_records"] = example_path.name
+        official["per_example_count"] = len(examples)
         official["seed"] = seed
         official["selection"] = saved.get("best")
         official["selection_claims_excluded"] = True
@@ -531,7 +544,7 @@ def evaluate_adapted_checkpoints(workdir: Path) -> dict:
         official["target_domain_validity"] = False
         destination = workdir / f"seed{seed}" / "official_development.json"
         destination.write_text(json.dumps(official, indent=2) + "\n", encoding="utf-8")
-        reports.append({"seed": seed, "metrics": official.get("metrics"), "assessable": official.get("assessable"), "unassessable_context": official.get("unassessable_context")})
+        reports.append({"seed": seed, "metrics": official.get("metrics"), "macro_f1": official.get("macro_f1"), "calibration_bins": official.get("calibration_bins"), "assessable": official.get("assessable"), "unassessable_context": official.get("unassessable_context"), "per_example_records": official.get("per_example_count")})
         del model
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
