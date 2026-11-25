@@ -400,6 +400,7 @@ def train(dataset: str, entity: str, predicate: str, seed: int, model_name: str 
 
                 publish_scientific_status(output, {
                     "technical_preflight": True,
+                    "useful_computation_started": time.time(),
                     "model_loaded": True,
                     "device": "cuda",
                     "optimiser_steps": 1,
@@ -428,11 +429,20 @@ def train(dataset: str, entity: str, predicate: str, seed: int, model_name: str 
     if "formal_20261115" not in str(output):
         from schema_study.production_runtime import publish_scientific_status
 
-        finished = book["completed_epochs"] >= hyperparameters["max_epochs"] and book["best_score"] is not None
+        finished = book["completed_epochs"] >= hyperparameters["max_epochs"] and book["best_score"] is not None and (output / "checkpoints/best/checkpoint.pt").is_file()
+        started = time.time()
+        existing = output / "scientific_status.json"
+        if existing.is_file():
+            prior = json.loads(existing.read_text(encoding="utf-8"))
+            if prior.get("useful_computation_started") is not None:
+                started = prior["useful_computation_started"]
         publish_scientific_status(output, {
             "scientific": "training_completed" if finished else "valid_continuation_required",
             "preflight_passed": book["optimizer_updates"] >= 1,
             "technical_preflight": book["optimizer_updates"] >= 1,
+            "useful_computation_started": started,
+            "selection_recorded": book["best_score"] is not None and book["best_epoch"] is not None,
+            "checkpoint_validated": (output / "checkpoints/best/checkpoint.pt").is_file(),
             "monitoring_guarantees_completion": False,
             "steps": book["optimizer_updates"],
             "total_steps": total_steps,
@@ -480,22 +490,31 @@ def _record(output: Path, kind: str, payload: dict) -> None:
     write_process_json(directory, "resource_usage.json", payload)
 
 
-def predict(dataset: str, entity: str, predicate: str, seed: int) -> None:
+def predict(dataset: str, entity: str, predicate: str, seed: int, model_name: str = "biomedbert", output_dir: Path | None = None, checkpoint: Path | None = None) -> dict:
     import torch
 
-    output = _output(dataset, entity, predicate, seed)
+    output = Path(output_dir) if output_dir is not None else _output(dataset, entity, predicate, seed)
+    output.mkdir(parents=True, exist_ok=True)
     prediction_path = output / "predictions.jsonl"
     if prediction_path.is_file() and (output / "prediction_complete.json").is_file():
         _record(output, "predict", {"model_called": False, "reason": "predictions_already_complete"})
-        return
-    tokenizer = load_biomedbert_tokenizer(str(TOKENIZER_DIR))
+        return {"completed": True, "status": "inference_completed", "predictions_usable": True}
+    if model_name == "biomedbert":
+        tokenizer = load_biomedbert_tokenizer(str(TOKENIZER_DIR))
+    else:
+        from transformers import AutoTokenizer
+        from schema_study.production_assets import encoder_layout
+        tokenizer = AutoTokenizer.from_pretrained(encoder_layout(model_name)["tokenizer"], local_files_only=True)
     schema_name = "biored" if dataset != "drugprot" else "drugprot"
     schema = load_schema(CODE / "configs/schemas" / f"{schema_name}.yaml")
     classes = [label.stable_id for label in schema.level_labels(predicate)]
     if dataset != "drugprot":
         classes.append(schema.no_relation_id)
-    encoder, dropout, head, _streams = _model(tokenizer, classes, seed, entity, predicate, torch)
-    saved = torch.load(output / "checkpoints/best/checkpoint.pt", map_location="cpu", weights_only=False)
+    encoder, dropout, head, _streams = _model(tokenizer, classes, seed, entity, predicate, torch, model_name)
+    checkpoint_path = Path(checkpoint) if checkpoint is not None else output / "checkpoints/best/checkpoint.pt"
+    if not checkpoint_path.is_file():
+        return {"completed": False, "status": "valid_continuation_required", "reason": "selected checkpoint is absent"}
+    saved = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
     encoder.load_state_dict(saved["encoder"])
     dropout.load_state_dict(saved["dropout"])
     head.load_state_dict(saved["classifier"])
@@ -529,6 +548,30 @@ def predict(dataset: str, entity: str, predicate: str, seed: int) -> None:
                 }, ensure_ascii=False) + "\n")
     (output / "prediction_complete.json").write_text(json.dumps({"rows_written": True, "checkpoint": "best", "best_epoch": saved["best_epoch"]}) + "\n", encoding="utf-8")
     _record(output, "predict", {"model_called": True, "checkpoint": "best", "best_epoch": saved["best_epoch"]})
+    from schema_study.production_runtime import publish_scientific_status
+
+    publish_scientific_status(output, {
+        "scientific": "inference_completed",
+        "predictions_usable": prediction_path.is_file() and prediction_path.stat().st_size > 0,
+        "checkpoint_validated": True,
+        "technical_preflight": True,
+        "useful_computation_started": time.time(),
+    })
+    return {"completed": True, "status": "inference_completed", "predictions_usable": True}
+
+
+def evaluate(task: dict) -> dict:
+    """Score the agreed final populations with the selected encoder checkpoint."""
+    checkpoint = Path(task["checkpoint_source"])
+    return predict(
+        task["dataset"],
+        task["entity"],
+        task.get("schema_predicate") or task["predicate"],
+        int(task["seed"]),
+        model_name=task.get("model") or "biomedbert",
+        output_dir=Path(task["output"]),
+        checkpoint=checkpoint,
+    )
 
 
 def apply_programme() -> str:

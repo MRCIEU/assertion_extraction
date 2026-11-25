@@ -201,9 +201,9 @@ EXECUTORS = {
     "hierarchical_consistency": "schema_study.production_encoder:train_hierarchical",
     "schema_conditioned_lora": "schema_study.production_lora:fit",
     "curriculum": "schema_study.production_lora:fit",
-    "class_imbalance": "schema_study.production_encoder:train_encoder",
-    "negative_sampling": "schema_study.production_encoder:train_encoder",
-    "data_efficiency": "schema_study.production_encoder:train_encoder",
+    "class_imbalance": "schema_study.formal_train:train",
+    "negative_sampling": "schema_study.formal_train:train",
+    "data_efficiency": "schema_study.formal_train:train",
     "unseen_schema": "schema_study.production_lora:fit",
     "encoder_sensitivity": "schema_study.formal_train:train",
     "lora_sensitivity": "schema_study.production_lora:fit",
@@ -220,7 +220,8 @@ EXECUTORS = {
     "nli": "schema_study.measurement_cpu:main",
     "verifier_adaptation": "schema_study.measurement_cpu:adapt_verifier",
     "analysis": "schema_study.analysis_plan:analyse_records",
-    "gpt_oss": "schema_study.production_lora:load_causal_lm",
+    "gpt_oss": "schema_study.formal_generate:generate",
+    "final_evaluation": "schema_study.formal_train:evaluate",
     "qwen36": None,
 }
 
@@ -230,7 +231,7 @@ IMPLEMENTED_FAMILIES = {
     "data_efficiency", "unseen_schema", "encoder_sensitivity", "lora_sensitivity",
     "zero_shot", "few_shot", "adapter_inference", "constrained", "thinking",
     "self_consistency", "evidence", "qualified", "candidate_scoring", "certainty",
-    "nli", "verifier_adaptation", "analysis", "gpt_oss",
+    "nli", "verifier_adaptation", "analysis", "gpt_oss", "final_evaluation",
 }
 BLOCKED_MODELS = {
     "qwen36": "Transformers 4.57.5 does not recognise model_type qwen3_5. The optional comparison does not block the principal study.",
@@ -246,6 +247,8 @@ def executor_for(task: dict) -> str | None:
         return EXECUTORS["lora_sft"]
     if task.get("model") == "qwen8b" and task["family"] == "negative_sampling":
         return EXECUTORS["lora_sft"]
+    if task["family"] == "final_evaluation" and task.get("source_family") in {"hierarchical_multitask", "hierarchical_consistency"}:
+        return "schema_study.production_encoder:evaluate_hierarchical"
     return EXECUTORS.get(task["family"])
 
 
@@ -299,6 +302,8 @@ def _configuration(task: dict) -> dict:
 
 def _resources(task: dict) -> dict:
     model = task.get("model", "")
+    if task["family"] in {"certainty", "nli", "analysis"}:
+        return {"gpus": 0, "gpu_options": [0], "cpus": 8, "strategy": "cpu", "partition": "workq", "qos": "normal"}
     if str(model).startswith("qwen32") or model == "qwen32b":
         return {"gpus": 2, "gpu_options": [1, 2, 4], "cpus": 8, "strategy": "fsdp_full_shard", "parameter_sharding": True, "partition": "workq", "qos": "normal"}
     if str(model).startswith("qwen") or model in {"gpt_oss_20b", "qwen36"}:
@@ -377,14 +382,23 @@ def annotate_task(task: dict) -> dict:
         dependencies.append(task["trains_from"])
         if task.get("adapter_path"):
             dependencies.append(f"adapter:{task['trains_from']}")
+        if task.get("checkpoint_source"):
+            dependencies.append(f"checkpoint:{task['trains_from']}")
     if task["family"] in {"zero_shot", "few_shot", "adapter_inference", "constrained", "thinking", "self_consistency", "evidence", "qualified", "candidate_scoring", "gpt_oss"}:
-        source = "few_shot" if task["family"] == "few_shot" else "zero_shot"
-        dependencies.append(f"shards:{source}:{dataset}:{entity}:{predicate}")
+        if task.get("population_filter"):
+            dependencies.append(f"population:{task['population_filter']}:{dataset}")
+        else:
+            source = "few_shot" if task["family"] == "few_shot" else "zero_shot"
+            dependencies.append(f"shards:{source}:{dataset}:{entity}:{predicate}")
+            task["shard_directory"] = (
+                "/home/b5ac/freddieyu.b5ac/projects/project_1/studies/schema_granularity_v1/runs/formal/"
+                f"formal_matched_e0_e7/generation_inputs/{source}/{dataset}/{entity}/{predicate}"
+            )
     task["depends_on"] = dependencies
     task["resources"] = _resources(task)
     task["walltime"] = _walltime(task)
     task["command"] = f"python -m schema_study.production_dispatch run {task['family']} {task['task_id']}"
-    reason = BLOCKED_MODELS.get(model or "")
+    reason = BLOCKED_MODELS.get(model or "") or task.get("blocked_reason")
     statuses = ["specified"]
     if reason or not executor or task["family"] not in IMPLEMENTED_FAMILIES:
         statuses.append("blocked")
@@ -484,14 +498,60 @@ def _supplementary_tasks(training: list[dict]) -> list[dict]:
         for paradigm in ("zero_shot", "few_shot"):
             tasks.append(_task("gpt_oss", dataset=dataset, entity="E2" if dataset == "biored" else "native", predicate="P3", model="gpt_oss_20b", paradigm=paradigm))
             tasks.append(_task("qwen36", dataset=dataset, entity="E2" if dataset == "biored" else "native", predicate="P3", model="qwen36", paradigm=paradigm))
+    lora_families = {"schema_conditioned_lora", "curriculum", "unseen_schema", "lora_sensitivity"}
+    encoder_families = {
+        "principal_training", "biolinkbert", "hierarchical_multitask", "hierarchical_consistency",
+        "class_imbalance", "negative_sampling", "data_efficiency", "encoder_sensitivity",
+    }
     for source in training:
-        if source.get("adaptation") == "lora_sft" or source["family"] in {"schema_conditioned_lora", "curriculum", "unseen_schema", "lora_sensitivity"}:
-            inference = _task(
-                "adapter_inference", dataset=source.get("dataset"), entity=source.get("entity"), predicate=source.get("predicate"),
-                model=source.get("model"), seed=source.get("seed"), trains_from=source["task_id"],
-            )
+        lora = source.get("adaptation") == "lora_sft" or source["family"] in lora_families
+        encoder = (
+            not lora
+            and not str(source.get("model", "")).startswith("qwen")
+            and source.get("model") not in {"gpt_oss_20b", "qwen36"}
+            and source["family"] in encoder_families
+        )
+        if lora:
+            entity = source.get("entity")
+            predicate = source.get("predicate") or source.get("final_block")
+            fields = {
+                "dataset": source.get("dataset"), "entity": entity, "predicate": predicate,
+                "model": source.get("model"), "seed": source.get("seed"), "trains_from": source["task_id"],
+                "evaluation_role": "internal",
+            }
+            if source["family"] in {"schema_conditioned_lora", "unseen_schema"}:
+                fields["population_filter"] = source["family"]
+                fields["exposure"] = source.get("exposure")
+                fields["withheld"] = source.get("withheld")
+                fields["order"] = source.get("order")
+            inference = _task("adapter_inference", **fields)
             inference["adapter_path"] = task_directory(source) + "/best_adapter"
             tasks.append(inference)
+            if source.get("dataset") == "biored" and entity and predicate and "population_filter" not in fields:
+                external = _task(
+                    "adapter_inference", dataset="bc8", entity=entity, predicate=predicate,
+                    model=source.get("model"), seed=source.get("seed"), trains_from=source["task_id"], evaluation_role="external",
+                )
+                external["adapter_path"] = inference["adapter_path"]
+                tasks.append(external)
+            elif source.get("dataset") == "biored" and source["family"] == "schema_conditioned_lora":
+                external = _task(
+                    "adapter_inference", dataset="bc8", model=source.get("model"), seed=source.get("seed"),
+                    trains_from=source["task_id"], evaluation_role="external", population_filter="bc8_all",
+                    exposure=source.get("exposure"),
+                )
+                external["adapter_path"] = inference["adapter_path"]
+                tasks.append(external)
+        if encoder:
+            evaluation = _task(
+                "final_evaluation", dataset=source.get("dataset"), entity=source.get("entity"), predicate=source.get("predicate"),
+                model=source.get("model") or "biomedbert", seed=source.get("seed"), trains_from=source["task_id"],
+                source_family=source["family"],
+            )
+            evaluation["checkpoint_source"] = task_directory(source) + (
+                "/checkpoints/best/model.pt" if source["family"] in {"hierarchical_multitask", "hierarchical_consistency"} else "/checkpoints/best/checkpoint.pt"
+            )
+            tasks.append(evaluation)
     tasks.append(_task("verifier_adaptation", dataset="scifact", model="deberta_base", split="train_development_held_out_from_reported_baseline"))
     for dataset in ("biored", "drugprot", "bc8"):
         tasks.append(_task("analysis", dataset=dataset, statistic="corpus_micro_f1"))
@@ -504,7 +564,7 @@ def execution_manifest(reuse_drugprot_encoder: bool = True) -> list[dict]:
     """Training, inference, measurement and analysis. Continuation segments are not extra training runs."""
     training = resolved_tasks(reuse_drugprot_encoder)
     tasks = training + [annotate_task(task) for task in _inference_tasks() + _supplementary_tasks(training)]
-    inference_families = {"zero_shot", "few_shot", "adapter_inference", "constrained", "thinking", "self_consistency", "evidence", "qualified", "candidate_scoring", "gpt_oss"}
+    inference_families = {"zero_shot", "few_shot", "adapter_inference", "constrained", "thinking", "self_consistency", "evidence", "qualified", "candidate_scoring", "gpt_oss", "final_evaluation"}
     upstream = {}
     for task in tasks:
         if task.get("family") in inference_families and "blocked" not in task.get("statuses", []):

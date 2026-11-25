@@ -23,6 +23,7 @@ export PYTHONDONTWRITEBYTECODE=1
 export PYTHONNOUSERSITE=1
 export PYTHONPATH=/home/b5ac/freddieyu.b5ac/project_1/src
 export SCHEMA_STUDY_STORAGE_ROOT=/home/b5ac/freddieyu.b5ac/projects/project_1
+export SCHEMA_STUDY_PROGRAMME=formal_matched_e0_e7
 
 cd /home/b5ac/freddieyu.b5ac/project_1
 # --control submits only when the approval file matches this checkout.

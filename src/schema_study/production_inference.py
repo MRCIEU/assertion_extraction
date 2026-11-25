@@ -101,15 +101,18 @@ def write_ledger(path: Path, completed: dict[str, str], rows: list[dict]) -> Non
     temporary.replace(path)
 
 
-def vllm_generate(prompts: list[str], sampling: dict, lora_path: str | None = None) -> list[dict]:
-    """Call the installed vLLM 0.13 `LLM.generate` interface and parse each answer."""
+def vllm_generate(prompts: list[str], sampling: dict, lora_path: str | None = None, engine=None) -> list[dict]:
+    """Generate one batch on a supplied engine. A new engine is built only when the caller has not loaded one."""
     from vllm import LLM, SamplingParams
     from vllm.lora.request import LoRARequest
     from vllm.sampling_params import StructuredOutputsParams
 
     from schema_study.production_runtime import interpret_generation
 
-    engine = LLM(model=sampling["model_path"], dtype="bfloat16", enable_lora=lora_path is not None)
+    if engine is None:
+        if not sampling.get("model_path"):
+            raise RuntimeError("A production engine requires the pinned model path.")
+        engine = LLM(model=sampling["model_path"], dtype="bfloat16", enable_lora=lora_path is not None)
     structured = sampling.get("structured_outputs")
     params = SamplingParams(
         temperature=sampling.get("temperature", 0.0),
@@ -122,20 +125,35 @@ def vllm_generate(prompts: list[str], sampling: dict, lora_path: str | None = No
     outputs = engine.generate(prompts, params, lora_request=lora)
     rows = []
     for output in outputs:
-        raw = output.outputs[0].text if output.outputs else ""
-        labels = None
-        parsed = None
-        if sampling.get("schema") is not None and sampling.get("candidate_id") and sampling.get("level"):
-            parsed = interpret_generation(raw, sampling["candidate_id"], sampling["schema"], sampling["level"])
-            if parsed["ledger_status"] != "invalid":
-                labels = parsed["predicted_labels"]
+        completions = list(output.outputs or [])
+        raw = completions[0].text if completions else ""
+        samples = []
+        for completion in completions:
+            sample_raw = completion.text
+            sample = {"raw": sample_raw, "finish_reason": completion.finish_reason}
+            if sampling.get("schema") is not None and sampling.get("candidate_id") and sampling.get("level"):
+                parsed = interpret_generation(sample_raw, sampling["candidate_id"], sampling["schema"], sampling["level"])
+                sample["labels"] = None if parsed["ledger_status"] == "invalid" else parsed["predicted_labels"]
+                sample["parsed"] = parsed
+                sample["ledger_status"] = parsed["ledger_status"]
+                sample["predicted_labels"] = parsed["predicted_labels"]
+            samples.append(sample)
+        labels = samples[0].get("labels") if samples else None
+        parsed = samples[0].get("parsed") if samples else None
         prompt_token_logprobs = []
         for entry in output.prompt_logprobs or []:
             if not entry:
                 continue
             chosen = max(entry.values(), key=lambda item: getattr(item, "rank", 0) == 1)
             prompt_token_logprobs.append(float(getattr(chosen, "logprob", chosen)))
-        rows.append({"raw": raw, "labels": labels, "parsed": parsed, "prompt_token_logprobs": prompt_token_logprobs})
+        rows.append({
+            "raw": raw,
+            "labels": labels,
+            "parsed": parsed,
+            "samples": samples,
+            "prompt_token_logprobs": prompt_token_logprobs,
+            "completion_tokens": sum(len(getattr(completion, "token_ids", []) or []) for completion in completions),
+        })
     return rows
 
 

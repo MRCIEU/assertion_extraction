@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import random
+import time
 from pathlib import Path
 
 from schema_study.learning_conditions import RESEARCH_PREDICATES
@@ -399,7 +400,7 @@ SCIENTIFIC_COMPLETE = {"training_completed", "inference_completed", "completed"}
 RETRYABLE_SLURM = {"TIMEOUT", "NODE_FAIL", "PREEMPTED", "DEADLINE"}
 TERMINAL_SLURM = {"FAILED", "CANCELLED", "OUT_OF_MEMORY", "BOOT_FAIL"}
 MONITORING_SECONDS = 300
-HELD_FAMILIES = {"verifier_adaptation", "certainty", "nli"}
+HELD_FAMILIES = {"verifier_adaptation"}
 
 
 def _group_released(entry: dict) -> bool:
@@ -469,8 +470,9 @@ def merge_group_block(state: dict, entry: dict) -> dict:
     return entry
 
 
-def reconcile_entry(entry: dict, scheduler: str, output: dict | None, *, task_id: str = "", group: str | None = None, slurm_state: str = "", elapsed_seconds: int = 0) -> dict:
-    """Join one Slurm observation with the scientific output. COMPLETED without that output is not success."""
+def reconcile_entry(entry: dict, scheduler: str, output: dict | None, *, task_id: str = "", group: str | None = None, slurm_state: str = "", elapsed_seconds: int = 0, observation_seconds: float | None = None) -> dict:
+    """Join one Slurm observation with the scientific output. Queue time is not useful computation."""
+    del elapsed_seconds
     current = dict(entry)
     if slurm_state:
         current["slurm_state"] = slurm_state.split()[0]
@@ -479,10 +481,13 @@ def reconcile_entry(entry: dict, scheduler: str, output: dict | None, *, task_id
         return current
     if scheduler == "running":
         current["state"] = "running"
-        technical = bool(output and (output.get("technical_preflight") or output.get("scientific") == "preflight_passed"))
-        if technical and elapsed_seconds >= MONITORING_SECONDS:
-            current["scientific"] = "preflight_passed"
-            current["monitoring_guarantees_completion"] = False
+        started = None if not output else output.get("useful_computation_started")
+        if output and output.get("technical_preflight") and started is not None:
+            observed = float(observation_seconds) if observation_seconds is not None else time.time() - float(started)
+            if observed >= MONITORING_SECONDS:
+                current["scientific"] = "preflight_passed"
+                current["monitoring_guarantees_completion"] = False
+                current["useful_observation_seconds"] = observed
         return current
     if scheduler == "unknown":
         current["scheduler"] = "unknown"
@@ -492,6 +497,15 @@ def reconcile_entry(entry: dict, scheduler: str, output: dict | None, *, task_id
     if scheduler == "terminal":
         return _failure_entry(current, task_id, current.get("slurm_state", "terminal"), systematic=current.get("slurm_state") == "OUT_OF_MEMORY", group=group)
     status = (output or {}).get("scientific")
+    if status == "training_completed" and not (output.get("selection_recorded") and output.get("checkpoint_validated")):
+        current["state"] = "valid_continuation_required"
+        current["scientific"] = "preflight_passed" if output.get("technical_preflight") or output.get("preflight_passed") else "valid_continuation_required"
+        current["reason"] = "training_completion_missing_selection_or_checkpoint"
+        return current
+    if status == "inference_completed" and not output.get("predictions_usable"):
+        current["state"] = "valid_continuation_required"
+        current["reason"] = "inference_completion_missing_prediction_content"
+        return current
     if status in {"preflight_passed", "training_completed", "inference_completed", "valid_continuation_required"}:
         current["state"] = status
         if status == "valid_continuation_required" and (output.get("preflight_passed") or output.get("technical_preflight") or current.get("scientific") == "preflight_passed"):
@@ -631,7 +645,11 @@ def probe_readiness(task: dict) -> dict:
             "fingerprint": None,
             "provenance": "reconstructed_completion_record",
         }
-    if task["family"] in {"zero_shot", "few_shot", "adapter_inference", "constrained", "thinking", "self_consistency", "evidence", "qualified", "candidate_scoring", "gpt_oss"}:
+    if task.get("population_filter"):
+        manifest = Path("/home/b5ac/freddieyu.b5ac/projects/project_1/studies/schema_granularity_v1/runs/formal/formal_matched_e0_e7/generation_inputs/validation_manifest.json")
+        ready = manifest.is_file() and json.loads(manifest.read_text(encoding="utf-8")).get("ready") is True
+        evidence[f"population:{task['population_filter']}:{task.get('dataset')}"] = {"ready": ready}
+    elif task["family"] in {"zero_shot", "few_shot", "adapter_inference", "constrained", "thinking", "self_consistency", "evidence", "qualified", "candidate_scoring", "gpt_oss"}:
         source = "few_shot" if task["family"] == "few_shot" else "zero_shot"
         directory = Path("/home/b5ac/freddieyu.b5ac/projects/project_1/studies/schema_granularity_v1/runs/formal/formal_matched_e0_e7/generation_inputs") / source / str(task.get("dataset")) / str(task.get("entity")) / str(task.get("predicate"))
         validation = directory / "VALIDATION.json"
@@ -641,6 +659,9 @@ def probe_readiness(task: dict) -> dict:
         evidence[f"shards:{source}:{task.get('dataset')}:{task.get('entity')}:{task.get('predicate')}"] = {"ready": ready}
     if task.get("adapter_path"):
         evidence[f"adapter:{task.get('trains_from')}"] = verify_peft_adapter(Path(task["adapter_path"]), task.get("model_revision"))
+    if task.get("checkpoint_source"):
+        checkpoint = Path(task["checkpoint_source"])
+        evidence[f"checkpoint:{task.get('trains_from')}"] = {"ready": checkpoint.is_file() and checkpoint.stat().st_size > 0}
     return evidence
 
 
@@ -867,6 +888,47 @@ def evidence_record(raw: str, source_text: str, spans: list[str]) -> dict:
         return {"raw": raw, "spans": [], "unsupported": [], "complete": False, "reason": "label_only_response"}
     unsupported = [span for span in spans if span not in source_text]
     return {"raw": raw, "spans": spans, "unsupported": unsupported, "complete": not unsupported}
+
+
+def prediction_usable(record: dict) -> bool:
+    """A status without the generated response is not a scientific prediction."""
+    return bool(
+        record.get("request_id")
+        and record.get("candidate_id")
+        and "raw" in record
+        and "predicted_labels" in record
+        and record.get("status") in {"valid", "valid_empty", "invalid"}
+    )
+
+
+def prediction_record(request: dict, result: dict, task: dict, specification: dict, status: str) -> dict:
+    """Retain the original response and the fields needed to reproduce the evaluation."""
+    parsed = result.get("parsed") or {}
+    return {
+        "request_id": request["request_id"],
+        "candidate_id": request.get("candidate_id"),
+        "model": task.get("model") or request.get("model"),
+        "model_revision": task.get("model_revision"),
+        "tokenizer_revision": task.get("tokenizer_revision"),
+        "adapter": task.get("adapter_path"),
+        "checkpoint": task.get("adapter_path") or task.get("checkpoint"),
+        "family": task.get("family"),
+        "learning_condition": task.get("family"),
+        "entity": task.get("entity") or request.get("entity_level"),
+        "predicate": task.get("predicate") or request.get("predicate_level"),
+        "seed": task.get("seed"),
+        "raw": result.get("raw"),
+        "predicted_labels": result.get("labels") if result.get("labels") is not None else result.get("predicted_labels"),
+        "illegal_labels": result.get("illegal_labels", parsed.get("illegal_labels", [])),
+        "status": status,
+        "prompt_tokens": result.get("prompt_tokens"),
+        "completion_tokens": result.get("completion_tokens"),
+        "scores": result.get("scores"),
+        "input_fingerprint": (task.get("input") or {}).get("fingerprint") or request.get("rendered_sha256"),
+        "rendered": request.get("rendered") or request.get("prompt"),
+        "rendered_sha256": request.get("rendered_sha256"),
+        "decoding": specification.get("decoding"),
+    }
 
 
 def generation_requests(rows: list[dict]) -> list[dict]:

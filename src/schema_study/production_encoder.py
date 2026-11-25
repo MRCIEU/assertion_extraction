@@ -6,6 +6,8 @@ BioLinkBERT through `load_pretrained_encoder` and uses schema head widths.
 
 from __future__ import annotations
 
+import json
+import time
 from pathlib import Path
 
 import torch
@@ -186,6 +188,7 @@ def train_hierarchical(model: SchemaHierarchicalModel | None = None, steps: int 
 
                 publish_scientific_status(Path(output_dir), {
                     "technical_preflight": True,
+                    "useful_computation_started": time.time(),
                     "model_loaded": True,
                     "device": str(next(model.parameters()).device),
                     "optimiser_steps": 1,
@@ -200,13 +203,33 @@ def train_hierarchical(model: SchemaHierarchicalModel | None = None, steps: int 
     head_gradients = {name: value for name, value in gradients.items() if name.startswith("heads.")}
     production = batches is not None
     status = training_status(step, horizon, best is not None) if production else "fixture"
+    checkpoint_path = None
+    if output_dir is not None and production and status == "training_completed":
+        checkpoint_path = Path(output_dir) / "checkpoints/best/model.pt"
+        checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = checkpoint_path.with_suffix(".pt.tmp")
+        torch.save({
+            "state_dict": {key: value.detach().cpu() for key, value in model.state_dict().items()},
+            "best": best,
+            "corpus": model.corpus,
+        }, temporary)
+        temporary.replace(checkpoint_path)
     if output_dir is not None and production:
         from schema_study.production_runtime import publish_scientific_status
 
+        started = time.time()
+        existing = Path(output_dir) / "scientific_status.json"
+        if existing.is_file():
+            prior = json.loads(existing.read_text(encoding="utf-8"))
+            if prior.get("useful_computation_started") is not None:
+                started = prior["useful_computation_started"]
         publish_scientific_status(Path(output_dir), {
             "scientific": status,
             "preflight_passed": step >= 1,
             "technical_preflight": step >= 1,
+            "useful_computation_started": started,
+            "selection_recorded": best is not None,
+            "checkpoint_validated": checkpoint_path is not None and checkpoint_path.is_file(),
             "monitoring_guarantees_completion": False,
             "steps": step,
             "total_steps": horizon,

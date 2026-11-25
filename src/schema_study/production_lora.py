@@ -12,6 +12,7 @@ import json
 import math
 import random
 import signal
+import time
 from pathlib import Path
 
 import numpy as np
@@ -558,6 +559,7 @@ def fit(
 
                 publish_scientific_status(output_dir, {
                     "technical_preflight": True,
+                    "useful_computation_started": time.time(),
                     "model_loaded": True,
                     "device": str(device),
                     "optimiser_steps": 1,
@@ -592,10 +594,19 @@ def fit(
             export_peft_adapter(output_dir / "best_adapter", best["adapter"], configuration)
         from schema_study.production_runtime import publish_scientific_status
 
+        started = time.time()
+        existing = output_dir / "scientific_status.json"
+        if existing.is_file():
+            prior = json.loads(existing.read_text(encoding="utf-8"))
+            if prior.get("useful_computation_started") is not None:
+                started = prior["useful_computation_started"]
         publish_scientific_status(output_dir, {
             "scientific": status,
             "preflight_passed": step >= 1 and all(math.isfinite(value) for value in losses),
             "technical_preflight": step >= 1,
+            "useful_computation_started": started,
+            "selection_recorded": selection_recorded,
+            "checkpoint_validated": (output_dir / "adapter_checkpoint.pt").is_file(),
             "monitoring_guarantees_completion": False,
             "steps": step,
             "total_steps": total,

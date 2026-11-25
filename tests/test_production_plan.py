@@ -36,6 +36,42 @@ def test_counts_follow_the_agreed_conditions():
     assert len(curriculum_tasks()) == 27
 
 
+def test_operational_evaluation_covers_agreed_adapters():
+    from schema_study.production_plan import execution_manifest
+
+    tasks = execution_manifest()
+    training_families = {
+        "principal_training", "biolinkbert", "hierarchical_multitask", "hierarchical_consistency",
+        "schema_conditioned_lora", "curriculum", "class_imbalance", "negative_sampling",
+        "data_efficiency", "unseen_schema", "encoder_sensitivity", "lora_sensitivity",
+    }
+    training = [task for task in tasks if task["family"] in training_families]
+    assert len(training) == 576
+    assert not any(task.get("dataset") == "bc8" and task["family"] in training_families for task in tasks)
+    biored = [task for task in training if task["family"] == "principal_training" and task["dataset"] == "biored" and task["adaptation"] == "lora_sft"]
+    drug = [task for task in training if task["family"] == "principal_training" and task["dataset"] == "drugprot" and task["adaptation"] == "lora_sft"]
+    assert len(biored) == 192 and len(drug) == 24
+    by_source: dict[str, list] = {}
+    for task in tasks:
+        if task["family"] == "adapter_inference":
+            by_source.setdefault(task["trains_from"], []).append(task)
+    for source in biored:
+        roles = {item.get("evaluation_role") for item in by_source[source["task_id"]]}
+        assert roles == {"internal", "external"}
+        assert {item["dataset"] for item in by_source[source["task_id"]]} == {"biored", "bc8"}
+    for source in drug:
+        assert [item["dataset"] for item in by_source[source["task_id"]]] == ["drugprot"]
+    encoder_families = {
+        "principal_training", "biolinkbert", "hierarchical_multitask", "hierarchical_consistency",
+        "class_imbalance", "negative_sampling", "data_efficiency", "encoder_sensitivity",
+    }
+    encoder_ids = {task["task_id"] for task in training if task["family"] in encoder_families and not str(task.get("model") or "").startswith("qwen")}
+    final_ids = {task["trains_from"] for task in tasks if task["family"] == "final_evaluation"}
+    assert encoder_ids <= final_ids
+    prompts = [task for task in tasks if task["family"] == "zero_shot" and "blocked" not in task["statuses"]]
+    assert prompts and all(task.get("shard_directory") for task in prompts)
+
+
 def test_curriculum_orders_share_the_final_native_block():
     examples = {name: [f"{name}-{index}"] for index, name in enumerate(("P0", "P1", "P2", "P3"))}
     sequences = {order: curriculum_sequence(order, examples) for order in ("coarse_to_fine", "fine_to_coarse", "mixed")}
@@ -503,6 +539,11 @@ def test_controller_requeue_preflight_and_backend(tmp_path: Path):
     waiting = controller_decisions(tasks, state, 1, 0, evidence)
     assert waiting[1]["reason"] == "representative_pending"
     state["rep"] = reconcile_entry(state["rep"], "running", {"technical_preflight": True}, task_id="rep", group="g", elapsed_seconds=600)
+    assert state["rep"].get("scientific") != "preflight_passed"
+    state["rep"] = reconcile_entry(
+        state["rep"], "running", {"technical_preflight": True, "useful_computation_started": 1},
+        task_id="rep", group="g", observation_seconds=600,
+    )
     released = controller_decisions(tasks, state, 1, 0, evidence)
     assert released[1]["action"] == "submit"
     assert released[2]["action"] == "skip"
@@ -518,6 +559,10 @@ def test_controller_requeue_preflight_and_backend(tmp_path: Path):
     assert interpret_slurm("9", {}, None) == "unknown"
     bare = reconcile_entry({"job_id": "9", "state": "running"}, "slurm_completed", None, task_id="rep", slurm_state="COMPLETED")
     assert bare["reason"] == "slurm_completed_without_scientific_record"
+    unfinished = reconcile_entry({}, "slurm_completed", {"scientific": "training_completed"}, task_id="rep", slurm_state="COMPLETED")
+    assert unfinished["reason"] == "training_completion_missing_selection_or_checkpoint"
+    thin = reconcile_entry({}, "slurm_completed", {"scientific": "inference_completed"}, task_id="rep", slurm_state="COMPLETED")
+    assert thin["reason"] == "inference_completion_missing_prediction_content"
     oom = reconcile_entry({"job_id": "9", "state": "running"}, "terminal", None, task_id="rep", group="g", slurm_state="OUT_OF_MEMORY")
     grouped = {}
     merge_group_block(grouped, oom)
@@ -571,7 +616,10 @@ def test_controller_requeue_preflight_and_backend(tmp_path: Path):
         "backend_name": "fixture",
         "fixture_responses": {"keep": {"raw": '{"labels": []}', "labels": []}, "again": {"raw": "not json", "labels": None}},
     }, tmp_path / "resume")
-    assert resumed["completed"] is True
+    assert resumed["completed"] is True and resumed["engine_loads"] == 1
+    stored = {row["request_id"]: row for row in (json.loads(line) for line in (tmp_path / "resume" / "predictions.jsonl").read_text(encoding="utf-8").splitlines())}
+    assert stored["keep"]["raw"] == '{"labels": []}' and stored["keep"]["candidate_id"] == "c"
+    assert "predicted_labels" in stored["keep"]
     second_pass = _run_generation({
         "family": "zero_shot",
         "shard_directory": str(tmp_path / "resume" / "shards"),
@@ -579,6 +627,8 @@ def test_controller_requeue_preflight_and_backend(tmp_path: Path):
         "fixture_responses": {},
     }, tmp_path / "resume")
     assert second_pass["completed"] is True and second_pass.get("resumed", 0) == 0
+    retained = {row["request_id"]: row for row in (json.loads(line) for line in (tmp_path / "resume" / "predictions.jsonl").read_text(encoding="utf-8").splitlines())}
+    assert retained["keep"]["raw"] == '{"labels": []}' and "predicted_labels" in retained["again"]
     checked = publish_validation(tmp_path / "resume" / "shards")
     assert checked["ready"] is True
     assert probe_readiness({
