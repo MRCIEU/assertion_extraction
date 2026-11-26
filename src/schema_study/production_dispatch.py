@@ -1224,7 +1224,7 @@ def _evaluate_hierarchical(task: dict, workdir: Path) -> dict:
         for target_dataset, split in targets:
             grouped: dict[str, dict] = {}
             for predicate in RESEARCH_PREDICATES:
-                rows, _classes, _target_schema = _build_rows(target_dataset, task["entity"], predicate, {split})
+                rows, _classes, _target_schema = _build_rows(target_dataset, task["entity"], HISTORICAL_PREDICATES[predicate], {split})
                 for row in rows:
                     slot = grouped.setdefault(row["candidate_id"], {
                         "candidate_id": row["candidate_id"],

@@ -164,9 +164,10 @@ def transformers_generate(model, tokenizer, prompts: list[str], max_new_tokens: 
     tokenizer.padding_side = "left"
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
-    encoded = tokenizer(prompts, return_tensors="pt", padding=True)
+    encoded = tokenizer(prompts, return_tensors="pt", padding=True, add_special_tokens=False)
     encoded = {key: value.to(model.device) for key, value in encoded.items()}
     width = int(encoded["input_ids"].shape[1])
+    prompt_lengths = [int(encoded["attention_mask"][index].sum()) for index in range(len(prompts))]
     generate = {
         "max_new_tokens": max_new_tokens,
         "pad_token_id": tokenizer.pad_token_id,
@@ -178,20 +179,40 @@ def transformers_generate(model, tokenizer, prompts: list[str], max_new_tokens: 
         generate["do_sample"] = False
     with torch.inference_mode():
         output = model.generate(**encoded, **generate)
+    eos = tokenizer.eos_token_id
+    pad = tokenizer.pad_token_id
     rows = []
     for index, _prompt in enumerate(prompts):
         samples_out = []
         for sample_index in range(samples):
-            row = output[index * samples + sample_index]
-            text = tokenizer.decode(row[width:], skip_special_tokens=True)
-            samples_out.append({"raw": text, "finish_reason": "stop"})
+            continuation = output[index * samples + sample_index][width:].tolist()
+            produced = []
+            reason = "other"
+            for token in continuation:
+                if pad is not None and token == pad and token != eos:
+                    break
+                produced.append(int(token))
+                if eos is not None and token == eos:
+                    reason = "eos"
+                    break
+            if reason != "eos" and len(produced) >= max_new_tokens:
+                reason = "length"
+            text = tokenizer.decode(produced, skip_special_tokens=True)
+            samples_out.append({
+                "raw": text,
+                "finish_reason": reason,
+                "completion_tokens": len(produced),
+                "prompt_tokens": prompt_lengths[index],
+            })
         rows.append({
             "raw": samples_out[0]["raw"] if samples_out else "",
             "labels": None,
             "parsed": None,
             "samples": samples_out,
             "prompt_token_logprobs": [],
-            "completion_tokens": int(output.shape[1] - width),
+            "prompt_tokens": samples_out[0]["prompt_tokens"] if samples_out else prompt_lengths[index],
+            "completion_tokens": samples_out[0]["completion_tokens"] if samples_out else 0,
+            "finish_reason": samples_out[0]["finish_reason"] if samples_out else "other",
             "backend": "transformers",
         })
     return rows

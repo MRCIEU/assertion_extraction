@@ -44,19 +44,31 @@ case "$1" in
     mkdir -p "$TRITON_CACHE_DIR" "$TORCHINDUCTOR_CACHE_DIR"
     export PATH="/home/b5ac/freddieyu.b5ac/projects/project_1/environments/vllm/bin:/usr/bin:/bin"
     export LD_LIBRARY_PATH="/home/b5ac/freddieyu.b5ac/projects/project_1/environments/vllm/lib/python3.12/site-packages/nvidia/cu13/lib"
-    /home/b5ac/freddieyu.b5ac/projects/project_1/environments/vllm/bin/python -m schema_study.production_dispatch run "$1" "$2" &
+    setsid /home/b5ac/freddieyu.b5ac/projects/project_1/environments/vllm/bin/python -m schema_study.production_dispatch run "$1" "$2" &
     child=$!
-    trap 'kill -USR1 "$child" 2>/dev/null || true' USR1
+    trap 'kill -USR1 -"$child" 2>/dev/null || kill -USR1 "$child" 2>/dev/null || true' USR1
+    set +e
     wait "$child"
-    exit $?
+    status=$?
+    if [[ "$status" -gt 128 ]]; then
+      wait "$child"
+      status=$?
+    fi
+    exit "$status"
     ;;
 esac
 if [[ "$gpus" -gt 1 ]]; then
-  /home/b5ac/freddieyu.b5ac/miniforge3/envs/hf-hpc/bin/torchrun --nproc_per_node="$gpus" -m schema_study.production_dispatch run "$1" "$2" &
+  setsid /home/b5ac/freddieyu.b5ac/miniforge3/envs/hf-hpc/bin/torchrun --nproc_per_node="$gpus" -m schema_study.production_dispatch run "$1" "$2" &
 else
-  /home/b5ac/freddieyu.b5ac/miniforge3/envs/hf-hpc/bin/python -m schema_study.production_dispatch run "$1" "$2" &
+  setsid /home/b5ac/freddieyu.b5ac/miniforge3/envs/hf-hpc/bin/python -m schema_study.production_dispatch run "$1" "$2" &
 fi
 child=$!
-trap 'kill -USR1 "$child" 2>/dev/null || true' USR1
+trap 'kill -USR1 -"$child" 2>/dev/null || kill -USR1 "$child" 2>/dev/null || true' USR1
+set +e
 wait "$child"
-exit $?
+status=$?
+if [[ "$status" -gt 128 ]]; then
+  wait "$child"
+  status=$?
+fi
+exit "$status"

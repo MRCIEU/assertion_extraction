@@ -522,6 +522,20 @@ def export_peft_adapter(directory: Path, adapter: dict, configuration: dict) -> 
     return directory
 
 
+def _agree(flag: bool, device: torch.device, *, source_rank: int | None = None) -> bool:
+    """One optimiser boundary, one decision. Rank-local clocks do not enter a collective alone."""
+    if not (torch.distributed.is_available() and torch.distributed.is_initialized()):
+        return flag
+    if device.type != "cuda":
+        device = torch.device("cpu")
+    value = torch.tensor([1 if flag else 0], dtype=torch.int32, device=device)
+    if source_rank is None:
+        torch.distributed.all_reduce(value, op=torch.distributed.ReduceOp.MAX)
+    else:
+        torch.distributed.broadcast(value, src=source_rank)
+    return bool(int(value.item()))
+
+
 def _write_progress(directory: Path, step: int, total: int, learning_rate: float, recent_losses: list[float], interval_seconds: float) -> None:
     """Publish a small heartbeat. The full loss history is not retained in this file."""
     import os
@@ -542,30 +556,130 @@ def _write_progress(directory: Path, step: int, total: int, learning_rate: float
     temporary.replace(directory / "progress.json")
 
 
+def _tensor_rank(weights: dict) -> int:
+    """The LoRA rank is the leading dimension of every A matrix. A mixed set is not a configuration."""
+    ranks = set()
+    for name, tensor in weights.items():
+        if "lora_A" not in str(name) or not hasattr(tensor, "shape") or len(tuple(tensor.shape)) != 2:
+            continue
+        ranks.add(int(tensor.shape[0]))
+    if len(ranks) != 1:
+        raise RuntimeError(f"The adapter tensors do not share one rank: {sorted(ranks) or 'none'}.")
+    return ranks.pop()
+
+
+def _remember_configuration(configuration: dict, source: dict) -> bool:
+    found = False
+    for key in ("rank", "alpha", "dropout", "target_modules"):
+        if source.get(key) is not None:
+            configuration[key] = source[key]
+            found = True
+    return found
+
+
+def _verified_standard(standard: Path, configuration: dict, rank: int) -> bool:
+    config_path = standard / "adapter_config.json"
+    weights_path = standard / "adapter_model.safetensors"
+    if not config_path.is_file() or not weights_path.is_file() or weights_path.stat().st_size <= 0:
+        return False
+    payload = json.loads(config_path.read_text(encoding="utf-8"))
+    base = str(payload.get("base_model_name_or_path") or "")
+    if not base or base == str(configuration.get("base_revision")):
+        return False
+    if int(payload.get("r", -1)) != rank or int(payload.get("lora_alpha", -1)) != int(configuration["alpha"]):
+        return False
+    from safetensors import safe_open
+
+    with safe_open(weights_path, framework="pt") as handle:
+        names = list(handle.keys())
+        shapes = {name: tuple(handle.get_slice(name).get_shape()) for name in names if "lora_A" in name}
+    if not shapes or {shape[0] for shape in shapes.values()} != {rank}:
+        return False
+    expected = set(configuration.get("target_modules") or LORA_TARGET_MODULES)
+    if any(not any(module in name for name in names) for module in expected):
+        return False
+    return True
+
+
 def ensure_standard_adapter(adapter_dir: Path, model_name: str) -> Path:
-    """Publish a PEFT directory beside a historical export. The historical files stay in place."""
-    standard = adapter_dir / "peft_standard"
-    if (standard / "adapter_model.safetensors").is_file() and (standard / "adapter_config.json").is_file():
-        return standard
+    """Publish a PEFT directory beside a historical export. Rank and alpha come from that training run."""
+    import os
+
     from schema_study.production_assets import GENERATIVE
 
-    configuration = production_configuration()
-    configuration["base_model_path"] = str(GENERATIVE[model_name]["path"])
-    weights = None
-    for candidate in (adapter_dir / "adapter_model.bin", adapter_dir.parent / "best" / "adapter_checkpoint.pt", adapter_dir.parent / "adapter_checkpoint.pt"):
-        if not candidate.is_file():
-            continue
-        saved = torch.load(candidate, map_location="cpu", weights_only=False)
-        if isinstance(saved, dict) and "adapter" in saved:
-            weights = saved.get("best_adapter") or saved["adapter"]
-            configuration.update({key: saved.get("configuration", {}).get(key, configuration.get(key)) for key in ("rank", "alpha", "dropout", "target_modules")})
+    adapter_dir = Path(adapter_dir)
+    standard = adapter_dir / "peft_standard"
+    lock = adapter_dir / ".peft_convert.lock"
+    descriptor = None
+    for _attempt in range(60):
+        try:
+            descriptor = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
             break
-        if isinstance(saved, dict) and any("lora_" in str(key) for key in saved):
-            weights = saved
-            break
-    if not weights:
-        raise RuntimeError(f"No adapter tensors were found beside {adapter_dir}.")
-    return export_peft_adapter(standard, weights, configuration)
+        except FileExistsError:
+            time.sleep(1)
+    if descriptor is None:
+        raise RuntimeError(f"Another conversion is still writing {adapter_dir}.")
+    try:
+        os.write(descriptor, str(os.getpid()).encode("ascii"))
+        configuration = production_configuration()
+        configuration["base_model_path"] = str(GENERATIVE[model_name]["path"])
+        configuration["base_revision"] = GENERATIVE[model_name]["revision"]
+        configured = False
+        weights = None
+        for checkpoint in (adapter_dir.parent / "best" / "adapter_checkpoint.pt", adapter_dir.parent / "adapter_checkpoint.pt"):
+            if not checkpoint.is_file():
+                continue
+            saved = torch.load(checkpoint, map_location="cpu", weights_only=False)
+            if isinstance(saved, dict) and _remember_configuration(configuration, saved.get("configuration") or {}):
+                configured = True
+            if weights is None and isinstance(saved, dict) and saved.get("adapter"):
+                weights = saved.get("best_adapter") or saved["adapter"]
+            if configured and weights is not None:
+                break
+        historical = adapter_dir / "adapter_config.json"
+        if historical.is_file():
+            payload = json.loads(historical.read_text(encoding="utf-8"))
+            translated = {
+                "rank": None if configuration.get("rank") not in (None, 16) or configured else payload.get("r"),
+                "alpha": None if configured else payload.get("lora_alpha"),
+                "dropout": None if configured else payload.get("lora_dropout"),
+                "target_modules": None if configured else payload.get("target_modules"),
+            }
+            if not configured:
+                translated["rank"] = payload.get("r")
+            if _remember_configuration(configuration, translated):
+                configured = True
+        if weights is None:
+            for candidate in (adapter_dir / "adapter_model.bin", adapter_dir.parent / "best" / "adapter_checkpoint.pt", adapter_dir.parent / "adapter_checkpoint.pt"):
+                if not candidate.is_file():
+                    continue
+                saved = torch.load(candidate, map_location="cpu", weights_only=False)
+                if isinstance(saved, dict) and "adapter" in saved:
+                    weights = saved.get("best_adapter") or saved["adapter"]
+                    break
+                if isinstance(saved, dict) and any("lora_" in str(key) for key in saved):
+                    weights = saved
+                    break
+        if not weights:
+            raise RuntimeError(f"No adapter tensors were found beside {adapter_dir}.")
+        if not configured:
+            raise RuntimeError("A tensor-only adapter file does not record its rank and alpha. The principal default is not a substitute.")
+        rank = _tensor_rank(weights)
+        if int(configuration["rank"]) != rank:
+            raise RuntimeError(f"The recorded rank {configuration['rank']} does not match the adapter tensors ({rank}).")
+        if _verified_standard(standard, configuration, rank):
+            return standard
+        if standard.exists():
+            rejected = adapter_dir / f"peft_standard_rejected_r{rank}"
+            if not rejected.exists():
+                standard.rename(rejected)
+        published = export_peft_adapter(standard, weights, configuration)
+        if not _verified_standard(published, configuration, rank):
+            raise RuntimeError("The converted adapter failed its rank, alpha and tensor check.")
+        return published
+    finally:
+        os.close(descriptor)
+        lock.unlink(missing_ok=True)
 
 
 def fit(
@@ -638,7 +752,8 @@ def fit(
     signal.signal(signal.SIGUSR1, _handle)
     try:
         while step < steps:
-            if stop["requested"] or (stop_after is not None and step >= stop_after):
+            stop["requested"] = _agree(bool(stop["requested"] or (stop_after is not None and step >= stop_after)), device)
+            if stop["requested"]:
                 break
             learning_rate = learning_rate_at_step(step, total, float(configuration["learning_rate"]), float(configuration["warmup_ratio"]))
             for group in optimizer.param_groups:
@@ -669,10 +784,12 @@ def fit(
             optimizer.step()
             losses.append(accumulated / accumulate)
             step += 1
-            if output_dir is not None and time.time() - last_heartbeat >= 180:
+            publish_heartbeat = _agree(output_dir is not None and time.time() - last_heartbeat >= 180, device, source_rank=0)
+            if publish_heartbeat and output_dir is not None:
                 _write_progress(output_dir, step, total, learning_rate, losses[-20:], time.time() - last_heartbeat)
                 last_heartbeat = time.time()
-            if output_dir is not None and step > 1 and time.time() - last_checkpoint >= 1200:
+            publish_checkpoint = _agree(output_dir is not None and step > 1 and time.time() - last_checkpoint >= 1200, device, source_rank=0)
+            if publish_checkpoint and output_dir is not None:
                 package = _package(model, optimizer, step, position, configuration, fingerprints or {}, None if not best else {key: value for key, value in best.items() if key != "adapter"})
                 if best and best.get("adapter"):
                     package["best_adapter"] = best["adapter"]
@@ -699,12 +816,32 @@ def fit(
                     "monitoring_guarantees_completion": False,
                 })
             interval = int(configuration.get("eval_interval") or total)
-            if score_fn is not None and step % interval == 0 and not stop["requested"]:
+            run_development = _agree(score_fn is not None and step % interval == 0 and not stop["requested"], device, source_rank=0)
+            if run_development and output_dir is not None:
+                package = _package(model, optimizer, step, position, configuration, fingerprints or {}, None if not best else {key: value for key, value in best.items() if key != "adapter"})
+                if best and best.get("adapter"):
+                    package["best_adapter"] = best["adapter"]
+                save_checkpoint(output_dir, package)
+            if run_development:
                 model.eval()
                 metric = float(score_fn(model))
                 model.train()
                 if best is None or metric > float(best.get("development_micro_f1", -1)):
-                    best = {"step": step, "development_micro_f1": metric, "adapter": _adapter_state(model)}
+                    selected = _adapter_state(model)
+                    best = {"step": step, "development_micro_f1": metric, "adapter": selected}
+                    import os
+
+                    if output_dir is not None and int(os.environ.get("RANK", "0")) == 0 and selected:
+                        selection = {
+                            "optimiser_step": step,
+                            "development_micro_f1": metric,
+                            "recorded_at": time.time(),
+                        }
+                        temporary = output_dir / ".selection.json.tmp"
+                        temporary.write_text(json.dumps(selection) + "\n", encoding="utf-8")
+                        temporary.replace(output_dir / "selection.json")
+                        if configuration.get("base_model_path"):
+                            export_peft_adapter(output_dir / "selected_adapter", selected, configuration)
     finally:
         signal.signal(signal.SIGUSR1, previous)
     from schema_study.production_runtime import training_status
