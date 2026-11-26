@@ -942,6 +942,8 @@ def prediction_record(request: dict, result: dict, task: dict, specification: di
         "rendered": request.get("rendered") or request.get("prompt"),
         "rendered_sha256": request.get("rendered_sha256"),
         "decoding": specification.get("decoding"),
+        "inference_backend": specification.get("backend"),
+        "inference_backend_version": specification.get("backend_version"),
     }
 
 

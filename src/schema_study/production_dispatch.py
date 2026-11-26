@@ -510,6 +510,9 @@ class GenerationSession:
             model.eval()
             self.engine = model
             self.loads += 1
+            import transformers
+
+            self.specification["backend_version"] = getattr(transformers, "__version__", None)
         return self.engine, self.tokenizer
 
     def _transformers_batch(self, requests: list[dict]) -> list[dict]:
