@@ -10,7 +10,7 @@
 #SBATCH --mem=64G
 #SBATCH --time=04:00:00
 #SBATCH --export=ALL
-#SBATCH --signal=B:USR1@180
+#SBATCH --signal=B:USR1@600
 
 set -euo pipefail
 set +x
@@ -30,7 +30,7 @@ gpus="${SLURM_GPUS_ON_NODE:-${SLURM_GPUS:-1}}"
 # Training stays on hf-hpc. Generation uses the separate vLLM 0.33 runtime.
 # That runtime has its own PyTorch and is not the training stack.
 case "$1" in
-  zero_shot|few_shot|adapter_inference|constrained|thinking|self_consistency|evidence|qualified|candidate_scoring|gpt_oss)
+  zero_shot|few_shot|constrained|thinking|self_consistency|evidence|qualified|candidate_scoring|gpt_oss)
     export PYTHONPATH=/home/b5ac/freddieyu.b5ac/project_1/src
     export PYTHONNOUSERSITE=1
     # The bundled nvcc is CUDA 13.5 and its headers report CUDA 13.0, so
@@ -44,10 +44,19 @@ case "$1" in
     mkdir -p "$TRITON_CACHE_DIR" "$TORCHINDUCTOR_CACHE_DIR"
     export PATH="/home/b5ac/freddieyu.b5ac/projects/project_1/environments/vllm/bin:/usr/bin:/bin"
     export LD_LIBRARY_PATH="/home/b5ac/freddieyu.b5ac/projects/project_1/environments/vllm/lib/python3.12/site-packages/nvidia/cu13/lib"
-    exec /home/b5ac/freddieyu.b5ac/projects/project_1/environments/vllm/bin/python -m schema_study.production_dispatch run "$1" "$2"
+    /home/b5ac/freddieyu.b5ac/projects/project_1/environments/vllm/bin/python -m schema_study.production_dispatch run "$1" "$2" &
+    child=$!
+    trap 'kill -USR1 "$child" 2>/dev/null || true' USR1
+    wait "$child"
+    exit $?
     ;;
 esac
 if [[ "$gpus" -gt 1 ]]; then
-  exec /home/b5ac/freddieyu.b5ac/miniforge3/envs/hf-hpc/bin/torchrun --nproc_per_node="$gpus" -m schema_study.production_dispatch run "$1" "$2"
+  /home/b5ac/freddieyu.b5ac/miniforge3/envs/hf-hpc/bin/torchrun --nproc_per_node="$gpus" -m schema_study.production_dispatch run "$1" "$2" &
+else
+  /home/b5ac/freddieyu.b5ac/miniforge3/envs/hf-hpc/bin/python -m schema_study.production_dispatch run "$1" "$2" &
 fi
-exec /home/b5ac/freddieyu.b5ac/miniforge3/envs/hf-hpc/bin/python -m schema_study.production_dispatch run "$1" "$2"
+child=$!
+trap 'kill -USR1 "$child" 2>/dev/null || true' USR1
+wait "$child"
+exit $?

@@ -109,6 +109,10 @@ def _invoke_production(task: dict, workdir: Path, *, gpu_permitted: bool = False
         configuration.update({key: task["configuration"][key] for key in task["configuration"] if key in configuration})
         configuration["base_revision"] = task.get("model_revision")
         configuration["tokenizer_revision"] = task.get("tokenizer_revision")
+        from schema_study.production_assets import GENERATIVE
+
+        configuration["base_model_path"] = str(GENERATIVE[task["model"]]["path"])
+        configuration["retain_consumed_prefixes"] = False
         configuration["micro_batch_size"] = 1
         configuration["world_size"] = process["world"]
         configuration["requested_gpus"] = requested
@@ -393,6 +397,8 @@ def backend_specification(task: dict) -> dict:
     }
     if task.get("model") == "gpt_oss_20b":
         specification["max_new_tokens"] = 2048
+    if family == "adapter_inference":
+        specification["backend"] = "transformers"
     if family == "constrained":
         specification.update({"decoding": "legal_label_schema", "structured_outputs": True, "legal_label_schema": True})
     elif family == "thinking":
@@ -480,6 +486,46 @@ class GenerationSession:
             ))
         return prompts
 
+    def _transformers(self):
+        if self.engine is None:
+            import torch
+            from transformers import AutoModelForCausalLM
+
+            from schema_study.production_assets import GENERATIVE
+            from schema_study.production_lora import ensure_standard_adapter
+
+            spec = GENERATIVE[self.specification["model"]]
+            tokenizer = self._load_tokenizer()
+            if tokenizer.pad_token_id is None:
+                tokenizer.pad_token = tokenizer.eos_token
+            tokenizer.padding_side = "left"
+            model = AutoModelForCausalLM.from_pretrained(spec["path"], local_files_only=True, torch_dtype=torch.bfloat16)
+            adapter = self.specification.get("adapter")
+            if adapter:
+                from peft import PeftModel
+
+                standard = ensure_standard_adapter(Path(adapter), self.specification["model"])
+                model = PeftModel.from_pretrained(model, str(standard))
+            model.to("cuda")
+            model.eval()
+            self.engine = model
+            self.loads += 1
+        return self.engine, self.tokenizer
+
+    def _transformers_batch(self, requests: list[dict]) -> list[dict]:
+        from schema_study.production_inference import transformers_generate
+
+        model, tokenizer = self._transformers()
+        samples = 5 if self.specification["decoding"] == "self_consistency" else 1
+        return transformers_generate(
+            model,
+            tokenizer,
+            self._prompts(requests),
+            max_new_tokens=int(self.specification["max_new_tokens"]),
+            temperature=float(self.specification["temperature"]),
+            samples=samples,
+        )
+
     def generate_batch(self, requests: list[dict], *, batch_size: int = 8) -> list[dict]:
         """Run one loaded backend over bounded batches. The engine count stays at one."""
         if not requests:
@@ -501,6 +547,8 @@ class GenerationSession:
                     raise RuntimeError("retryable response missing")
                 rows.append(dict(found))
             return rows
+        if self.specification.get("backend") == "transformers" or self.task.get("inference_backend") == "transformers":
+            return self._transformers_batch(requests)
         from schema_study.production_inference import vllm_generate
 
         engine = self._engine()
@@ -537,11 +585,14 @@ class GenerationSession:
                 raise RuntimeError("Candidate scoring has no legal output schema.")
             prompt = request.get("rendered") or request.get("prompt") or ""
             for label in legal:
-                pairs.append((request["request_id"], label, prompt + str(label)))
-        scored = vllm_generate([prompt for _request, _label, prompt in pairs], {**sampling, "max_tokens": 1, "prompt_logprobs": 1, "n": 1}, lora_path=self.specification.get("adapter"), engine=engine)
+                pairs.append((request["request_id"], label, prompt, str(label)))
+        self._load_tokenizer()
+        scored = vllm_generate([prompt + label for _request, _label, prompt, label in pairs], {**sampling, "max_tokens": 1, "prompt_logprobs": 1, "n": 1}, lora_path=self.specification.get("adapter"), engine=engine)
         grouped: dict[str, dict[str, list]] = {}
-        for (request_id, label, _prompt), row in zip(pairs, scored):
-            grouped.setdefault(request_id, {})[label] = row.get("prompt_token_logprobs") or []
+        for (request_id, label, prompt, _label_text), row in zip(pairs, scored):
+            prompt_length = len(self.tokenizer.encode(prompt, add_special_tokens=False))
+            values = row.get("prompt_token_logprobs") or []
+            grouped.setdefault(request_id, {})[label] = values[prompt_length:]
         return [{"request_id": request["request_id"], "raw": "", "labels": None, "token_logprobs": grouped[request["request_id"]]} for request in requests]
 
 
@@ -999,11 +1050,12 @@ def _lora_development_score(task: dict, evaluation: list[dict], tokenizer, predi
                 tokens = torch.full((len(chunk), width), int(tokenizer.pad_token_id or 0), dtype=torch.long, device=device)
                 mask = torch.zeros(len(chunk), width, dtype=torch.long, device=device)
                 for index, ids in enumerate(encoded):
-                    tokens[index, : len(ids)] = torch.tensor(ids, device=device)
-                    mask[index, : len(ids)] = 1
+                    offset = width - len(ids)
+                    tokens[index, offset:] = torch.tensor(ids, device=device)
+                    mask[index, offset:] = 1
                 output = generator.generate(tokens, attention_mask=mask, max_new_tokens=256, do_sample=False)
                 for index, (record, predicate, historical, _user) in enumerate(chunk):
-                    text = tokenizer.decode(output[index][len(encoded[index]):], skip_special_tokens=True)
+                    text = tokenizer.decode(output[index][width:], skip_special_tokens=True)
                     parsed = interpret_generation(text, record["candidate_id"], schema, historical)
                     gold = (record.get("assistant") or {}).get("labels", [])
                     rows.append({"gold": gold, "predicted": parsed["predicted_labels"], "status": "valid" if parsed["ledger_status"] in {"valid", "valid_empty"} else "invalid", "candidate_id": record["candidate_id"], "raw": text, "illegal_labels": parsed.get("illegal_labels", [])})

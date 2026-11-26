@@ -492,6 +492,12 @@ def reconcile_entry(entry: dict, scheduler: str, output: dict | None, *, task_id
     if scheduler == "unknown":
         current["scheduler"] = "unknown"
         return current
+    if scheduler == "retryable" and str(current.get("slurm_state", "")).startswith("TIMEOUT"):
+        current["state"] = "valid_continuation_required"
+        current["scientific"] = "preflight_passed" if (output or {}).get("technical_preflight") else current.get("scientific")
+        current["continuation_segments"] = int(current.get("continuation_segments", 0)) + 1
+        current["reason"] = "planned_walltime_continuation"
+        return current
     if scheduler == "retryable":
         return _failure_entry(current, task_id, current.get("slurm_state", "retryable"), group=group)
     if scheduler == "terminal":

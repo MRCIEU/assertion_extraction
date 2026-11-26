@@ -425,34 +425,114 @@ def _apply_device_policy(model: nn.Module, configuration: dict) -> tuple[torch.d
         model = model.to(device)
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[local])
     elif policy == "fsdp":
+        from functools import partial
+
         from torch.distributed.fsdp import FullyShardedDataParallel, MixedPrecision, ShardingStrategy
+        from torch.distributed.fsdp.wrap import transformer_auto_wrap_policy
 
         precision = MixedPrecision(param_dtype=torch.bfloat16, reduce_dtype=torch.bfloat16, buffer_dtype=torch.bfloat16)
+        layer_types = {type(module) for module in model.modules() if module.__class__.__name__.endswith("DecoderLayer")}
+        wrap = partial(transformer_auto_wrap_policy, transformer_layer_cls=layer_types) if layer_types else None
         model = FullyShardedDataParallel(
-            model, device_id=device, mixed_precision=precision, sharding_strategy=ShardingStrategy.FULL_SHARD,
+            model,
+            device_id=device,
+            mixed_precision=precision,
+            sharding_strategy=ShardingStrategy.FULL_SHARD,
+            auto_wrap_policy=wrap,
+            use_orig_params=True,
         )
     record["requested_gpus"] = int(configuration.get("requested_gpus", initialised))
     record["initialised_world"] = initialised if policy in {"ddp", "fsdp"} else 1
     return device, {**record, "model": model}
 
 
+def peft_key(name: str) -> str:
+    """Map an injected LoRA name onto the PEFT state-dict name. The adapter slot is not part of the key."""
+    cleaned = name.replace(".default.weight", ".weight").replace(".default.bias", ".bias")
+    if cleaned.startswith("base_model.model."):
+        return cleaned
+    return "base_model.model." + cleaned
+
+
 def export_peft_adapter(directory: Path, adapter: dict, configuration: dict) -> Path:
-    """Write the selected adapter in the PEFT directory layout, separate from the resumable checkpoint."""
+    """Write a standard PEFT directory. An existing historical export in this directory is left in place."""
+    if (directory / "adapter_model.bin").is_file() and not (directory / "adapter_model.safetensors").is_file():
+        directory = directory / "peft_standard"
     directory.mkdir(parents=True, exist_ok=True)
+    base = configuration.get("base_model_path") or configuration.get("base_model_name_or_path")
+    if not base or str(base) == str(configuration.get("base_revision")):
+        raise RuntimeError("The adapter export needs the base-model path. A revision hash is not that path.")
+    weights = {}
+    for name, tensor in adapter.items():
+        if "lora_" not in name:
+            continue
+        weights[peft_key(name)] = tensor.detach().cpu().contiguous()
+    if not weights:
+        raise RuntimeError("The adapter export contains no LoRA tensors.")
     config = {
         "peft_type": "LORA",
-        "r": configuration.get("rank"),
-        "lora_alpha": configuration.get("alpha"),
-        "lora_dropout": configuration.get("dropout"),
-        "target_modules": configuration.get("target_modules"),
+        "task_type": "CAUSAL_LM",
+        "r": int(configuration["rank"]),
+        "lora_alpha": int(configuration["alpha"]),
+        "lora_dropout": float(configuration["dropout"]),
+        "target_modules": list(configuration.get("target_modules") or LORA_TARGET_MODULES),
         "bias": "none",
-        "base_model_name_or_path": configuration.get("base_revision"),
+        "base_model_name_or_path": str(base),
+        "inference_mode": True,
     }
-    (directory / "adapter_config.json").write_text(json.dumps(config, sort_keys=True) + "\n", encoding="utf-8")
-    torch.save({name: tensor for name, tensor in adapter.items() if "lora_" in name}, directory / "adapter_model.bin")
-    if not (directory / "adapter_config.json").is_file() or (directory / "adapter_model.bin").stat().st_size <= 0:
+    (directory / "adapter_config.json").write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+    from safetensors.torch import save_file
+
+    save_file(weights, directory / "adapter_model.safetensors")
+    if (directory / "adapter_model.safetensors").stat().st_size <= 0:
         raise RuntimeError("The inference adapter export was not published.")
     return directory
+
+
+def _write_progress(directory: Path, step: int, total: int, learning_rate: float, recent_losses: list[float], interval_seconds: float) -> None:
+    """Publish a small heartbeat. The full loss history is not retained in this file."""
+    import os
+
+    if int(os.environ.get("RANK", "0")) != 0:
+        return
+    payload = {
+        "optimiser_step": step,
+        "total_steps": total,
+        "learning_rate": learning_rate,
+        "recent_loss_mean": None if not recent_losses else sum(recent_losses) / len(recent_losses),
+        "recent_loss_finite": all(math.isfinite(value) for value in recent_losses),
+        "heartbeat_seconds": interval_seconds,
+        "recorded_at": time.time(),
+    }
+    temporary = directory / ".progress.json.tmp"
+    temporary.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+    temporary.replace(directory / "progress.json")
+
+
+def ensure_standard_adapter(adapter_dir: Path, model_name: str) -> Path:
+    """Publish a PEFT directory beside a historical export. The historical files stay in place."""
+    standard = adapter_dir / "peft_standard"
+    if (standard / "adapter_model.safetensors").is_file() and (standard / "adapter_config.json").is_file():
+        return standard
+    from schema_study.production_assets import GENERATIVE
+
+    configuration = production_configuration()
+    configuration["base_model_path"] = str(GENERATIVE[model_name]["path"])
+    weights = None
+    for candidate in (adapter_dir / "adapter_model.bin", adapter_dir.parent / "best" / "adapter_checkpoint.pt", adapter_dir.parent / "adapter_checkpoint.pt"):
+        if not candidate.is_file():
+            continue
+        saved = torch.load(candidate, map_location="cpu", weights_only=False)
+        if isinstance(saved, dict) and "adapter" in saved:
+            weights = saved.get("best_adapter") or saved["adapter"]
+            configuration.update({key: saved.get("configuration", {}).get(key, configuration.get(key)) for key in ("rank", "alpha", "dropout", "target_modules")})
+            break
+        if isinstance(saved, dict) and any("lora_" in str(key) for key in saved):
+            weights = saved
+            break
+    if not weights:
+        raise RuntimeError(f"No adapter tensors were found beside {adapter_dir}.")
+    return export_peft_adapter(standard, weights, configuration)
 
 
 def fit(
@@ -511,9 +591,12 @@ def fit(
     losses = []
     learning_rates = []
     consumed = []
+    retain_consumed = bool(configuration.get("retain_consumed_prefixes", True))
     cursor = BatchCursor(batches)
     cursor.skip(position)
     stop = {"requested": False}
+    last_checkpoint = time.time()
+    last_heartbeat = time.time()
 
     def _handle(signum, frame) -> None:
         stop["requested"] = True
@@ -535,7 +618,8 @@ def fit(
                 if device.type == "cuda":
                     batch = {key: value.to(device) if torch.is_tensor(value) else value for key, value in batch.items()}
                 position = cursor.index
-                consumed.append([int(value) for value in batch["input_ids"].reshape(-1)[:8].tolist()])
+                if retain_consumed:
+                    consumed.append([int(value) for value in batch["input_ids"].reshape(-1)[:8].tolist()])
                 loss = sequence_loss(model, batch)
                 if not torch.isfinite(loss):
                     raise RuntimeError("Loss is not finite.")
@@ -543,10 +627,22 @@ def fit(
                 accumulated += float(loss.detach())
             if step == 0 and not any(parameter.grad is not None and float(parameter.grad.abs().sum()) > 0 for parameter in trainable):
                 raise RuntimeError("LoRA parameters received no gradient.")
-            torch.nn.utils.clip_grad_norm_(trainable, 1.0)
+            if _is_fsdp(model):
+                model.clip_grad_norm_(1.0)
+            else:
+                torch.nn.utils.clip_grad_norm_(trainable, 1.0)
             optimizer.step()
             losses.append(accumulated / accumulate)
             step += 1
+            if output_dir is not None and time.time() - last_heartbeat >= 180:
+                _write_progress(output_dir, step, total, learning_rate, losses[-20:], time.time() - last_heartbeat)
+                last_heartbeat = time.time()
+            if output_dir is not None and step > 1 and time.time() - last_checkpoint >= 1200:
+                package = _package(model, optimizer, step, position, configuration, fingerprints or {}, None if not best else {key: value for key, value in best.items() if key != "adapter"})
+                if best and best.get("adapter"):
+                    package["best_adapter"] = best["adapter"]
+                save_checkpoint(output_dir, package)
+                last_checkpoint = time.time()
             if step == 1 and output_dir is not None and not configuration.get("skip_preflight_checkpoint"):
                 technical = _package(model, optimizer, step, position, configuration, fingerprints or {}, None)
                 save_checkpoint(output_dir, technical)
@@ -568,7 +664,7 @@ def fit(
                     "monitoring_guarantees_completion": False,
                 })
             interval = int(configuration.get("eval_interval") or total)
-            if score_fn is not None and step % interval == 0:
+            if score_fn is not None and step % interval == 0 and not stop["requested"]:
                 model.eval()
                 metric = float(score_fn(model))
                 model.train()

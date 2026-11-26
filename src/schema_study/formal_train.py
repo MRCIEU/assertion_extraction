@@ -162,6 +162,30 @@ def _restore(state: dict, torch) -> None:
         torch.cuda.set_rng_state_all(state["cuda"])
 
 
+def encoder_tokenizer(model_name: str):
+    """Build the tokenizer used for both training and final evaluation."""
+    if model_name == "biomedbert":
+        tokenizer = load_biomedbert_tokenizer(str(TOKENIZER_DIR))
+        observed = [tokenizer.convert_tokens_to_ids(marker) for marker in SPECIAL_MARKERS]
+        if observed != list(range(30522, 30522 + len(SPECIAL_MARKERS))):
+            raise RuntimeError("Marker ids differ from the accepted tokenizer.")
+        return tokenizer
+    from transformers import AutoTokenizer
+
+    from schema_study.production_assets import encoder_layout
+
+    tokenizer = AutoTokenizer.from_pretrained(encoder_layout(model_name)["tokenizer"], local_files_only=True)
+    missing = [marker for marker in SPECIAL_MARKERS if marker not in tokenizer.get_vocab()]
+    if missing:
+        added = tokenizer.add_special_tokens({"additional_special_tokens": missing})
+        if added != len(missing):
+            raise RuntimeError("The encoder tokenizer did not accept the context markers.")
+    absent = [marker for marker in SPECIAL_MARKERS if marker not in tokenizer.get_vocab()]
+    if absent:
+        raise RuntimeError("The encoder tokenizer is missing context markers.")
+    return tokenizer
+
+
 def _model(tokenizer, classes: list[str], seed: int, entity: str, predicate: str, torch, model_name: str = "biomedbert"):
     from torch.nn import Dropout, Linear
     from transformers import AutoModel
@@ -176,16 +200,24 @@ def _model(tokenizer, classes: list[str], seed: int, entity: str, predicate: str
     loaded = AutoModel.from_pretrained(layout["model"], local_files_only=True)
     encoder = loaded.bert if hasattr(loaded, "bert") else loaded
     before = encoder.get_input_embeddings().weight.shape[0]
-    encoder.resize_token_embeddings(len(tokenizer))
+    target = len(tokenizer)
+    if before < target:
+        encoder.resize_token_embeddings(target)
     after = encoder.get_input_embeddings().weight.shape[0]
-    if after - before != len(SPECIAL_MARKERS):
-        raise RuntimeError(f"Embedding resize mismatch: {before} -> {after}")
+    if after != target:
+        raise RuntimeError(f"Embedding table length {after} does not match the tokenizer length {target}.")
     streams = seed_streams(seed, entity, predicate)
     generator = torch.Generator()
     generator.manual_seed(streams["marker_embedding_init"] % (2**31 - 1))
-    with torch.no_grad():
-        rows = torch.randn((len(SPECIAL_MARKERS), encoder.config.hidden_size), generator=generator)
-        encoder.get_input_embeddings().weight[-len(SPECIAL_MARKERS):].copy_(rows * encoder.config.initializer_range)
+    grown = after - before
+    if grown:
+        if grown != len(SPECIAL_MARKERS):
+            raise RuntimeError(f"Embedding resize mismatch: {before} -> {after}")
+        with torch.no_grad():
+            rows = torch.randn((grown, encoder.config.hidden_size), generator=generator)
+            encoder.get_input_embeddings().weight[-grown:].copy_(rows * encoder.config.initializer_range)
+    elif before != target:
+        raise RuntimeError(f"Embedding resize mismatch: {before} -> {after}")
     dropout = Dropout(0.1)
     head = Linear(encoder.config.hidden_size, len(classes))
     generator.manual_seed(streams["classifier_head"] % (2**31 - 1))
@@ -324,18 +356,7 @@ def train(dataset: str, entity: str, predicate: str, seed: int, model_name: str 
         if saved.get("completed_epochs", 0) >= 10:
             _record(output, "train", {"model_called": False, "reason": "training_already_complete", "calls": 0})
             return {"completed_epochs": saved["completed_epochs"], "best_score": saved.get("best_score"), "updates": saved.get("optimizer_updates", 0)}
-    if model_name == "biomedbert":
-        tokenizer = load_biomedbert_tokenizer(str(TOKENIZER_DIR))
-        observed = [tokenizer.convert_tokens_to_ids(marker) for marker in SPECIAL_MARKERS]
-        if observed != list(range(30522, 30522 + len(SPECIAL_MARKERS))):
-            raise RuntimeError("Marker ids differ from the accepted tokenizer.")
-    else:
-        from transformers import AutoTokenizer
-        from schema_study.production_assets import encoder_layout
-        tokenizer = AutoTokenizer.from_pretrained(encoder_layout(model_name)["tokenizer"], local_files_only=True)
-        added = tokenizer.add_special_tokens({"additional_special_tokens": [marker for marker in SPECIAL_MARKERS if marker not in tokenizer.get_vocab()]})
-        if added != len(SPECIAL_MARKERS) and any(marker not in tokenizer.get_vocab() for marker in SPECIAL_MARKERS):
-            raise RuntimeError("The encoder tokenizer did not accept the context markers.")
+    tokenizer = encoder_tokenizer(model_name)
     rows, classes, schema = _build_rows(dataset, entity, predicate, {"train", "dev"})
     train_rows = _population([row for row in rows if row["split"] == "train"], fraction, seed, negative_strategy)
     dev_rows = [row for row in rows if row["split"] == "dev"]
@@ -500,12 +521,7 @@ def predict(dataset: str, entity: str, predicate: str, seed: int, model_name: st
     if prediction_path.is_file() and (output / "prediction_complete.json").is_file():
         _record(output, "predict", {"model_called": False, "reason": "predictions_already_complete"})
         return {"completed": True, "status": "inference_completed", "predictions_usable": True}
-    if model_name == "biomedbert":
-        tokenizer = load_biomedbert_tokenizer(str(TOKENIZER_DIR))
-    else:
-        from transformers import AutoTokenizer
-        from schema_study.production_assets import encoder_layout
-        tokenizer = AutoTokenizer.from_pretrained(encoder_layout(model_name)["tokenizer"], local_files_only=True)
+    tokenizer = encoder_tokenizer(model_name)
     schema_name = "biored" if dataset != "drugprot" else "drugprot"
     schema = load_schema(CODE / "configs/schemas" / f"{schema_name}.yaml")
     classes = [label.stable_id for label in schema.level_labels(predicate)]

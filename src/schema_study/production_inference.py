@@ -157,6 +157,46 @@ def vllm_generate(prompts: list[str], sampling: dict, lora_path: str | None = No
     return rows
 
 
+def transformers_generate(model, tokenizer, prompts: list[str], max_new_tokens: int, temperature: float, samples: int) -> list[dict]:
+    """Greedy or sampled generation with left padding. The continuation starts at the padded width."""
+    import torch
+
+    tokenizer.padding_side = "left"
+    if tokenizer.pad_token_id is None:
+        tokenizer.pad_token = tokenizer.eos_token
+    encoded = tokenizer(prompts, return_tensors="pt", padding=True)
+    encoded = {key: value.to(model.device) for key, value in encoded.items()}
+    width = int(encoded["input_ids"].shape[1])
+    generate = {
+        "max_new_tokens": max_new_tokens,
+        "pad_token_id": tokenizer.pad_token_id,
+        "num_return_sequences": samples,
+    }
+    if temperature and temperature > 0:
+        generate.update({"do_sample": True, "temperature": temperature})
+    else:
+        generate["do_sample"] = False
+    with torch.inference_mode():
+        output = model.generate(**encoded, **generate)
+    rows = []
+    for index, _prompt in enumerate(prompts):
+        samples_out = []
+        for sample_index in range(samples):
+            row = output[index * samples + sample_index]
+            text = tokenizer.decode(row[width:], skip_special_tokens=True)
+            samples_out.append({"raw": text, "finish_reason": "stop"})
+        rows.append({
+            "raw": samples_out[0]["raw"] if samples_out else "",
+            "labels": None,
+            "parsed": None,
+            "samples": samples_out,
+            "prompt_token_logprobs": [],
+            "completion_tokens": int(output.shape[1] - width),
+            "backend": "transformers",
+        })
+    return rows
+
+
 def _run(name: str, requests: list[dict], completed: dict[str, str], backend, ledger: Path | None) -> dict:
     if backend is None:
         return {"family": name, "submitted": False, "reason": "formal_gpu_execution_is_not_authorised"}
