@@ -460,6 +460,8 @@ def _apply_device_policy(model: nn.Module, configuration: dict) -> tuple[torch.d
         from torch.distributed.fsdp import MixedPrecisionPolicy, fully_shard
 
         torch.cuda.set_device(device)
+        # cuDNN's attention graph failed in the Qwen3-32B backward. The math and memory-efficient SDPA kernels remain available.
+        torch.backends.cuda.enable_cudnn_sdp(False)
         layers = [module for module in model.modules() if module.__class__.__name__.endswith("DecoderLayer")]
         if not layers:
             raise RuntimeError("FSDP found no transformer block to shard.")
