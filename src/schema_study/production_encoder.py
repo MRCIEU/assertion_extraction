@@ -233,14 +233,25 @@ def train_hierarchical(model: SchemaHierarchicalModel | None = None, steps: int 
                 if mask is not None:
                     mask = mask.to(device)
                 targets = {name: value.to(device) for name, value in targets.items()}
-                outputs = model(token_ids, mask)
+                # Four examples per forward. Four forwards keep the global batch of 16.
+                micro = 4 if int(token_ids.shape[0]) > 4 else int(token_ids.shape[0])
+                starts = list(range(0, int(token_ids.shape[0]), micro))
+                optimizer.zero_grad(set_to_none=True)
+                for start in starts:
+                    stop = start + micro
+                    part_targets = {name: value[start:stop] for name, value in targets.items()}
+                    part_mask = None if mask is None else mask[start:stop]
+                    outputs = model(token_ids[start:stop], part_mask)
+                    objective, detail = hierarchical_objective(outputs, part_targets, model.corpus, schema, consistency)
+                    (objective / len(starts)).backward()
+                optimizer.step()
             else:
                 token_ids, targets = item
                 outputs = model(token_ids)
-            objective, detail = hierarchical_objective(outputs, targets, model.corpus, schema, consistency)
-            optimizer.zero_grad(set_to_none=True)
-            objective.backward()
-            optimizer.step()
+                objective, detail = hierarchical_objective(outputs, targets, model.corpus, schema, consistency)
+                optimizer.zero_grad(set_to_none=True)
+                objective.backward()
+                optimizer.step()
             step += 1
             if step == 1 or (completed and step == completed + 1):
                 gradients = {
