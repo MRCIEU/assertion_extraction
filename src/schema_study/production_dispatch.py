@@ -1031,7 +1031,7 @@ def _lora_development_score(task: dict, evaluation: list[dict], tokenizer, predi
         import torch
 
         rank = int(os.environ.get("RANK", "0"))
-        generator = model.module if hasattr(model, "module") else model
+        generator = model.module if hasattr(model, "module") and not getattr(model, "_schema_study_fsdp2", False) else model
         if rank == 0 and not hasattr(generator, "generate"):
             raise RuntimeError("Development selection requires the model's generation interface.")
         device = next(generator.parameters()).device
@@ -1040,7 +1040,8 @@ def _lora_development_score(task: dict, evaluation: list[dict], tokenizer, predi
         was_training = model.training
         model.eval()
         rows = []
-        context = model.summon_full_params(writeback=False, rank0_only=True) if hasattr(model, "summon_full_params") else nullcontext()
+        fsdp2 = bool(getattr(model, "_schema_study_fsdp2", False))
+        context = nullcontext() if fsdp2 or not hasattr(model, "summon_full_params") else model.summon_full_params(writeback=False, rank0_only=True)
 
         def _generate():
             for start in range(0, len(prompts), 4):
@@ -1068,7 +1069,11 @@ def _lora_development_score(task: dict, evaluation: list[dict], tokenizer, predi
         from schema_study.production_runtime import rank0_generation
 
         with context, torch.no_grad():
-            rank0_generation(rank, _generate, _barrier)
+            if fsdp2:
+                _generate()
+                _barrier()
+            else:
+                rank0_generation(rank, _generate, _barrier)
         metric = float(positive_micro_f1(rows)["f1"]) if rank == 0 else 0.0
         if torch.distributed.is_available() and torch.distributed.is_initialized():
             value = torch.tensor([metric], dtype=torch.float64, device=device if device.type == "cuda" else "cpu")

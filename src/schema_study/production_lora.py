@@ -90,7 +90,10 @@ def causal_next_token_loss(logits: torch.Tensor, labels: torch.Tensor) -> torch.
 def sequence_loss(model: nn.Module, batch: dict[str, torch.Tensor]) -> torch.Tensor:
     """Use a causal LM loss when the model returns one. Do not shift that loss again."""
     labels = batch["labels"]
-    output = model(input_ids=batch["input_ids"], attention_mask=batch["attention_mask"], labels=labels)
+    try:
+        output = model(input_ids=batch["input_ids"], attention_mask=batch["attention_mask"], labels=labels, use_cache=False)
+    except TypeError:
+        output = model(input_ids=batch["input_ids"], attention_mask=batch["attention_mask"], labels=labels)
     if hasattr(output, "loss") and output.loss is not None:
         return output.loss
     logits = output if torch.is_tensor(output) else output.logits
@@ -235,8 +238,19 @@ def _restore_rng(state: dict) -> None:
         torch.cuda.set_rng_state_all(chosen["cuda"])
 
 
+def _is_fsdp2(model: nn.Module) -> bool:
+    return bool(getattr(model, "_schema_study_fsdp2", False))
+
+
 def _adapter_state(model: nn.Module) -> dict:
     """Collect adapter tensors. FSDP gathers a full state dict on rank 0 before the file is written."""
+    if _is_fsdp2(model):
+        from torch.distributed.checkpoint.state_dict import StateDictOptions, get_model_state_dict
+
+        state = get_model_state_dict(
+            model, options=StateDictOptions(full_state_dict=True, cpu_offload=True, ignore_frozen_params=True),
+        )
+        return {name: value.detach().cpu().clone() for name, value in state.items() if "lora_" in name}
     if type(model).__name__ == "FullyShardedDataParallel":
         from torch.distributed.fsdp import FullStateDictConfig, FullyShardedDataParallel, StateDictType
 
@@ -285,11 +299,21 @@ def save_checkpoint(directory: Path, package: dict) -> Path:
 
 
 def _is_fsdp(model: nn.Module) -> bool:
-    return type(model).__name__ == "FullyShardedDataParallel"
+    return type(model).__name__ == "FullyShardedDataParallel" or _is_fsdp2(model)
+
+
+def _state_options():
+    from torch.distributed.checkpoint.state_dict import StateDictOptions
+
+    return StateDictOptions(full_state_dict=True, cpu_offload=True)
 
 
 def _optimizer_state(model: nn.Module, optimizer) -> dict:
     """Collect a full optimiser state. FSDP uses the process group rather than a local shard file."""
+    if _is_fsdp2(model):
+        from torch.distributed.checkpoint.state_dict import get_optimizer_state_dict
+
+        return get_optimizer_state_dict(model, optimizer, options=_state_options())
     if _is_fsdp(model):
         from torch.distributed.fsdp import FullOptimStateDictConfig, FullStateDictConfig, FullyShardedDataParallel, StateDictType
 
@@ -304,6 +328,14 @@ def _optimizer_state(model: nn.Module, optimizer) -> dict:
 
 
 def _load_optimizer_state(model: nn.Module, optimizer, state: dict) -> None:
+    if _is_fsdp2(model):
+        from torch.distributed.checkpoint.state_dict import StateDictOptions, set_optimizer_state_dict
+
+        set_optimizer_state_dict(
+            model, optimizer, state,
+            options=StateDictOptions(full_state_dict=True, cpu_offload=True, broadcast_from_rank0=True),
+        )
+        return
     if _is_fsdp(model):
         from torch.distributed.fsdp import FullOptimStateDictConfig, FullStateDictConfig, FullyShardedDataParallel, StateDictType
 
@@ -425,22 +457,21 @@ def _apply_device_policy(model: nn.Module, configuration: dict) -> tuple[torch.d
         model = model.to(device)
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[local])
     elif policy == "fsdp":
-        from functools import partial
+        from torch.distributed.fsdp import MixedPrecisionPolicy, fully_shard
 
-        from torch.distributed.fsdp import FullyShardedDataParallel, MixedPrecision, ShardingStrategy
-        from torch.distributed.fsdp.wrap import transformer_auto_wrap_policy
-
-        precision = MixedPrecision(param_dtype=torch.bfloat16, reduce_dtype=torch.bfloat16, buffer_dtype=torch.bfloat16)
-        layer_types = {type(module) for module in model.modules() if module.__class__.__name__.endswith("DecoderLayer")}
-        wrap = partial(transformer_auto_wrap_policy, transformer_layer_cls=layer_types) if layer_types else None
-        model = FullyShardedDataParallel(
-            model,
-            device_id=device,
-            mixed_precision=precision,
-            sharding_strategy=ShardingStrategy.FULL_SHARD,
-            auto_wrap_policy=wrap,
-            use_orig_params=True,
-        )
+        torch.cuda.set_device(device)
+        layers = [module for module in model.modules() if module.__class__.__name__.endswith("DecoderLayer")]
+        if not layers:
+            raise RuntimeError("FSDP found no transformer block to shard.")
+        if hasattr(model, "config"):
+            model.config.use_cache = False
+        if hasattr(model, "gradient_checkpointing_enable"):
+            model.gradient_checkpointing_enable()
+        precision = MixedPrecisionPolicy(param_dtype=torch.bfloat16, reduce_dtype=torch.bfloat16)
+        for layer in layers:
+            fully_shard(layer, mp_policy=precision)
+        fully_shard(model, mp_policy=precision)
+        model._schema_study_fsdp2 = True
     record["requested_gpus"] = int(configuration.get("requested_gpus", initialised))
     record["initialised_world"] = initialised if policy in {"ddp", "fsdp"} else 1
     return device, {**record, "model": model}
@@ -627,7 +658,9 @@ def fit(
                 accumulated += float(loss.detach())
             if step == 0 and not any(parameter.grad is not None and float(parameter.grad.abs().sum()) > 0 for parameter in trainable):
                 raise RuntimeError("LoRA parameters received no gradient.")
-            if _is_fsdp(model):
+            if _is_fsdp2(model):
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            elif _is_fsdp(model):
                 model.clip_grad_norm_(1.0)
             else:
                 torch.nn.utils.clip_grad_norm_(trainable, 1.0)

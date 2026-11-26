@@ -999,6 +999,8 @@ def sbatch_argv(task: dict, script: str) -> list[str]:
     ]
     if gpus:
         command.insert(5, f"--gpus={gpus}")
+    if str(task.get("model")) == "qwen32b" and gpus:
+        command.insert(5, "--mem=120G")
     return command
 
 
