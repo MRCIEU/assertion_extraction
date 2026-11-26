@@ -151,6 +151,15 @@ def main() -> None:
             selected = [row for row in predictions if row.get("split") in (None, "", split) and row.get("dataset", target) == target]
             if task["family"] != "final_evaluation":
                 selected = predictions
+            allowed_ids = {label.stable_id for label in schema.level_labels(level)}
+            foreign = sorted({label for row in selected for label in row["predicted_labels"] if label not in allowed_ids})
+            if foreign:
+                inventory.append({
+                    "task_id": task["task_id"], "dataset": target, "eligible": False,
+                    "reason": "predicted_labels_are_not_at_the_recorded_level",
+                    "family": task["family"], "schema_predicate": level, "example_label": foreign[0],
+                })
+                continue
             try:
                 scored = score_predictions(
                     population, selected, schema, level,
@@ -199,8 +208,11 @@ def main() -> None:
                 item["positive_candidates"] = sorted(_positive_ids(scored["rows"]))
                 for coarse in COARSE:
                     rolled = []
-                    for row in selected:
-                        rolled.append({**row, "predicted_labels": rollup_predicted_labels(schema, row["predicted_labels"], source_level="P4", target_level=coarse)})
+                    try:
+                        for row in selected:
+                            rolled.append({**row, "predicted_labels": rollup_predicted_labels(schema, row["predicted_labels"], source_level="P4", target_level=coarse)})
+                    except KeyError:
+                        continue
                     rolled_score = score_predictions(
                         population, rolled, schema, coarse,
                         allowed_splits={split}, data_version=VERSIONS[target], input_version="target_anchored_v1",
