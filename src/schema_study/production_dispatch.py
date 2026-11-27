@@ -1008,7 +1008,7 @@ def _lora_development_score(task: dict, evaluation: list[dict], tokenizer, predi
     """Score the development population with the causal model. Test and BC8 rows are not used."""
     from schema_study.formal_prepare import _fill
     from schema_study.learning_conditions import HISTORICAL_PREDICATES
-    from schema_study.production_runtime import interpret_generation, positive_micro_f1
+    from schema_study.production_runtime import development_request_key, interpret_generation, positive_micro_f1
     from schema_study.schemas import default_schema_path, load_schema
 
     dataset = task["dataset"]
@@ -1025,9 +1025,9 @@ def _lora_development_score(task: dict, evaluation: list[dict], tokenizer, predi
         historical = HISTORICAL_PREDICATES.get(predicate, predicate)
         block = "\n".join(f"- {name}" for name in schema.positive_display_names(historical))
         user = _fill(dataset, record["candidate_id"], historical, texts[(record["candidate_id"], entity)], {(dataset, historical): block})
-        prompts.append((record, predicate, historical, user))
+        prompts.append((record, predicate, historical, user, development_request_key(record, predicate)))
 
-    def score(model) -> float:
+    def score(model, optimiser_step) -> float:
         import os
         from contextlib import nullcontext
 
@@ -1042,24 +1042,31 @@ def _lora_development_score(task: dict, evaluation: list[dict], tokenizer, predi
             raise RuntimeError("Development generation remained on CPU.")
         was_training = model.training
         model.eval()
-        rows = []
-        partial = prediction_path.with_name("development_partial.jsonl") if prediction_path is not None else None
-        done = {}
-        if partial is not None and partial.is_file():
-            for line in partial.read_text(encoding="utf-8").splitlines():
-                if line.strip():
-                    row = json.loads(line)
-                    done[row["candidate_id"]] = row
-            rows.extend(done.values())
+        from schema_study.production_runtime import (
+            development_evaluation_identity,
+            load_development_ledger,
+            record_development_boundary,
+        )
+
+        if optimiser_step is None:
+            raise RuntimeError("Development evaluation requires the optimiser step.")
+        expected = [item[4] for item in prompts]
+        if len(expected) != len(set(expected)):
+            raise RuntimeError("The development population repeats a candidate, entity and predicate request.")
+        evaluation_id = development_evaluation_identity(str(task.get("task_id")), int(optimiser_step), expected)
+        ledger_dir = prediction_path.parent / "development_ledgers" if prediction_path is not None else None
+        partial = ledger_dir / f"{evaluation_id}.jsonl" if ledger_dir is not None else None
+        done = load_development_ledger(partial, evaluation_id, set(expected)) if partial is not None else {}
+        rows = [done[key] for key in expected if key in done]
         fsdp2 = bool(getattr(model, "_schema_study_fsdp2", False))
         context = nullcontext() if fsdp2 or not hasattr(model, "summon_full_params") else model.summon_full_params(writeback=False, rank0_only=True)
 
         def _generate():
             for start in range(0, len(prompts), 4):
                 chunk = prompts[start:start + 4]
-                if all(item[0]["candidate_id"] in done for item in chunk):
+                if all(item[4] in done for item in chunk):
                     continue
-                encoded = [tokenizer.apply_chat_template([{"role": "user", "content": user}], tokenize=True, add_generation_prompt=True, enable_thinking=False) for _record, _predicate, _historical, user in chunk]
+                encoded = [tokenizer.apply_chat_template([{"role": "user", "content": user}], tokenize=True, add_generation_prompt=True, enable_thinking=False) for _record, _predicate, _historical, user, _key in chunk]
                 width = max(len(ids) for ids in encoded)
                 tokens = torch.full((len(chunk), width), int(tokenizer.pad_token_id or 0), dtype=torch.long, device=device)
                 mask = torch.zeros(len(chunk), width, dtype=torch.long, device=device)
@@ -1068,16 +1075,27 @@ def _lora_development_score(task: dict, evaluation: list[dict], tokenizer, predi
                     tokens[index, offset:] = torch.tensor(ids, device=device)
                     mask[index, offset:] = 1
                 output = generator.generate(tokens, attention_mask=mask, max_new_tokens=256, do_sample=False)
-                for index, (record, predicate, historical, _user) in enumerate(chunk):
-                    if record["candidate_id"] in done:
+                for index, (record, predicate, historical, _user, key) in enumerate(chunk):
+                    if key in done:
                         continue
                     text = tokenizer.decode(output[index][width:], skip_special_tokens=True)
                     parsed = interpret_generation(text, record["candidate_id"], schema, historical)
                     gold = (record.get("assistant") or {}).get("labels", [])
-                    row = {"gold": gold, "predicted": parsed["predicted_labels"], "status": "valid" if parsed["ledger_status"] in {"valid", "valid_empty"} else "invalid", "candidate_id": record["candidate_id"], "raw": text, "illegal_labels": parsed.get("illegal_labels", [])}
+                    row = {
+                        "gold": gold,
+                        "predicted": parsed["predicted_labels"],
+                        "status": "valid" if parsed["ledger_status"] in {"valid", "valid_empty"} else "invalid",
+                        "candidate_id": record["candidate_id"],
+                        "request_key": list(key),
+                        "evaluation_id": evaluation_id,
+                        "optimiser_step": int(optimiser_step),
+                        "raw": text,
+                        "illegal_labels": parsed.get("illegal_labels", []),
+                    }
                     rows.append(row)
-                    done[record["candidate_id"]] = row
+                    done[key] = row
                     if partial is not None and rank == 0:
+                        partial.parent.mkdir(parents=True, exist_ok=True)
                         with partial.open("a", encoding="utf-8") as handle:
                             handle.write(json.dumps(row, sort_keys=True) + "\n")
             return rows
@@ -1099,11 +1117,16 @@ def _lora_development_score(task: dict, evaluation: list[dict], tokenizer, predi
             value = torch.tensor([metric], dtype=torch.float64, device=device if device.type == "cuda" else "cpu")
             torch.distributed.broadcast(value, src=0)
             metric = float(value.item())
-        if rank == 0 and prediction_path is not None:
+        complete = len(done) == len(expected)
+        if rank == 0 and prediction_path is not None and complete:
             prediction_path.parent.mkdir(parents=True, exist_ok=True)
+            ordered = [done[key] for key in expected]
             temporary = prediction_path.with_suffix(".jsonl.tmp")
-            temporary.write_text("".join(json.dumps(row, sort_keys=True) + "\n" for row in rows), encoding="utf-8")
+            temporary.write_text("".join(json.dumps(row, sort_keys=True) + "\n" for row in ordered), encoding="utf-8")
             temporary.replace(prediction_path)
+            record_development_boundary(prediction_path.parent, int(optimiser_step), evaluation_id, True, len(expected))
+        elif rank == 0 and prediction_path is not None:
+            record_development_boundary(prediction_path.parent, int(optimiser_step), evaluation_id, False, len(expected))
         if was_training:
             model.train()
         return metric

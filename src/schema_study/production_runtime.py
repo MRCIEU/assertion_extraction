@@ -289,6 +289,77 @@ def sensitivity_changes(baseline: dict, proposed: dict) -> dict:
     return changed
 
 
+def scheduled_development_steps(total_updates: int, interval: int) -> tuple[int, ...]:
+    """Epoch boundaries only. A short continuation segment does not add a selection step."""
+    total = int(total_updates)
+    every = int(interval)
+    if total < 1 or every < 1:
+        raise ValueError("Development scheduling needs a positive horizon and interval.")
+    return tuple(step for step in range(every, total + 1, every))
+
+
+def development_request_key(row: dict, predicate: str) -> tuple[str, str, str]:
+    """One development request. The candidate id is not unique across views or predicates."""
+    return (
+        str(row.get("candidate_id")),
+        str(row.get("entity_level") or row.get("entity") or ""),
+        str(predicate),
+    )
+
+
+def development_evaluation_identity(task_id: str, optimiser_step: int, request_keys: list[tuple]) -> str:
+    """Bind a ledger to one checkpoint and one request population."""
+    import hashlib
+
+    payload = {
+        "task_id": str(task_id),
+        "optimiser_step": int(optimiser_step),
+        "requests": [list(key) for key in sorted(request_keys)],
+    }
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()[:20]
+
+
+def load_development_ledger(path: Path, evaluation_id: str, expected: set[tuple]) -> dict[tuple, dict]:
+    """Read one checkpoint's ledger. Another checkpoint's rows are not completions."""
+    found: dict[tuple, dict] = {}
+    if not path.is_file():
+        return found
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        row = json.loads(line)
+        if row.get("evaluation_id") != evaluation_id:
+            raise RuntimeError("A development ledger contains a row from a different checkpoint or population.")
+        key = tuple(row.get("request_key") or [])
+        if len(key) != 3 or key not in expected:
+            raise RuntimeError("A development ledger contains a request that is not in this evaluation.")
+        if key in found:
+            raise RuntimeError("A development ledger repeats a request.")
+        found[key] = row
+    return found
+
+
+def record_development_boundary(directory: Path, optimiser_step: int, evaluation_id: str, complete: bool, requests: int) -> None:
+    path = directory / "development_boundaries.json"
+    current = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
+    current[str(int(optimiser_step))] = {
+        "evaluation_id": evaluation_id,
+        "complete": bool(complete),
+        "requests": int(requests),
+    }
+    temporary = path.with_suffix(".json.tmp")
+    temporary.write_text(json.dumps(current, sort_keys=True) + "\n", encoding="utf-8")
+    temporary.replace(path)
+
+
+def development_boundary_complete(directory: Path, optimiser_step: int) -> bool:
+    path = directory / "development_boundaries.json"
+    if not path.is_file():
+        return False
+    row = json.loads(path.read_text(encoding="utf-8")).get(str(int(optimiser_step))) or {}
+    return row.get("complete") is True
+
+
 def training_status(step: int, total_updates: int, selection_recorded: bool, failed: bool = False, invalid_checkpoint: bool = False) -> str:
     if invalid_checkpoint:
         return "invalid_or_incomplete_checkpoint"

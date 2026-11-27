@@ -793,7 +793,46 @@ def fit(
 
     previous = signal.getsignal(signal.SIGUSR1)
     signal.signal(signal.SIGUSR1, _handle)
+
+    def _development_due(current: int) -> bool:
+        from schema_study.production_runtime import scheduled_development_steps
+
+        interval = int(configuration.get("eval_interval") or total)
+        return int(current) in scheduled_development_steps(total, interval)
+
+    def _development_open(current: int) -> bool:
+        from schema_study.production_runtime import development_boundary_complete
+
+        if output_dir is None:
+            return True
+        return not development_boundary_complete(output_dir, int(current))
+
+    def _apply_development(current: int) -> None:
+        nonlocal best
+        metric = float(score_fn(model, int(current)))
+        if best is None or metric > float(best.get("development_micro_f1", -1)):
+            selected = _adapter_state(model)
+            best = {"step": int(current), "development_micro_f1": metric, "adapter": selected}
+            import os
+
+            if output_dir is not None and int(os.environ.get("RANK", "0")) == 0 and selected:
+                selection = {
+                    "optimiser_step": int(current),
+                    "development_micro_f1": metric,
+                    "evaluation_identity": "scheduled_boundary",
+                    "recorded_at": time.time(),
+                }
+                temporary = output_dir / ".selection.json.tmp"
+                temporary.write_text(json.dumps(selection) + "\n", encoding="utf-8")
+                temporary.replace(output_dir / "selection.json")
+                if configuration.get("base_model_path"):
+                    export_peft_adapter(output_dir / "selected_adapter", selected, configuration)
+
     try:
+        if score_fn is not None and step > 0 and _development_due(step) and _development_open(step):
+            model.eval()
+            _apply_development(step)
+            model.train()
         while step < steps:
             stop["requested"] = _agree(bool(stop["requested"] or (stop_after is not None and step >= stop_after)), device)
             if stop["requested"]:
@@ -865,51 +904,26 @@ def fit(
                 if best and best.get("adapter"):
                     package["best_adapter"] = best["adapter"]
                 save_checkpoint(output_dir, package)
-            if run_development:
+            if run_development and _development_open(step):
                 model.eval()
-                metric = float(score_fn(model))
+                _apply_development(step)
                 model.train()
-                if best is None or metric > float(best.get("development_micro_f1", -1)):
-                    selected = _adapter_state(model)
-                    best = {"step": step, "development_micro_f1": metric, "adapter": selected}
-                    import os
-
-                    if output_dir is not None and int(os.environ.get("RANK", "0")) == 0 and selected:
-                        selection = {
-                            "optimiser_step": step,
-                            "development_micro_f1": metric,
-                            "recorded_at": time.time(),
-                        }
-                        temporary = output_dir / ".selection.json.tmp"
-                        temporary.write_text(json.dumps(selection) + "\n", encoding="utf-8")
-                        temporary.replace(output_dir / "selection.json")
-                        if configuration.get("base_model_path"):
-                            export_peft_adapter(output_dir / "selected_adapter", selected, configuration)
-        if score_fn is not None and step >= steps and not (best and best.get("development_micro_f1") is not None):
+        if score_fn is not None and step >= steps and _development_due(step) and _development_open(step):
             model.eval()
-            metric = float(score_fn(model))
+            _apply_development(step)
             model.train()
-            selected = _adapter_state(model)
-            best = {"step": step, "development_micro_f1": metric, "adapter": selected}
-            import os
-
-            if output_dir is not None and int(os.environ.get("RANK", "0")) == 0 and selected:
-                selection = {
-                    "optimiser_step": step,
-                    "development_micro_f1": metric,
-                    "recorded_at": time.time(),
-                    "selection_after_horizon": True,
-                }
-                temporary = output_dir / ".selection.json.tmp"
-                temporary.write_text(json.dumps(selection) + "\n", encoding="utf-8")
-                temporary.replace(output_dir / "selection.json")
-                if configuration.get("base_model_path"):
-                    export_peft_adapter(output_dir / "selected_adapter", selected, configuration)
     finally:
         signal.signal(signal.SIGUSR1, previous)
     from schema_study.production_runtime import training_status
 
-    selection_recorded = bool(best and "development_micro_f1" in best)
+    from schema_study.production_runtime import development_boundary_complete, scheduled_development_steps
+
+    boundaries = scheduled_development_steps(total, int(configuration.get("eval_interval") or total)) if score_fn is not None else ()
+    final_boundary = boundaries[-1] if boundaries else None
+    final_done = final_boundary is None or (output_dir is not None and development_boundary_complete(output_dir, final_boundary))
+    selection_recorded = bool(best and "development_micro_f1" in best) and (score_fn is None or final_done or step < total)
+    if score_fn is not None and step >= total and not final_done:
+        selection_recorded = False
     status = training_status(step, total, selection_recorded)
     public_best = None if not best else {key: value for key, value in best.items() if key != "adapter"}
     package = _package(model, optimizer, step, position, configuration, fingerprints or {}, public_best)

@@ -248,6 +248,7 @@ def main() -> None:
                         "backend": item["backend"],
                         "seed": task.get("seed"),
                         "level": coarse,
+                        **comparison_arm(task, by_id),
                         "metrics": _compact(rolled_score["summary"]),
                         "recovered": sorted(_recovered(rolled_score["rows"])),
                         "positive": sorted(_positive_ids(rolled_score["rows"])),
@@ -272,6 +273,7 @@ def main() -> None:
                     "backend": item["backend"],
                     "seed": task.get("seed"),
                     "level": level,
+                    **comparison_arm(task, by_id),
                     "metrics": _compact(summary),
                     "recovered": sorted(_recovered(scored["rows"])),
                     "positive": sorted(_positive_ids(scored["rows"])),
@@ -279,12 +281,37 @@ def main() -> None:
     _write(inventory, comparisons, differential, entity_differential, document_recall, by_id, state)
 
 
+def comparison_arm(task: dict, by_id: dict) -> dict:
+    """Controls that a direct prediction and its native-mapped counterpart must share.
+
+    The predicate-specific training task is provenance. It is not part of the match,
+    because those two models are trained at different predicate levels on purpose.
+    """
+    source = by_id.get(task.get("trains_from")) or task
+    configuration = source.get("configuration") or {}
+    return {
+        "source_family": source.get("family"),
+        "fraction": source.get("fraction"),
+        "strategy": source.get("strategy"),
+        "order": source.get("order"),
+        "exposure": source.get("exposure"),
+        "withheld": source.get("withheld"),
+        "loss": source.get("loss"),
+        "change": source.get("change"),
+        "learning_rate": configuration.get("learning_rate"),
+        "rank": configuration.get("rank"),
+        "representation_version": (source.get("input") or {}).get("version") or task.get("representation_version"),
+    }
+
+
 def _condition_key(item: dict) -> tuple:
     return (
         item.get("dataset"), item.get("entity"), item.get("model"), item.get("family"),
-        item.get("source_family"), item.get("trains_from"), item.get("seed"), item.get("level"),
+        item.get("source_family"), item.get("seed"), item.get("level"),
         item.get("fraction"), item.get("strategy"), item.get("order"), item.get("exposure"),
-        item.get("withheld"), item.get("loss"), item.get("evaluation_role"), item.get("backend"),
+        item.get("withheld"), item.get("loss"), item.get("change"),
+        item.get("learning_rate"), item.get("rank"), item.get("representation_version"),
+        item.get("evaluation_role"), item.get("backend"),
     )
 
 
@@ -296,14 +323,18 @@ def _matched(comparisons: list[dict]) -> list[dict]:
         key = _condition_key(item)
         slot = direct if item["route"] == "direct" else mapped
         if key in slot and slot[key]["task_id"] != item["task_id"]:
-            collisions.append({"key": [None if part is None else str(part) for part in key], "kept": slot[key]["task_id"], "dropped": item["task_id"]})
+            collisions.append({"key": [None if part is None else str(part) for part in key], "task_ids": [slot[key]["task_id"], item["task_id"]]})
+            slot[key] = None
             continue
-        slot[key] = item
+        if key not in slot:
+            slot[key] = item
     if collisions:
         destination = REPORT / "match_collisions.json"
         destination.write_text(json.dumps(collisions, indent=2) + "\n", encoding="utf-8")
     rows = []
     for key, coarse in direct.items():
+        if coarse is None or mapped.get(key) is None:
+            continue
         fine = mapped.get(key)
         if fine is None:
             continue
