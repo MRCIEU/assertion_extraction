@@ -1186,6 +1186,13 @@ def controller_decisions(tasks: list[dict], state: dict, running: int, pending: 
             if prompts and not prompts_ready_to_build():
                 decisions.append({"task_id": task["task_id"], "action": "skip", "reason": "contexts_not_accepted"})
                 continue
+            if prompts and task.get("family") == "input_validation" and any(
+                state.get(item["task_id"], {}).get("state") in ACTIVE_CONTROLLER_STATES
+                for item in tasks
+                if item.get("family") == "input_preparation" and item.get("role") == "mesh_ancestor_v1_prompts"
+            ):
+                decisions.append({"task_id": task["task_id"], "action": "skip", "reason": "prompt_preparation_running"})
+                continue
             if prompts and task.get("family") == "input_validation" and not prompt_shards_present():
                 decisions.append({"task_id": task["task_id"], "action": "skip", "reason": "prompts_not_written"})
                 continue

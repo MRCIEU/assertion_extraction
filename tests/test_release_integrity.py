@@ -384,6 +384,16 @@ def test_prompt_preparation_is_submitted_ahead_of_bulk_training():
     assert by_id["train-cell"]["action"] == "defer"
 
 
+def test_prompt_validation_waits_until_preparation_finishes():
+    from schema_study.production_plan import MAX_QUEUED_JOBS
+    from schema_study.production_runtime import controller_decisions
+
+    preparation = {"task_id": "prep", "family": "input_preparation", "role": "mesh_ancestor_v1_prompts", "dataset": "biored", "resources": {"gpus": 0}, "statuses": []}
+    validation = {"task_id": "check", "family": "input_validation", "role": "mesh_ancestor_v1_prompts", "dataset": "biored", "resources": {"gpus": 0}, "statuses": []}
+    decisions = controller_decisions([preparation, validation], {"prep": {"state": "running"}}, 1, 0, set(), set())
+    assert {row["task_id"]: row["reason"] for row in decisions}["check"] == "prompt_preparation_running"
+
+
 def test_model_input_acceptance_requires_every_population():
     from schema_study.input_acceptance import model_inputs_complete
 

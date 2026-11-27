@@ -623,6 +623,13 @@ def _prepare_prompts(workdir: Path) -> dict:
     return {"completed": True, "status": "inference_completed"}
 
 
+def _token_bytes(token_ids) -> bytes:
+    """Token ids do not fit in a single byte."""
+    import array
+
+    return array.array("I", token_ids).tobytes()
+
+
 def model_inputs_complete(fingerprints: dict) -> bool:
     """One sample is not acceptance. Every corrected entity, predicate and split must be present."""
     needed = {
@@ -726,7 +733,7 @@ def _validate_model_inputs(task: dict, workdir: Path) -> dict:
                     gold = list(row.get("mapped_gold") or [])
                     digest.update(f"{row['candidate_id']}\t{row['text']}\t{gold}\n".encode("utf-8"))
                     encoded = encoder(row["text"], add_special_tokens=True)["input_ids"]
-                    encoder_digest.update(bytes(encoded))
+                    encoder_digest.update(_token_bytes(encoded))
                     if len(encoded) > 512:
                         encoder_over += 1
                     user = _fill("biored", row["candidate_id"], historical, row["text"], {("biored", historical): block})
@@ -734,7 +741,7 @@ def _validate_model_inputs(task: dict, workdir: Path) -> dict:
                     rendered = render_conversation(tokenizers["qwen8b"], user, assistant)
                     if int(rendered["prompt_tokens"]) <= 0 or int(rendered["prompt_tokens"]) >= len(rendered["input_ids"]):
                         failures.append({"entity": entity, "predicate": predicate, "split": split, "reason": "loss_mask"})
-                    token_digest["qwen8b"].update(bytes(rendered["input_ids"]))
+                    token_digest["qwen8b"].update(_token_bytes(rendered["input_ids"]))
                     token_digest["qwen8b"].update(str(rendered["prompt_tokens"]).encode("ascii"))
                     max_tokens["qwen8b"] = max(max_tokens["qwen8b"], len(rendered["input_ids"]))
                     if shared_qwen:
@@ -742,7 +749,7 @@ def _validate_model_inputs(task: dict, workdir: Path) -> dict:
                         max_tokens["qwen32b"] = max_tokens["qwen8b"]
                     else:
                         other = render_conversation(tokenizers["qwen32b"], user, assistant)
-                        token_digest["qwen32b"].update(bytes(other["input_ids"]))
+                        token_digest["qwen32b"].update(_token_bytes(other["input_ids"]))
                         token_digest["qwen32b"].update(str(other["prompt_tokens"]).encode("ascii"))
                         max_tokens["qwen32b"] = max(max_tokens["qwen32b"], len(other["input_ids"]))
                 if encoder_over:
