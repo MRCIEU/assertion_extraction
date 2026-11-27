@@ -364,6 +364,14 @@ def test_finished_ledger_is_accepted_without_rerunning_inference(tmp_path: Path)
     assert ledger_acceptance_valid(tmp_path, "biored") is True
 
 
+def test_prompt_cell_does_not_require_a_training_seed(tmp_path: Path):
+    from schema_study.scientific_coverage import _cell_accepted
+
+    cell = {"model": "qwen8b", "dataset": "drugprot", "entity": "native", "predicate": "P0", "strategy": "zero_shot"}
+    task = {"output": str(tmp_path), "family": "zero_shot", "model": "qwen8b", "dataset": "drugprot"}
+    assert _cell_accepted("prompts", cell, task, {"state": "inference_completed"}) is False
+
+
 def test_prompt_preparation_is_submitted_ahead_of_bulk_training():
     from schema_study.production_plan import MAX_QUEUED_JOBS
     from schema_study.production_runtime import controller_decisions

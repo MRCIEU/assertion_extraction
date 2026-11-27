@@ -140,10 +140,11 @@ def _cell_accepted(kind: str, cell: dict, task: dict, entry: dict) -> bool:
         return artifact_valid(checkpoint)
     from schema_study.programme_closure import ledger_acceptance_valid
 
-    if task.get("source_family") not in {None, "principal_training"}:
-        return False
-    if task.get("trains_from") != _principal_training_id(cell, task.get("representation_version")):
-        return False
+    if kind == "evaluations":
+        if task.get("source_family") not in {None, "principal_training"}:
+            return False
+        if task.get("trains_from") != _principal_training_id(cell, task.get("representation_version")):
+            return False
     return ledger_acceptance_valid(Path(task.get("output") or ""), cell["dataset"])
 
 

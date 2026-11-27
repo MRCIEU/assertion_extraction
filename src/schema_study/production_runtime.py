@@ -1219,7 +1219,11 @@ def controller_decisions(tasks: list[dict], state: dict, running: int, pending: 
         if group_block and group_block.get("blocked"):
             decisions.append({"task_id": task["task_id"], "action": "skip", "reason": "systematic_group_failure"})
             continue
-        if task.get("representative") is False and task.get("representative_group") not in ready_representatives:
+        if (
+            task.get("representative") is False
+            and task.get("family") not in {"input_preparation", "input_validation", "ledger_acceptance"}
+            and task.get("representative_group") not in ready_representatives
+        ):
             decisions.append({"task_id": task["task_id"], "action": "skip", "reason": "representative_pending"})
             continue
         missing = unresolved_prerequisites(task, state, verified)
