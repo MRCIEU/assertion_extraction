@@ -566,6 +566,17 @@ def _validate_prompts(task: dict, workdir: Path) -> dict:
     existing = _load_manifest(destination)
     payload = merge_acceptance(existing, prompts={"passed": passed, "conditions": checked, "failures": failures[:8]})
     publish_acceptance(destination, payload)
+    marker = workdir / "prompt_recovery_used"
+    if not passed and not marker.is_file():
+        marker.write_text("1\n", encoding="utf-8")
+        for failure in failures:
+            directory = Path(failure["directory"])
+            if directory.is_dir():
+                for child in directory.iterdir():
+                    if child.is_file():
+                        child.unlink()
+        publish_scientific_status(workdir, {"scientific": "valid_continuation_required", "predictions_usable": False, "prompts_passed": False})
+        return {"completed": True, "status": "valid_continuation_required", "prompts_passed": False, "reason": "invalid_prompt_shards_removed"}
     status = "inference_completed" if passed else "invalid"
     publish_scientific_status(workdir, {"scientific": status, "predictions_usable": False, "prompts_passed": passed, "population_complete": passed})
     return {"completed": True, "status": status, "prompts_passed": passed}

@@ -586,6 +586,17 @@ def reconcile_entry(entry: dict, scheduler: str, output: dict | None, *, task_id
         return current
     if scheduler == "retryable":
         return _failure_entry(current, task_id, current.get("slurm_state", "retryable"), group=group)
+    output_record = output or {}
+    checkpoint_continues = output_record.get("checkpoint_validated") is True and (
+        output_record.get("scientific") == "valid_continuation_required" or output_record.get("technical_preflight") is True
+    )
+    if scheduler == "terminal" and checkpoint_continues:
+        current["state"] = "valid_continuation_required"
+        current["scientific"] = "preflight_passed" if output.get("technical_preflight") else "valid_continuation_required"
+        current["continuation_segments"] = int(current.get("continuation_segments", 0)) + 1
+        current["reason"] = "checkpointed_exit_continues"
+        current["attempts"] = int(current.get("attempts") or 0)
+        return current
     if scheduler == "terminal":
         return _failure_entry(current, task_id, current.get("slurm_state", "terminal"), systematic=current.get("slurm_state") == "OUT_OF_MEMORY", group=group)
     status = (output or {}).get("scientific")
@@ -837,9 +848,13 @@ def publish_validation(directory: Path) -> dict:
 
 
 def publish_scientific_status(directory: Path, payload: dict) -> None:
-    """Publish the task's own status. A Slurm accounting line is not this record."""
+    """Publish the task's own status. Only one rank writes; a shared temporary name is not safe."""
+    import os
+
+    if int(os.environ.get("RANK", "0")) != 0:
+        return
     directory.mkdir(parents=True, exist_ok=True)
-    temporary = directory / ".scientific_status.json.tmp"
+    temporary = directory / f".scientific_status.json.tmp.{os.getpid()}"
     temporary.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
     temporary.replace(directory / "scientific_status.json")
 
@@ -1087,14 +1102,18 @@ def controller_decisions(tasks: list[dict], state: dict, running: int, pending: 
                 decisions.append({"task_id": task["task_id"], "action": "skip", "reason": "prompts_not_written"})
                 continue
             if prompts and task.get("family") == "input_preparation" and prompt_shards_present():
-                decisions.append({"task_id": task["task_id"], "action": "skip", "reason": "prompts_already_present"})
-                continue
+                prompts_passed = (corrected_input_manifest().get("acceptance") or {}).get("prompts_passed")
+                if prompts_passed is not False:
+                    decisions.append({"task_id": task["task_id"], "action": "skip", "reason": "prompts_already_present"})
+                    continue
             if not prompts and task.get("family") == "input_validation" and not context_files_complete():
                 decisions.append({"task_id": task["task_id"], "action": "skip", "reason": "contexts_not_written"})
                 continue
             if not prompts and task.get("family") == "input_preparation" and context_files_complete():
-                decisions.append({"task_id": task["task_id"], "action": "skip", "reason": "contexts_already_present"})
-                continue
+                contexts_passed = (corrected_input_manifest().get("acceptance") or {}).get("contexts_passed")
+                if contexts_passed is not False:
+                    decisions.append({"task_id": task["task_id"], "action": "skip", "reason": "contexts_already_present"})
+                    continue
         if task.get("family") == "path_verification":
             source_state = next(
                 (

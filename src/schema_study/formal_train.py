@@ -544,6 +544,8 @@ def predict(dataset: str, entity: str, predicate: str, seed: int, model_name: st
     else:
         targets = [("drugprot", "eval")]
     populations: dict[str, int] = {}
+    expected_ids: dict[str, set[str]] = {}
+    written_rows: list[dict] = []
     with prediction_path.open("w", encoding="utf-8") as handle:
         for target_dataset, split in targets:
             rows, _target_classes, target_schema = _build_rows(target_dataset, entity, predicate, {split})
@@ -555,8 +557,9 @@ def predict(dataset: str, entity: str, predicate: str, seed: int, model_name: st
                 target_schema, predicate, saved["threshold"], torch,
             )
             populations[target_dataset] = populations.get(target_dataset, 0) + len(rows)
+            expected_ids.setdefault(target_dataset, set()).update(row["candidate_id"] for row in rows)
             for row, predicted, scores in zip(rows, labels, probabilities):
-                handle.write(json.dumps({
+                record = {
                     "candidate_id": row["candidate_id"],
                     "document_id": row["document_id"],
                     "dataset": target_dataset,
@@ -571,7 +574,13 @@ def predict(dataset: str, entity: str, predicate: str, seed: int, model_name: st
                     "threshold": saved["threshold"],
                     "checkpoint": "best",
                     "best_epoch": saved["best_epoch"],
-                }, ensure_ascii=False) + "\n")
+                }
+                written_rows.append(record)
+                handle.write(json.dumps(record, ensure_ascii=False) + "\n")
+    from schema_study.programme_closure import publish_ledger_acceptance
+
+    for corpus, identifiers in expected_ids.items():
+        publish_ledger_acceptance(output, corpus, written_rows, identifiers)
     (output / "prediction_complete.json").write_text(json.dumps({"rows_written": True, "checkpoint": "best", "best_epoch": saved["best_epoch"]}) + "\n", encoding="utf-8")
     _record(output, "predict", {"model_called": True, "checkpoint": "best", "best_epoch": saved["best_epoch"]})
     from schema_study.production_runtime import publish_scientific_status

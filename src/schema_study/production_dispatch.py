@@ -972,6 +972,7 @@ def _run_generation(task: dict, workdir: Path) -> dict:
     session = construct_backend(task)
     schema = _generation_schema(task)
     expected = []
+    expected_candidates: list[str] = []
     for shard_dir in directories:
         for path in sorted(shard_dir.glob("shard_*.jsonl")):
             prepared = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
@@ -982,6 +983,7 @@ def _run_generation(task: dict, workdir: Path) -> dict:
 
                 prepared = apply_contract(task, prepared)
             expected.extend(row["request_id"] for row in prepared)
+            expected_candidates.extend(row["candidate_id"] for row in prepared if row.get("candidate_id"))
             runnable = [row for row in prepared if row["request_id"] in set(pending_requests([row["request_id"] for row in prepared], statuses))]
             if not runnable:
                 continue
@@ -1032,6 +1034,10 @@ def _run_generation(task: dict, workdir: Path) -> dict:
             _write_predictions(ledger_path, published)
     usable = [prediction_usable(published.get(identifier, {})) for identifier in expected]
     scientific_done = bool(expected) and len(published) == len(expected) and all(usable) and len(set(expected)) == len(expected)
+    if scientific_done and expected_candidates:
+        from schema_study.programme_closure import publish_ledger_acceptance
+
+        publish_ledger_acceptance(workdir, str(task.get("dataset") or ""), list(published.values()), set(expected_candidates))
     status_name = "inference_completed" if scientific_done else "valid_continuation_required"
     (workdir / "scientific_status.json").write_text(json.dumps({
         "scientific": status_name,

@@ -343,6 +343,8 @@ def _walltime(task: dict) -> str:
     if task["family"] == "selection_diagnostic":
         return "08:00:00"
     if task.get("dataset") == "drugprot" and task["family"] in {"principal_training", "biolinkbert"}:
+        if str(task.get("model") or "").startswith("qwen") or task.get("adaptation") == "lora_sft":
+            return "24:00:00"
         return "08:00:00"
     if task["family"] in {"schema_conditioned_lora", "curriculum", "lora_sensitivity"} or task.get("adaptation") == "lora_sft":
         return "24:00:00"

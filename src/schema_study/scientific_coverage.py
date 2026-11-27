@@ -112,8 +112,12 @@ def _cell_accepted(kind: str, cell: dict, task: dict, entry: dict) -> bool:
         checkpoint = output / ("checkpoints/best/checkpoint.pt" if cell["model"] == "biomedbert" else "best_adapter")
         if cell["model"] == "biomedbert":
             return checkpoint.is_file() and checkpoint.stat().st_size > 0
-        return artifact_valid(checkpoint) or (output / "adapter_checkpoint.pt").is_file()
-    return _population_covers(payload, cell["dataset"])
+        return artifact_valid(checkpoint)
+    from schema_study.programme_closure import ledger_acceptance_valid
+
+    if task.get("source_family") not in {None, "principal_training"}:
+        return False
+    return ledger_acceptance_valid(Path(task.get("output") or ""), cell["dataset"])
 
 
 def coverage_report(tasks: list[dict], state: dict) -> dict:

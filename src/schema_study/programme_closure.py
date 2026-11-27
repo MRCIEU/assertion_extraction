@@ -102,6 +102,78 @@ def resolve_equivalence(disposition: str | None, predecessor_state: str | None, 
     return "retrain"
 
 
+def assess_prediction_rows(rows: list[dict], expected_ids: set[str], corpus: str) -> dict:
+    """Identity-set acceptance of one final ledger. A positive row count is not a population."""
+    observed = []
+    wrong_corpus = 0
+    for row in rows:
+        if row.get("dataset") not in {None, corpus}:
+            continue
+        identifier = row.get("candidate_id")
+        if identifier:
+            observed.append(identifier)
+    duplicate = len(observed) - len(set(observed))
+    missing = len(expected_ids - set(observed))
+    unexpected = len(set(observed) - expected_ids)
+    return {
+        "passed": wrong_corpus == 0 and duplicate == 0 and missing == 0 and unexpected == 0 and len(observed) == len(expected_ids) and len(expected_ids) > 0,
+        "rows": len(rows),
+        "duplicate_candidates": duplicate,
+        "missing_candidates": missing,
+        "unexpected_candidates": unexpected,
+        "wrong_corpus": wrong_corpus,
+    }
+
+
+def publish_ledger_acceptance(directory: Path, corpus: str, rows: list[dict], expected_ids: set[str]) -> dict:
+    """Write the identity-set record. The controller later checks that the ledger bytes still match."""
+    import hashlib
+    import json
+
+    outcome = assess_prediction_rows(rows, expected_ids, corpus)
+    ledger = directory / "predictions.jsonl"
+    digest = hashlib.sha256()
+    if ledger.is_file():
+        with ledger.open("rb") as handle:
+            for block in iter(lambda: handle.read(1 << 20), b""):
+                digest.update(block)
+    record = {**outcome, "corpus": corpus, "ledger_sha256": digest.hexdigest(), "expected_count": len(expected_ids)}
+    destination = directory / "population_acceptance.json"
+    body = {}
+    if destination.is_file():
+        body = json.loads(destination.read_text(encoding="utf-8"))
+    body[corpus] = record
+    temporary = destination.with_suffix(".json.tmp")
+    temporary.write_text(json.dumps(body, indent=2) + "\n", encoding="utf-8")
+    temporary.replace(destination)
+    return record
+
+
+def ledger_acceptance_valid(directory: Path, corpus: str) -> bool:
+    """A controller tick may trust an acceptance record only while the ledger bytes are unchanged."""
+    import hashlib
+    import json
+
+    record_path = directory / "population_acceptance.json"
+    ledger = directory / "predictions.jsonl"
+    if not record_path.is_file() or not ledger.is_file():
+        return False
+    body = json.loads(record_path.read_text(encoding="utf-8"))
+    record = body.get(corpus) if isinstance(body.get(corpus), dict) else body
+    if record.get("passed") is not True or record.get("corpus") != corpus:
+        return False
+    digest = hashlib.sha256()
+    with ledger.open("rb") as handle:
+        for block in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(block)
+    return record.get("ledger_sha256") == digest.hexdigest() and int(record.get("expected_count") or 0) > 0 and record.get("missing_candidates") == 0
+
+
+def continuation_is_verified(restored_step: int, saved_step: int, optimizer_loaded: bool, scheduler_step: int, production_requests: int) -> bool:
+    """A weight load without the optimiser, or a toy string, is not a training resume."""
+    return restored_step == saved_step and optimizer_loaded and scheduler_step == saved_step and production_requests >= 1
+
+
 def assess_prompt_requests(rows: list[dict], expected_ids: set[str], entity: str, predicate: str) -> dict:
     """One shard population. A COMPLETE marker is not consulted."""
     seen = []

@@ -241,3 +241,57 @@ def test_predecessor_completion_resolves_without_another_validation_run():
     assert resolve_equivalence("reuse", "training_completed", False, True) == "retrain"
     assert resolve_equivalence("reuse_when_complete", "training_completed", True, False) == "retrain"
     assert resolve_equivalence("retrain", "training_completed", True, True) == "retrain"
+
+
+def test_validated_checkpoint_exit_is_continuation_not_terminal():
+    from schema_study.production_runtime import reconcile_entry
+
+    continued = reconcile_entry(
+        {"state": "running", "attempts": 7},
+        "terminal",
+        {"scientific": "valid_continuation_required", "checkpoint_validated": True},
+        task_id="task",
+        slurm_state="FAILED",
+    )
+    assert continued["state"] == "valid_continuation_required"
+    assert continued["attempts"] == 7
+    failed = reconcile_entry({"state": "running", "attempts": 3}, "terminal", {"scientific": "failed"}, task_id="task", slurm_state="FAILED")
+    assert failed["state"] == "terminal_failure"
+    preflight = reconcile_entry(
+        {"state": "submitted", "attempts": 1},
+        "terminal",
+        {"checkpoint_validated": True, "technical_preflight": True, "optimiser_steps": 1},
+        task_id="representative",
+        slurm_state="FAILED",
+    )
+    assert preflight["state"] == "valid_continuation_required"
+
+
+def test_rolling_checkpoint_and_population_count_do_not_accept_a_cell(tmp_path: Path):
+    from schema_study.programme_closure import assess_prediction_rows, continuation_is_verified, publish_ledger_acceptance
+    from schema_study.scientific_coverage import _cell_accepted
+
+    output = tmp_path / "train"
+    output.mkdir()
+    (output / "adapter_checkpoint.pt").write_bytes(b"rolling")
+    (output / "scientific_status.json").write_text(
+        '{"selection_recorded": true, "checkpoint_validated": true}\n', encoding="utf-8",
+    )
+    cell = {"model": "qwen8b", "dataset": "drugprot", "entity": "native", "predicate": "P0", "seed": 13}
+    task = {"output": str(output), "model": "qwen8b", "family": "principal_training", "source_family": "principal_training"}
+    assert _cell_accepted("training", cell, task, {"scientific": "training_completed"}) is False
+    rows = [{"candidate_id": "a", "dataset": "biored"}, {"candidate_id": "b", "dataset": "bc8"}]
+    assert assess_prediction_rows(rows, {"a"}, "biored")["passed"] is True
+    assert assess_prediction_rows(rows, {"b", "c"}, "bc8")["passed"] is False
+    ledger = tmp_path / "eval"
+    ledger.mkdir()
+    (ledger / "predictions.jsonl").write_text('{"candidate_id": "a", "dataset": "biored"}\n', encoding="utf-8")
+    publish_ledger_acceptance(ledger, "biored", [{"candidate_id": "a", "dataset": "biored"}], {"a"})
+    (ledger / "predictions.jsonl").write_text('{"candidate_id": "changed", "dataset": "biored"}\n', encoding="utf-8")
+    from schema_study.programme_closure import ledger_acceptance_valid
+
+    assert ledger_acceptance_valid(ledger, "biored") is False
+    supplementary = {**task, "output": str(ledger), "source_family": "schema_conditioned_lora", "family": "adapter_inference"}
+    assert _cell_accepted("evaluations", cell, supplementary, {"scientific": "inference_completed"}) is False
+    assert continuation_is_verified(10, 10, False, 10, 4) is False
+    assert continuation_is_verified(10, 10, True, 10, 0) is False
