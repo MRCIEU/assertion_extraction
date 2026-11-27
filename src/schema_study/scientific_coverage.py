@@ -133,19 +133,22 @@ def _cell_accepted(kind: str, cell: dict, task: dict, entry: dict) -> bool:
             return False
         if payload.get("selection_recorded") is not True or payload.get("checkpoint_validated") is not True:
             return False
+        if payload.get("steps") is None or int(payload.get("steps") or 0) != int(payload.get("total_steps") or -1):
+            return False
         output = Path(task.get("output") or "")
         checkpoint = output / ("checkpoints/best/checkpoint.pt" if cell["model"] == "biomedbert" else "best_adapter")
         if cell["model"] == "biomedbert":
             return checkpoint.is_file() and checkpoint.stat().st_size > 0
         return artifact_valid(checkpoint)
-    from schema_study.programme_closure import ledger_acceptance_valid
+    from schema_study.programme_closure import ledger_acceptance_valid, scientific_provenance_valid
 
     if kind == "evaluations":
         if task.get("source_family") not in {None, "principal_training"}:
             return False
         if task.get("trains_from") != _principal_training_id(cell, task.get("representation_version")):
             return False
-    return ledger_acceptance_valid(Path(task.get("output") or ""), cell["dataset"])
+    directory = Path(task.get("output") or "")
+    return ledger_acceptance_valid(directory, cell["dataset"]) and scientific_provenance_valid(directory, cell["dataset"])
 
 
 def coverage_report(tasks: list[dict], state: dict) -> dict:

@@ -382,3 +382,104 @@ def test_prompt_preparation_is_submitted_ahead_of_bulk_training():
     by_id = {row["task_id"]: row for row in decisions}
     assert by_id["prompt-prep"]["action"] == "submit"
     assert by_id["train-cell"]["action"] == "defer"
+
+
+def test_model_input_acceptance_requires_every_population():
+    from schema_study.input_acceptance import model_inputs_complete
+
+    one = {"E8/P0/train": {"rows": 1}}
+    assert model_inputs_complete(one) is False
+    complete = {
+        f"E{entity}/P{predicate}/{split}": {"rows": 2}
+        for entity in range(9)
+        for predicate in range(4)
+        for split in ("train", "dev")
+    }
+    assert model_inputs_complete(complete) is True
+
+
+def test_missing_loss_is_not_continuation_progress():
+    from schema_study.path_verification import adapter_names_match, continuation_advanced
+
+    assert continuation_advanced(10, 11, []) is False
+    assert continuation_advanced(10, 11, [0.2]) is True
+    assert continuation_advanced(10, 10, [0.2]) is False
+    assert adapter_names_match(["base.lora_A"], []) is False
+    assert adapter_names_match(["base.lora_A", "other"], ["base.lora_A"]) is True
+
+
+def test_missing_step_metadata_cannot_continue_indefinitely():
+    from schema_study.production_runtime import reconcile_entry
+
+    first = reconcile_entry(
+        {"state": "running", "attempts": 1},
+        "terminal",
+        {"checkpoint_validated": True, "technical_preflight": True},
+        task_id="cell",
+        slurm_state="FAILED",
+    )
+    assert first["state"] == "valid_continuation_required"
+    second = reconcile_entry(
+        first,
+        "terminal",
+        {"checkpoint_validated": True, "technical_preflight": True},
+        task_id="cell",
+        slurm_state="FAILED",
+    )
+    assert second["state"] == "terminal_failure"
+    assert second["reason"] == "unproductive_continuation"
+
+
+def test_population_acceptance_is_not_scientific_provenance():
+    from schema_study.programme_closure import assess_scientific_provenance
+
+    task = {"family": "final_evaluation", "dataset": "biored", "model": "biomedbert", "predicate": "P0", "schema_predicate": "P1"}
+    missing = assess_scientific_provenance(
+        [{"candidate_id": "a", "dataset": "biored", "predicted_labels": ["BR_P1_ANY"]}],
+        task,
+        {"BR_P1_ANY"},
+    )
+    assert missing["provenance_passed"] is False
+    assert missing["missing_output_status"] == 1
+    present = assess_scientific_provenance(
+        [{"candidate_id": "a", "dataset": "biored", "output_status": "valid", "predicted_labels": ["BR_P1_ANY"], "illegal_labels": []}],
+        task,
+        {"BR_P1_ANY"},
+    )
+    assert present["provenance_passed"] is True
+    assert present["model"] == "biomedbert"
+
+
+def test_pre_horizon_checkpoint_releases_path_verification(tmp_path: Path):
+    from schema_study.production_plan import MAX_QUEUED_JOBS
+    from schema_study.production_runtime import controller_decisions
+
+    source = tmp_path / "train"
+    source.mkdir()
+    (source / "adapter_checkpoint.pt").write_bytes(b"checkpoint")
+    training = {
+        "task_id": "representative",
+        "family": "principal_training",
+        "dataset": "drugprot",
+        "model": "qwen32b",
+        "entity": "native",
+        "predicate": "P0",
+        "seed": 13,
+        "output": str(source),
+        "resources": {"gpus": 2},
+        "statuses": [],
+    }
+    verification = {
+        "task_id": "verify",
+        "family": "path_verification",
+        "dataset": "drugprot",
+        "model": "qwen32b",
+        "output": str(tmp_path / "verify"),
+        "resources": {"gpus": 2},
+        "statuses": [],
+    }
+    absent = controller_decisions([training, {**verification, "task_id": "verify-absent"}], {"representative": {"state": "running"}}, 0, 0, set(), set())
+    assert {row["task_id"]: row["reason"] for row in absent}["verify-absent"] == "representative_writing"
+    present = controller_decisions([training, verification], {"representative": {"state": "valid_continuation_required"}}, 0, MAX_QUEUED_JOBS - 1, set(), set())
+    chosen = {row["task_id"]: row for row in present}
+    assert chosen["verify"]["action"] == "submit"

@@ -16,6 +16,22 @@ def continuation_package(saved: dict) -> dict:
     return saved
 
 
+def continuation_advanced(start: int, end: int | None, losses: list) -> bool:
+    """A missing loss record is not a finite loss. The step must move forward inside the horizon."""
+    import math
+
+    if end is None or not losses:
+        return False
+    return int(end) > int(start) and all(math.isfinite(value) for value in losses)
+
+
+def adapter_names_match(expected_names, loaded_names) -> bool:
+    """Inference-mode adapters are frozen. Gradient flags are not the parameter inventory."""
+    expected = {name for name in expected_names if "lora_" in name}
+    loaded = {name for name in loaded_names if "lora_" in name}
+    return bool(expected) and expected == loaded
+
+
 def selected_adapter(saved: dict) -> dict | None:
     """Selected weights only. A later rolling adapter is not a substitute."""
     best = saved.get("best_adapter")
@@ -91,122 +107,166 @@ def verify_representative(task: dict, workdir: Path) -> dict:
         "retain_consumed_prefixes": False,
     })
     process = prepare_process(int(task["resources"]["gpus"]))
-    model, tokenizer = load_causal_lm("qwen32b")
-    from schema_study.production_dispatch import _development_from_candidates, _lora_development_score, _supervised_batches
+    from schema_study.production_dispatch import _supervised_batches
 
     start = int(rolling["step"])
+    horizon = int((rolling.get("scheduler") or {}).get("total_steps") or 0)
     isolated = workdir / "continuation"
     isolated.mkdir(parents=True, exist_ok=True)
-    result = fit(
-        model,
-        _supervised_batches(source, tokenizer, configuration),
-        configuration=configuration,
-        steps=start + 2,
-        total_steps=int((rolling.get("scheduler") or {}).get("total_steps") or start + 2),
-        resume=rolling,
-        output_dir=isolated,
-        fingerprints=rolling.get("fingerprints") or {},
-        fresh=model,
-        stop_after=start + 1,
+    prior_path = workdir / "release_evidence.json"
+    prior = json.loads(prior_path.read_text(encoding="utf-8")) if prior_path.is_file() else {}
+    prior_checks = prior.get("checks") or {}
+    continuation_current = (
+        prior.get("source_mtime_ns") == before
+        and prior_checks.get("optimiser_state_present") is True
+        and prior_checks.get("checkpoint_restored") is True
+        and prior_checks.get("sharding") is True
     )
-    advanced = int(result.get("steps") or 0) > start and all(
-        __import__("math").isfinite(value) for value in (result.get("losses") or [0.0])
-    )
-    checks["optimiser_state_present"] = advanced
-    checks["checkpoint_restored"] = (isolated / "adapter_checkpoint.pt").is_file() and checkpoint.stat().st_mtime_ns == before
-    checks["sharding"] = int(process["world"]) == int(task["resources"]["gpus"])
-    if not checks["development_evaluation"]:
-        development = [row for row in _development_from_candidates(source) if row.get("split") != "test"][:4]
-        if development and all(row.get("split") in {"dev", "development"} for row in development):
-            score = _lora_development_score(source, development, tokenizer, isolated / "development_predictions.jsonl")
-            metric = float(score(model, int(result["steps"])))
-            checks["development_evaluation"] = metric >= 0 and (isolated / "development_predictions.jsonl").is_file()
-    del model
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
+    if continuation_current:
+        result = {"steps": prior.get("continued_step"), "losses": prior.get("losses") or [], "position": prior.get("position"), "checkpoint": prior.get("checkpoint") or {}}
+        checks["optimiser_state_present"] = True
+        checks["checkpoint_restored"] = True
+        checks["sharding"] = True
+    elif horizon <= start:
+        result = {"steps": start, "losses": [], "position": rolling.get("position"), "checkpoint": {}}
+    else:
+        model, tokenizer = load_causal_lm("qwen32b")
+        result = fit(
+            model,
+            _supervised_batches(source, tokenizer, configuration),
+            configuration=configuration,
+            steps=min(start + 2, horizon),
+            total_steps=horizon,
+            resume=rolling,
+            output_dir=isolated,
+            fingerprints=rolling.get("fingerprints") or {},
+            fresh=model,
+            stop_after=start + 1,
+        )
+        trained = result.get("model") or model
+        placement = (result.get("checkpoint") or {}).get("placement") or {}
+        checks["optimiser_state_present"] = continuation_advanced(start, result.get("steps"), result.get("losses") or [])
+        checks["checkpoint_restored"] = (isolated / "adapter_checkpoint.pt").is_file() and checkpoint.stat().st_mtime_ns == before
+        checks["sharding"] = (
+            bool(getattr(trained, "_schema_study_fsdp2", False))
+            and int(process["world"]) == int(task["resources"]["gpus"])
+            and placement.get("parameter_sharding") is True
+            and placement.get("moved_unsharded_before_wrap") is False
+        )
+        del model, trained
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    rank = int(process["rank"])
+    world = int(process["world"])
+    if world > 1 and torch.distributed.is_initialized():
+        torch.distributed.barrier()
+        torch.distributed.destroy_process_group()
+    if rank != 0:
+        return {"completed": True, "status": "diagnostic_recorded", "verified": False, "rank": rank}
+    requests, request_provenance = _production_requests(dataset, entity, limit=4)
     if best is not None:
         exported = export_peft_adapter(workdir / "peft_standard", best, configuration)
         checks["adapter_export"] = (exported / "adapter_model.safetensors").is_file()
-        requests = _production_requests(dataset, entity, limit=4)
         if requests:
-            from schema_study.production_dispatch import GenerationSession
-            from schema_study.production_runtime import interpret_generation
-            from schema_study.schemas import default_schema_path, load_schema
+            from schema_study.learning_conditions import HISTORICAL_PREDICATES
+            from schema_study.production_dispatch import GenerationSession, _parse_generated, _write_predictions
+            from schema_study.production_dispatch import _generation_schema
+            from schema_study.production_runtime import prediction_record
 
+            historical = source.get("schema_predicate") or HISTORICAL_PREDICATES.get(source.get("predicate"), source.get("predicate"))
             probe = {
                 **source,
                 "family": "adapter_inference",
                 "adapter_path": str(exported),
-                "resources": task.get("resources") or {},
+                "schema_predicate": historical,
+                "resources": {"gpus": 1},
             }
             session = GenerationSession(probe)
             generated = session.generate_batch(requests, batch_size=1)
             loaded, _tokenizer = session._transformers()
+            loaded_names = [name for name, _parameter in loaded.named_parameters()]
+            expected_names = [name for name in best if "lora_" in name]
             loaded_pairs = {
                 peft_key(name): parameter.detach().cpu()
                 for name, parameter in loaded.named_parameters()
-                if "lora_" in name and parameter.requires_grad
+                if "lora_" in name
             }
-            checks["adapter_restored"] = bool(best) and all(
-                peft_key(name) in loaded_pairs and torch.equal(loaded_pairs[peft_key(name)], tensor.detach().cpu())
-                for name, tensor in best.items() if "lora_" in name
+            expected_pairs = {peft_key(name): tensor.detach().cpu() for name, tensor in best.items() if "lora_" in name}
+            config_path = exported / "adapter_config.json"
+            config = json.loads(config_path.read_text(encoding="utf-8")) if config_path.is_file() else {}
+            active = getattr(loaded, "active_adapters", None) or getattr(loaded, "active_adapter", None)
+            checks["adapter_restored"] = (
+                adapter_names_match(expected_names, loaded_names)
+                and bool(expected_pairs)
+                and set(expected_pairs) == set(loaded_pairs)
+                and all(torch.equal(loaded_pairs[name], tensor) for name, tensor in expected_pairs.items())
+                and int(config.get("r") or 0) == int(configuration["rank"])
+                and int(config.get("lora_alpha") or 0) == int(configuration["alpha"])
+                and str(config.get("base_model_name_or_path") or "") == str(configuration["base_model_path"])
+                and active not in {None, "", []}
             )
-            from schema_study.paths import get_paths
-
-            schema = load_schema(default_schema_path(get_paths().code_root, "drugprot" if dataset == "drugprot" else "biored"))
-            written = []
-            for request, row in zip(requests, generated):
-                interpreted = interpret_generation(row.get("raw") or row.get("text"), request["candidate_id"], schema, source.get("predicate") or "P0")
-                written.append({
-                    "request_id": request["request_id"],
-                    "candidate_id": request["candidate_id"],
-                    "dataset": dataset,
-                    "rendered_sha256": request.get("rendered_sha256"),
-                    "output_status": interpreted["ledger_status"],
-                    "predicted_labels": interpreted.get("predicted_labels") or [],
-                    "raw": interpreted.get("raw"),
-                })
-            ledger = workdir / "predictions.jsonl"
-            ledger.write_text("".join(json.dumps(row) + "\n" for row in written), encoding="utf-8")
-            from schema_study.programme_closure import assess_prediction_rows, publish_ledger_acceptance
-
-            population = assess_prediction_rows(written, {row["candidate_id"] for row in requests}, dataset)
-            legal = all(row["output_status"] in {"valid", "valid_empty", "invalid"} for row in written)
-            checks["inference_diagnostic"] = population["passed"] and legal and all(row.get("rendered_sha256") for row in written)
-            publish_ledger_acceptance(workdir, dataset, written, {row["candidate_id"] for row in requests})
+            schema = _generation_schema(probe)
+            published = {}
+            legal = True
+            for request, generated_row in zip(requests, generated):
+                shaped = _parse_generated(probe, request, generated_row, schema)
+                status = (shaped.get("parsed") or {}).get("ledger_status")
+                if status not in {"valid", "valid_empty", "invalid"}:
+                    legal = False
+                    status = "invalid"
+                record = prediction_record(request, shaped, probe, session.specification, status)
+                record["output_status"] = status
+                record["dataset"] = dataset
+                published[request["request_id"]] = record
+            _write_predictions(workdir / "predictions.jsonl", published)
+            checks["inference_diagnostic"] = legal and bool(published) and all(row.get("rendered_sha256") for row in requests) and request_provenance != "missing"
     evidence = {
         "verified": all(checks.values()),
         "dataset": dataset,
         "representative": source["task_id"],
         "execution_revision": (saved.get("fingerprints") or {}).get("revision"),
         "continuation_directory": str(isolated),
+        "source_mtime_ns": before,
+        "continued_step": result.get("steps"),
+        "losses": result.get("losses") or [],
+        "position": result.get("position"),
+        "request_provenance": request_provenance,
+        "development_source": "development_boundaries" if checks["development_evaluation"] else "not_scheduled",
         "checks": checks,
     }
-    temporary = workdir / ".release_evidence.json.tmp"
+    import os
+
+    temporary = workdir / f".release_evidence.json.tmp.{os.getpid()}"
     temporary.write_text(json.dumps(evidence, indent=2) + "\n", encoding="utf-8")
     temporary.replace(workdir / "release_evidence.json")
-    publish_scientific_status(workdir, {"scientific": "diagnostic_recorded", "verified": evidence["verified"], "checks": checks})
-    return {"completed": True, "status": "diagnostic_recorded", "verified": evidence["verified"]}
+    complete = all(checks.values())
+    publish_scientific_status(workdir, {
+        "scientific": "diagnostic_recorded" if complete else "valid_continuation_required",
+        "verified": complete,
+        "checks": checks,
+        "steps": result.get("steps"),
+        "checkpoint_fingerprint": str(before),
+    })
+    return {"completed": True, "status": "diagnostic_recorded" if complete else "valid_continuation_required", "verified": complete}
 
 
-def _production_requests(dataset: str, entity: str, predicate: str = "P0", limit: int = 4) -> list[dict]:
-    """A bounded prefix of the accepted generation shards. Context text is not this prompt."""
+def _production_requests(dataset: str, entity: str, predicate: str = "P0", limit: int = 4) -> tuple[list[dict], str]:
+    """Accepted production requests only. A corrected corpus does not fall back to a historical shard."""
     root = Path("/home/b5ac/freddieyu.b5ac/projects/project_1/studies/schema_granularity_v1/runs/formal/formal_matched_e0_e7/generation_inputs")
-    directories = [
-        root / "mesh_ancestor_v1" / "zero_shot" / dataset / entity / predicate,
-        root / "zero_shot" / dataset / entity / predicate,
-    ]
+    if dataset == "drugprot":
+        directory = root / "zero_shot" / dataset / entity / predicate
+        provenance = "native"
+    else:
+        directory = root / "mesh_ancestor_v1" / "zero_shot" / dataset / entity / predicate
+        provenance = "mesh_ancestor_v1"
     rows = []
-    for directory in directories:
-        if not directory.is_dir():
-            continue
-        for shard in sorted(directory.glob("shard_*.jsonl")):
-            for line in shard.open(encoding="utf-8"):
-                if not line.strip():
-                    continue
-                rows.append(json.loads(line))
-                if len(rows) == limit:
-                    return rows
-        if rows:
-            return rows
-    return rows
+    if not directory.is_dir():
+        return rows, "missing"
+    for shard in sorted(directory.glob("shard_*.jsonl")):
+        for line in shard.open(encoding="utf-8"):
+            if not line.strip():
+                continue
+            rows.append(json.loads(line))
+            if len(rows) == limit:
+                return rows, provenance
+    return rows, provenance if rows else "missing"

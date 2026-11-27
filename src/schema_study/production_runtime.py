@@ -565,7 +565,23 @@ def _continuation_stalled(current: dict, output: dict) -> bool:
     current["continuation_started_step"] = start
     current["continuation_ended_step"] = end
     current["failure_signature"] = output.get("scientific")
-    stalled = start is not None and end is not None and int(end) <= int(start)
+    fingerprint = output.get("checkpoint_fingerprint")
+    current["continuation_started_fingerprint"] = current.get("continuation_fingerprint")
+    if fingerprint:
+        current["continuation_ended_fingerprint"] = fingerprint
+        current["continuation_fingerprint"] = fingerprint
+    population_advanced = False
+    if "population_covered" in output:
+        covered = output.get("population_covered")
+        previous_covered = current.get("population_covered")
+        current["population_covered_started"] = previous_covered
+        current["population_covered"] = covered
+        population_advanced = covered is not None and (previous_covered is None or int(covered) > int(previous_covered))
+    step_advanced = end is not None and (start is None or int(end) > int(start))
+    if step_advanced or (end is None and population_advanced):
+        stalled = False
+    else:
+        stalled = True
     if stalled:
         current["unproductive_continuations"] = int(current.get("unproductive_continuations") or 0) + 1
     else:
@@ -577,7 +593,7 @@ def _continuation_stalled(current: dict, output: dict) -> bool:
 
 def queue_ledger_acceptance(state: dict, tasks: list[dict]) -> bool:
     """A finished prediction task still needs identity acceptance. Completion does not publish that record."""
-    from schema_study.programme_closure import ledger_acceptance_valid
+    from schema_study.programme_closure import ledger_acceptance_valid, scientific_provenance_valid
 
     needed = False
     for task in tasks:
@@ -588,7 +604,7 @@ def queue_ledger_acceptance(state: dict, tasks: list[dict]) -> bool:
             continue
         corpus = str(task.get("dataset") or "")
         directory = Path(task.get("output") or "")
-        if ledger_acceptance_valid(directory, corpus):
+        if ledger_acceptance_valid(directory, corpus) and scientific_provenance_valid(directory, corpus):
             continue
         record = directory / "population_acceptance.json"
         if record.is_file():
@@ -637,6 +653,11 @@ def reconcile_entry(entry: dict, scheduler: str, output: dict | None, *, task_id
         current["scheduler"] = "unknown"
         return current
     if scheduler == "retryable" and str(current.get("slurm_state", "")).startswith("TIMEOUT"):
+        if _continuation_stalled(current, output or {}):
+            current["state"] = "terminal_failure"
+            current["reason"] = "unproductive_continuation"
+            current["systematic"] = False
+            return current
         current["state"] = "valid_continuation_required"
         current["scientific"] = "preflight_passed" if (output or {}).get("technical_preflight") else current.get("scientific")
         current["continuation_segments"] = int(current.get("continuation_segments", 0)) + 1
@@ -1182,10 +1203,9 @@ def controller_decisions(tasks: list[dict], state: dict, running: int, pending: 
                     decisions.append({"task_id": task["task_id"], "action": "skip", "reason": "contexts_already_present"})
                     continue
         if task.get("family") == "path_verification":
-            source_state = next(
+            source = next(
                 (
-                    state.get(item["task_id"], {}).get("state")
-                    for item in tasks
+                    item for item in tasks
                     if item.get("family") == "principal_training"
                     and item.get("model") == "qwen32b"
                     and item.get("dataset") == task.get("dataset")
@@ -1193,8 +1213,13 @@ def controller_decisions(tasks: list[dict], state: dict, running: int, pending: 
                 ),
                 None,
             )
-            if source_state != "training_completed":
-                decisions.append({"task_id": task["task_id"], "action": "skip", "reason": "representative_not_finished"})
+            source_state = None if source is None else state.get(source["task_id"], {}).get("state")
+            checkpoint = None if source is None else Path(source["output"]) / "adapter_checkpoint.pt"
+            if source_state == "running":
+                decisions.append({"task_id": task["task_id"], "action": "skip", "reason": "representative_writing"})
+                continue
+            if checkpoint is None or not checkpoint.is_file():
+                decisions.append({"task_id": task["task_id"], "action": "skip", "reason": "checkpoint_absent"})
                 continue
         if task.get("family") == "selection_diagnostic" and task.get("dataset") == "biored":
             decisions.append({"task_id": task["task_id"], "action": "skip", "reason": "superseded_corrected_retraining"})

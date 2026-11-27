@@ -623,73 +623,147 @@ def _prepare_prompts(workdir: Path) -> dict:
     return {"completed": True, "status": "inference_completed"}
 
 
+def model_inputs_complete(fingerprints: dict) -> bool:
+    """One sample is not acceptance. Every corrected entity, predicate and split must be present."""
+    needed = {
+        f"E{entity}/P{predicate}/{split}"
+        for entity in range(9)
+        for predicate in range(4)
+        for split in ("train", "dev")
+    }
+    return needed <= set(fingerprints) and all(int((fingerprints.get(key) or {}).get("rows") or 0) > 0 for key in needed)
+
+
+def _context_views(entity: str, splits: set[str]) -> dict[str, str]:
+    """The view text the production loader is required to consume for one entity level."""
+    from schema_study.formal_train import CONTEXTS
+
+    views = {}
+    with Path(CONTEXTS["biored"]).open(encoding="utf-8") as handle:
+        for line in handle:
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            if row.get("split") not in splits:
+                continue
+            text = (row.get("views") or {}).get(entity)
+            if isinstance(text, str):
+                views[row["candidate_id"]] = text
+    return views
+
+
 def _validate_model_inputs(task: dict, workdir: Path) -> dict:
-    """Fingerprint the records the production loaders consume. A context file hash is not this record."""
+    """Stream every corrected E/P training and development population through the production loaders."""
     import hashlib
 
     from schema_study.formal_prepare import _fill
     from schema_study.formal_train import _build_rows
     from schema_study.learning_conditions import HISTORICAL_PREDICATES
-    from schema_study.production_dispatch import _bind_corrected_contexts, _context_texts, _metadata_rows
-    from schema_study.production_assets import GENERATIVE
-    from schema_study.production_lora import IGNORE_INDEX, batches_from_records
-    from schema_study.production_plan import execution_manifest
+    from schema_study.production_assets import ENCODERS, GENERATIVE
+    from schema_study.production_dispatch import _bind_corrected_contexts
+    from schema_study.production_lora import render_conversation
     from schema_study.production_runtime import publish_scientific_status
     from schema_study.programme_closure import merge_acceptance
     from schema_study.schemas import default_schema_path, load_schema
     from schema_study.paths import get_paths
-
-    workdir.mkdir(parents=True, exist_ok=True)
-    storage = Path("/home/b5ac/freddieyu.b5ac/projects/project_1/data/inputs/biored/target_anchored_mesh_ancestor_v1__biomedbert_e1354b7a/contexts.jsonl")
-    source_row = None
-    with storage.open(encoding="utf-8") as handle:
-        for line in handle:
-            row = json.loads(line)
-            if row.get("split") == "train" and (row.get("views") or {}).get("E8"):
-                source_row = row
-                break
-    if source_row is None:
-        publish_scientific_status(workdir, {"scientific": "invalid", "reason": "e8_source_missing"})
-        return {"completed": True, "status": "invalid"}
-    e8_text = source_row["views"]["E8"]
-    _bind_corrected_contexts({"representation_version": "mesh_ancestor_v1", "dataset": "biored"})
-    loaded = _context_texts("biored", {(source_row["candidate_id"], "E8")})[(source_row["candidate_id"], "E8")]
-    encoder_rows, _classes, _schema = _build_rows("biored", "E8", "P0", {"train"})
-    encoder_match = any(row["candidate_id"] == source_row["candidate_id"] and row["text"] == e8_text for row in encoder_rows)
-    schema = load_schema(default_schema_path(get_paths().code_root, "biored"))
-    block = "\n".join(f"- {name}" for name in schema.positive_display_names(HISTORICAL_PREDICATES["P0"]))
-    user = _fill("biored", source_row["candidate_id"], HISTORICAL_PREDICATES["P0"], loaded, {("biored", HISTORICAL_PREDICATES["P0"]): block})
-    fingerprints = {
-        "encoder_rows": len(encoder_rows),
-        "e8_text_sha256": hashlib.sha256(e8_text.encode("utf-8")).hexdigest(),
-        "loader_matches_e8": loaded == e8_text and encoder_match,
-    }
-    passed = loaded == e8_text and encoder_match and len(encoder_rows) == 21755
     from transformers import AutoTokenizer
 
-    for model_name in ("qwen8b", "qwen32b"):
-        spec = GENERATIVE[model_name]
-        tokenizer = AutoTokenizer.from_pretrained(spec["path"], local_files_only=True, revision=spec.get("revision"))
-        batch = next(batches_from_records([{"user": user, "assistant": json.dumps({"labels": []})}], tokenizer, 1))
-        labels = batch["labels"]
-        masked = bool((labels == IGNORE_INDEX).any()) and bool((labels != IGNORE_INDEX).any())
-        fingerprints[model_name] = {
-            "masked": masked,
-            "tokens": int(batch["input_ids"].shape[-1]),
-            "token_sha256": hashlib.sha256(batch["input_ids"].detach().cpu().numpy().tobytes()).hexdigest(),
-        }
-        passed = passed and masked and int(batch["input_ids"].shape[-1]) <= 512
-    source = next(
-        item for item in execution_manifest()
-        if item.get("representation_version") == "mesh_ancestor_v1" and item.get("entity") == "E8" and item.get("model") == "qwen8b"
-    )
-    e8_rows = [row for row in _metadata_rows(source) if row.get("entity_level") == "E8" and row.get("split") == "train"]
-    fingerprints["e8_metadata_rows"] = len(e8_rows)
-    passed = passed and len(e8_rows) > 0
+    del task
+    workdir.mkdir(parents=True, exist_ok=True)
+    _bind_corrected_contexts({"representation_version": "mesh_ancestor_v1", "dataset": "biored"})
+    authority = _candidate_authority("biored")
+    expected = {
+        split: {identifier for identifier, row in authority.items() if row.get("split") == split}
+        for split in ("train", "dev")
+    }
+    schema = load_schema(default_schema_path(get_paths().code_root, "biored"))
+    tokenizers = {
+        name: AutoTokenizer.from_pretrained(GENERATIVE[name]["path"], local_files_only=True, revision=GENERATIVE[name].get("revision"))
+        for name in ("qwen8b", "qwen32b")
+    }
+    encoder = AutoTokenizer.from_pretrained(str(ENCODERS["biomedbert"]["tokenizer"]), local_files_only=True)
+
+    def tokenizer_identity(tokenizer) -> str:
+        template = str(getattr(tokenizer, "chat_template", "") or "")
+        return hashlib.sha256(f"{tokenizer.name_or_path}|{len(tokenizer)}|{template}".encode("utf-8")).hexdigest()
+
+    identities = {name: tokenizer_identity(tokenizer) for name, tokenizer in tokenizers.items()}
+    shared_qwen = identities["qwen8b"] == identities["qwen32b"]
+    e2_views = _context_views("E2", {"train", "dev"})
+    e8_views = _context_views("E8", {"train", "dev"})
+    e8_distinct = sum(1 for identifier, text in e8_views.items() if text and text != e2_views.get(identifier))
+    failures = []
+    fingerprints = {}
+    if e8_distinct == 0:
+        failures.append({"entity": "E8", "reason": "e8_matches_e2"})
+    for entity_index in range(9):
+        entity = f"E{entity_index}"
+        views = e8_views if entity == "E8" else _context_views(entity, {"train", "dev"})
+        for predicate_index in range(4):
+            predicate = f"P{predicate_index}"
+            historical = HISTORICAL_PREDICATES[predicate]
+            block = "\n".join(f"- {name}" for name in schema.positive_display_names(historical))
+            for split in ("train", "dev"):
+                rows, _classes, _schema = _build_rows("biored", entity, historical, {split})
+                identifiers = [row["candidate_id"] for row in rows]
+                positives = sum(1 for row in rows if row.get("mapped_gold"))
+                negatives = sum(1 for row in rows if not row.get("mapped_gold"))
+                identity_ok = set(identifiers) == expected[split] and len(identifiers) == len(set(identifiers))
+                markers_ok = all("<<H>>" in row["text"] and "<<T>>" in row["text"] for row in rows)
+                view_ok = all(row["text"] == views.get(row["candidate_id"]) and views.get(row["candidate_id"]) for row in rows)
+                if not identity_ok or not markers_ok or not view_ok or positives == 0 or negatives == 0:
+                    failures.append({
+                        "entity": entity, "predicate": predicate, "split": split,
+                        "rows": len(rows), "identity_ok": identity_ok, "markers_ok": markers_ok,
+                        "view_ok": view_ok, "positives": positives, "negatives": negatives,
+                    })
+                digest = hashlib.sha256()
+                token_digest = {name: hashlib.sha256() for name in tokenizers}
+                encoder_digest = hashlib.sha256()
+                max_tokens = {name: 0 for name in tokenizers}
+                encoder_over = 0
+                for row in rows:
+                    gold = list(row.get("mapped_gold") or [])
+                    digest.update(f"{row['candidate_id']}\t{row['text']}\t{gold}\n".encode("utf-8"))
+                    encoded = encoder(row["text"], add_special_tokens=True)["input_ids"]
+                    encoder_digest.update(bytes(encoded))
+                    if len(encoded) > 512:
+                        encoder_over += 1
+                    user = _fill("biored", row["candidate_id"], historical, row["text"], {("biored", historical): block})
+                    assistant = json.dumps({"labels": gold}, ensure_ascii=False)
+                    rendered = render_conversation(tokenizers["qwen8b"], user, assistant)
+                    if int(rendered["prompt_tokens"]) <= 0 or int(rendered["prompt_tokens"]) >= len(rendered["input_ids"]):
+                        failures.append({"entity": entity, "predicate": predicate, "split": split, "reason": "loss_mask"})
+                    token_digest["qwen8b"].update(bytes(rendered["input_ids"]))
+                    token_digest["qwen8b"].update(str(rendered["prompt_tokens"]).encode("ascii"))
+                    max_tokens["qwen8b"] = max(max_tokens["qwen8b"], len(rendered["input_ids"]))
+                    if shared_qwen:
+                        token_digest["qwen32b"] = token_digest["qwen8b"]
+                        max_tokens["qwen32b"] = max_tokens["qwen8b"]
+                    else:
+                        other = render_conversation(tokenizers["qwen32b"], user, assistant)
+                        token_digest["qwen32b"].update(bytes(other["input_ids"]))
+                        token_digest["qwen32b"].update(str(other["prompt_tokens"]).encode("ascii"))
+                        max_tokens["qwen32b"] = max(max_tokens["qwen32b"], len(other["input_ids"]))
+                if encoder_over:
+                    failures.append({"entity": entity, "predicate": predicate, "split": split, "encoder_over_512": encoder_over})
+                fingerprints[f"{entity}/{predicate}/{split}"] = {
+                    "rows": len(rows),
+                    "positives": positives,
+                    "negatives": negatives,
+                    "historical_predicate": historical,
+                    "record_sha256": digest.hexdigest(),
+                    "encoder_token_sha256": encoder_digest.hexdigest(),
+                    "qwen8b_token_sha256": token_digest["qwen8b"].hexdigest(),
+                    "qwen32b_token_sha256": token_digest["qwen32b"].hexdigest(),
+                    "qwen_tokenizer_identity": identities,
+                    "shared_qwen_tokenizer": shared_qwen,
+                    "max_tokens": max_tokens,
+                }
+    passed = not failures and model_inputs_complete(fingerprints) and e8_distinct > 0
     destination = _manifest_path()
-    existing = _load_manifest(destination)
-    payload = merge_acceptance(existing, model_inputs={"passed": passed, "fingerprints": fingerprints})
+    payload = merge_acceptance(_load_manifest(destination), model_inputs={"passed": passed, "fingerprints": fingerprints, "failures": failures[:8]})
     publish_acceptance(destination, payload)
     status = "inference_completed" if passed else "invalid"
-    publish_scientific_status(workdir, {"scientific": status, "model_inputs_passed": passed})
-    return {"completed": True, "status": status, "model_inputs_passed": passed}
+    publish_scientific_status(workdir, {"scientific": status, "model_inputs_passed": passed, "conditions": len(fingerprints), "failures": len(failures)})
+    return {"completed": True, "status": status, "model_inputs_passed": passed, "failures": len(failures)}

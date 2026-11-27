@@ -153,6 +153,42 @@ def publish_ledger_acceptance(directory: Path, corpus: str, rows: list[dict], ex
     return record
 
 
+def _selected_checkpoint_fingerprint(training_output: str | None, workdir: Path) -> str | None:
+    """Hash one selected checkpoint. Repeated ledgers from the same model reuse the hash."""
+    import hashlib
+    import json
+
+    if not training_output:
+        return None
+    root = Path(training_output)
+    path = next((
+        candidate for candidate in (
+            root / "checkpoints/best/checkpoint.pt",
+            root / "best_adapter" / "adapter_model.safetensors",
+            root / "best" / "adapter_checkpoint.pt",
+        )
+        if candidate.is_file() and candidate.stat().st_size > 0
+    ), None)
+    if path is None:
+        return None
+    cache_path = workdir / "checkpoint_fingerprints.json"
+    cache = json.loads(cache_path.read_text(encoding="utf-8")) if cache_path.is_file() else {}
+    stamp = f"{path.stat().st_size}:{path.stat().st_mtime_ns}"
+    key = str(path)
+    cached = cache.get(key) or {}
+    if cached.get("stamp") == stamp and cached.get("sha256"):
+        return cached["sha256"]
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(block)
+    cache[key] = {"stamp": stamp, "sha256": digest.hexdigest()}
+    temporary = cache_path.with_suffix(".json.tmp")
+    temporary.write_text(json.dumps(cache) + "\n", encoding="utf-8")
+    temporary.replace(cache_path)
+    return cache[key]["sha256"]
+
+
 def accept_completed_ledgers(task: dict, workdir: Path) -> dict:
     """Validate finished ledgers in place. This does not load a model or repeat inference."""
     from schema_study.input_acceptance import _candidate_authority
@@ -163,9 +199,16 @@ def accept_completed_ledgers(task: dict, workdir: Path) -> dict:
 
     del task
     workdir.mkdir(parents=True, exist_ok=True)
+    from schema_study.learning_conditions import HISTORICAL_PREDICATES
+    from schema_study.schemas import default_schema_path, load_schema
+    from schema_study.paths import get_paths
+
     authorities = {}
+    schemas = {}
+    outputs = {item["task_id"]: item.get("output") for item in execution_manifest()}
     written = 0
     rejected = 0
+    provenance_written = 0
     for item in execution_manifest():
         if item.get("family") not in {"zero_shot", "few_shot", "adapter_inference", "final_evaluation"}:
             continue
@@ -173,24 +216,94 @@ def accept_completed_ledgers(task: dict, workdir: Path) -> dict:
         if not ledger.is_file():
             continue
         corpus = str(item.get("dataset") or "")
-        if ledger_acceptance_valid(Path(item["output"]), corpus):
+        directory = Path(item["output"])
+        population_ok = ledger_acceptance_valid(directory, corpus)
+        provenance_ok = scientific_provenance_valid(directory, corpus)
+        if population_ok and provenance_ok:
             continue
-        if corpus not in authorities:
-            authorities[corpus] = _candidate_authority(corpus)
-        split = {"biored": "test", "bc8": "bc8", "drugprot": "eval"}[corpus]
-        expected = {identifier for identifier, row in authorities[corpus].items() if row.get("split") == split}
-        outcome = _assess_ledger_file(ledger, expected, corpus)
-        publish_ledger_acceptance(Path(item["output"]), corpus, [], expected)
-        record_path = Path(item["output"]) / "population_acceptance.json"
-        body = json.loads(record_path.read_text(encoding="utf-8"))
-        body[corpus] = {**body.get(corpus, {}), **outcome, "corpus": corpus, "expected_count": len(expected), "ledger_sha256": body.get(corpus, {}).get("ledger_sha256")}
-        temporary = record_path.with_suffix(".json.tmp")
-        temporary.write_text(json.dumps(body, indent=2) + "\n", encoding="utf-8")
-        temporary.replace(record_path)
-        written += 1
-        rejected += 0 if outcome["passed"] else 1
-    publish_scientific_status(workdir, {"scientific": "inference_completed", "ledgers_validated": written, "ledgers_rejected": rejected})
-    return {"completed": True, "status": "inference_completed", "ledgers_validated": written, "ledgers_rejected": rejected}
+        stat = ledger.stat()
+        if not population_ok:
+            if corpus not in authorities:
+                authorities[corpus] = _candidate_authority(corpus)
+            split = {"biored": "test", "bc8": "bc8", "drugprot": "eval"}[corpus]
+            expected = {identifier for identifier, row in authorities[corpus].items() if row.get("split") == split}
+            outcome = _assess_ledger_file(ledger, expected, corpus)
+            publish_ledger_acceptance(directory, corpus, [], expected)
+            record_path = directory / "population_acceptance.json"
+            body = json.loads(record_path.read_text(encoding="utf-8"))
+            body[corpus] = {
+                **body.get(corpus, {}),
+                **outcome,
+                "corpus": corpus,
+                "expected_count": len(expected),
+                "ledger_sha256": body.get(corpus, {}).get("ledger_sha256"),
+                "ledger_size": stat.st_size,
+                "ledger_mtime_ns": stat.st_mtime_ns,
+            }
+            temporary = record_path.with_suffix(".json.tmp")
+            temporary.write_text(json.dumps(body, indent=2) + "\n", encoding="utf-8")
+            temporary.replace(record_path)
+            written += 1
+            rejected += 0 if outcome["passed"] else 1
+        elif not (directory / "population_acceptance.json").is_file():
+            continue
+        else:
+            record_path = directory / "population_acceptance.json"
+            body = json.loads(record_path.read_text(encoding="utf-8"))
+            cell = body.get(corpus) if isinstance(body.get(corpus), dict) else {}
+            if cell.get("ledger_size") != stat.st_size or cell.get("ledger_mtime_ns") != stat.st_mtime_ns:
+                cell["ledger_size"] = stat.st_size
+                cell["ledger_mtime_ns"] = stat.st_mtime_ns
+                body[corpus] = cell
+                temporary = record_path.with_suffix(".json.tmp")
+                temporary.write_text(json.dumps(body, indent=2) + "\n", encoding="utf-8")
+                temporary.replace(record_path)
+        if provenance_ok:
+            continue
+        if corpus not in schemas:
+            schemas[corpus] = load_schema(default_schema_path(get_paths().code_root, "drugprot" if corpus == "drugprot" else "biored"))
+        level = item.get("schema_predicate") or HISTORICAL_PREDICATES.get(item.get("predicate"), item.get("predicate"))
+        try:
+            labels = schemas[corpus].level_labels(level)
+        except KeyError:
+            labels = ()
+        legal = {label.stable_id for label in labels} | {label.display_name for label in labels}
+        legal.update({schemas[corpus].no_relation_id, schemas[corpus].no_relation_name})
+        def _matching_rows():
+            with ledger.open(encoding="utf-8") as handle:
+                for line in handle:
+                    if not line.strip():
+                        continue
+                    row = json.loads(line)
+                    if row.get("dataset") in {None, corpus}:
+                        yield row
+
+        provenance = assess_scientific_provenance(_matching_rows(), item, legal)
+        fingerprint = _selected_checkpoint_fingerprint(outputs.get(item.get("trains_from")), workdir)
+        provenance.update({
+            "corpus": corpus,
+            "ledger_size": stat.st_size,
+            "ledger_mtime_ns": stat.st_mtime_ns,
+            "checkpoint_fingerprint": fingerprint,
+            "checkpoint_role": "selected",
+        })
+        if item.get("family") in {"adapter_inference", "final_evaluation"} and not fingerprint:
+            provenance["provenance_passed"] = False
+            provenance["reason"] = "checkpoint_unresolved"
+        destination = directory / "scientific_provenance.json"
+        existing = json.loads(destination.read_text(encoding="utf-8")) if destination.is_file() else {}
+        existing[corpus] = provenance
+        temporary = destination.with_suffix(".json.tmp")
+        temporary.write_text(json.dumps(existing, indent=2) + "\n", encoding="utf-8")
+        temporary.replace(destination)
+        provenance_written += 1
+    publish_scientific_status(workdir, {
+        "scientific": "inference_completed",
+        "ledgers_validated": written,
+        "ledgers_rejected": rejected,
+        "provenance_written": provenance_written,
+    })
+    return {"completed": True, "status": "inference_completed", "ledgers_validated": written, "ledgers_rejected": rejected, "provenance_written": provenance_written}
 
 
 def _assess_ledger_file(path: Path, expected_ids: set[str], corpus: str) -> dict:
@@ -240,11 +353,72 @@ def ledger_acceptance_valid(directory: Path, corpus: str) -> bool:
     record = body.get(corpus) if isinstance(body.get(corpus), dict) else body
     if record.get("passed") is not True or record.get("corpus") != corpus:
         return False
-    digest = hashlib.sha256()
-    with ledger.open("rb") as handle:
-        for block in iter(lambda: handle.read(1 << 20), b""):
-            digest.update(block)
-    return record.get("ledger_sha256") == digest.hexdigest() and int(record.get("expected_count") or 0) > 0 and record.get("missing_candidates") == 0
+    stat = ledger.stat()
+    if record.get("ledger_size") != stat.st_size or record.get("ledger_mtime_ns") != stat.st_mtime_ns:
+        digest = hashlib.sha256()
+        with ledger.open("rb") as handle:
+            for block in iter(lambda: handle.read(1 << 20), b""):
+                digest.update(block)
+        if record.get("ledger_sha256") != digest.hexdigest():
+            return False
+    return int(record.get("expected_count") or 0) > 0 and record.get("missing_candidates") == 0
+
+
+def assess_scientific_provenance(rows: list[dict], task: dict, legal_ids: set[str]) -> dict:
+    """Population identity is not scientific acceptance. A missing output status is not a valid prediction."""
+    missing_status = 0
+    illegal = 0
+    checked = 0
+    missing_prompt = 0
+    generative = task.get("family") in {"zero_shot", "few_shot", "adapter_inference"}
+    for row in rows:
+        if row.get("dataset") not in {None, task.get("dataset")}:
+            continue
+        checked += 1
+        status = row.get("output_status") or row.get("status")
+        if status not in {"valid", "valid_empty", "invalid"}:
+            missing_status += 1
+            continue
+        labels = row.get("predicted_labels")
+        if not isinstance(labels, list):
+            illegal += 1
+            continue
+        if status == "valid" and (not labels or any(label not in legal_ids for label in labels) or row.get("illegal_labels")):
+            illegal += 1
+        elif status == "valid_empty" and labels:
+            illegal += 1
+        if generative and not row.get("rendered_sha256"):
+            missing_prompt += 1
+    return {
+        "provenance_passed": checked > 0 and missing_status == 0 and illegal == 0 and missing_prompt == 0,
+        "rows": checked,
+        "missing_output_status": missing_status,
+        "illegal_predictions": illegal,
+        "missing_prompt_fingerprint": missing_prompt,
+        "model": task.get("model"),
+        "representation_version": task.get("representation_version"),
+        "predicate": task.get("predicate"),
+        "schema_predicate": task.get("schema_predicate"),
+        "trains_from": task.get("trains_from"),
+        "parser": "interpret_generation" if generative else "encoder_threshold",
+        "inference_backend": "transformers" if task.get("family") == "adapter_inference" else task.get("family"),
+    }
+
+
+def scientific_provenance_valid(directory: Path, corpus: str) -> bool:
+    """Trust the provenance record only while the ledger bytes are unchanged. This does not reread the ledger."""
+    import json
+
+    record_path = directory / "scientific_provenance.json"
+    ledger = directory / "predictions.jsonl"
+    if not record_path.is_file() or not ledger.is_file():
+        return False
+    body = json.loads(record_path.read_text(encoding="utf-8"))
+    record = body.get(corpus) if isinstance(body.get(corpus), dict) else None
+    if not isinstance(record, dict) or record.get("provenance_passed") is not True or record.get("corpus") != corpus:
+        return False
+    stat = ledger.stat()
+    return record.get("ledger_size") == stat.st_size and record.get("ledger_mtime_ns") == stat.st_mtime_ns
 
 
 def continuation_is_verified(restored_step: int, saved_step: int, optimizer_loaded: bool, scheduler_step: int, production_requests: int) -> bool:
