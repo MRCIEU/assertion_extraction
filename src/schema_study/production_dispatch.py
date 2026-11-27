@@ -54,7 +54,12 @@ def execute_task(task: dict, workdir: Path, *, gpu_permitted: bool) -> dict:
         completed.write_text(json.dumps({"rows_written": True, "checkpoint": "adapter", "empirical_qwen_result": False}) + "\n", encoding="utf-8")
         result["completed"] = bool(result["weights_match"] and result["losses_match"] and result["consumed_match"])
         return result
-    cpu_executors = {"schema_study.analysis_plan:analyse_records", "schema_study.measurement_cpu:adapt_verifier"}
+    cpu_executors = {
+        "schema_study.analysis_plan:analyse_records",
+        "schema_study.measurement_cpu:adapt_verifier",
+        "schema_study.input_acceptance:validate_publication",
+        "schema_study.input_acceptance:prepare_contexts",
+    }
     if not gpu_permitted and task.get("executor") not in cpu_executors:
         raise PermissionError("formal_gpu_execution_is_not_authorised")
     if not task.get("executor"):
@@ -89,6 +94,26 @@ def _invoke_production(task: dict, workdir: Path, *, gpu_permitted: bool = False
         from schema_study.selection_diagnostic import score_pair
 
         return score_pair(task, workdir)
+    if executor == "schema_study.input_acceptance:validate_publication":
+        from schema_study.input_acceptance import validate_publication
+
+        return validate_publication(task, workdir)
+    if executor == "schema_study.input_acceptance:prepare_contexts":
+        from schema_study.input_acceptance import prepare_contexts
+
+        return prepare_contexts(task, workdir)
+    if executor == "schema_study.adapter_numeric:compare_adapters":
+        from schema_study.adapter_numeric import compare_adapters
+
+        return compare_adapters(task, workdir)
+    if executor == "schema_study.backend_control:compare_backends":
+        from schema_study.backend_control import compare_backends
+
+        return compare_backends(task, workdir)
+    if executor == "schema_study.path_verification:verify_representative":
+        from schema_study.path_verification import verify_representative
+
+        return verify_representative(task, workdir)
     if executor == "schema_study.formal_train:train":
         from schema_study.formal_train import train
 

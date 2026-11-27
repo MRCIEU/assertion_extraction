@@ -482,7 +482,7 @@ def resume_rank_examples(rank_examples: list[str], position: int) -> list[str]:
 
 ACTIVE_CONTROLLER_STATES = {"submitted", "pending", "running"}
 GROUP_RELEASE_STATES = {"preflight_passed", "training_completed", "inference_completed", "completed"}
-SCIENTIFIC_COMPLETE = {"training_completed", "inference_completed", "completed"}
+SCIENTIFIC_COMPLETE = {"training_completed", "inference_completed", "completed", "diagnostic_recorded"}
 RETRYABLE_SLURM = {"TIMEOUT", "NODE_FAIL", "PREEMPTED", "DEADLINE"}
 TERMINAL_SLURM = {"FAILED", "CANCELLED", "OUT_OF_MEMORY", "BOOT_FAIL"}
 MONITORING_SECONDS = 300
@@ -606,25 +606,30 @@ def reconcile_entry(entry: dict, scheduler: str, output: dict | None, *, task_id
             current["scientific"] = status
         current["monitoring_guarantees_completion"] = False
         return current
+    if status == "diagnostic_recorded":
+        current["state"] = "diagnostic_recorded"
+        current["scientific"] = "diagnostic_recorded"
+        current["monitoring_guarantees_completion"] = False
+        return current
     if status == "invalid":
         return _failure_entry(current, task_id, "scientific_invalid", systematic=True, group=group)
     return _failure_entry(current, task_id, "slurm_completed_without_scientific_record", group=group)
 
 
 def account_representation(state: dict, tasks: list[dict]) -> None:
-    """Archive unstarted stored deeper tasks and reuse E0–E2 when the input manifest says the windows match."""
+    """Archive unstarted stored deeper tasks. Reuse only an exact predecessor with an artifact."""
+    from schema_study.input_acceptance import contexts_accepted, reuse_decision
+
     manifest = corrected_input_manifest()
-    contexts_ready = bool(manifest.get("contexts_ready"))
-    historical_done = {}
-    for other in tasks:
-        if other.get("representation_version"):
-            continue
-        if state.get(other["task_id"], {}).get("state") in SCIENTIFIC_COMPLETE:
-            key = (other.get("family"), other.get("dataset"), str(other.get("entity")), str(other.get("predicate")), other.get("model"), other.get("seed"))
-            historical_done[key] = other["task_id"]
+    equivalence = manifest.get("equivalence") or {}
     for task in tasks:
         current = state.get(task["task_id"], {})
-        if current.get("state") in ACTIVE_OR_DONE | {"terminal_failure", "superseded_stored_representation", "reused_historical_equivalent"}:
+        if current.get("scientific") == "reused_historical_equivalent" or current.get("state") == "reused_historical_equivalent":
+            decision = reuse_decision(task, equivalence.get(task["task_id"]))
+            if decision is None:
+                state[task["task_id"]] = {"state": "unsubmitted", "scientific": None, "reuse_revoked": True}
+            continue
+        if current.get("state") in ACTIVE_OR_DONE | {"terminal_failure", "superseded_stored_representation"}:
             continue
         if representation_hold(task, current) == "superseded_stored_representation":
             state[task["task_id"]] = {
@@ -633,73 +638,36 @@ def account_representation(state: dict, tasks: list[dict]) -> None:
                 "preserved": True,
             }
             continue
-        if task.get("representation_version") != CORRECTED_REPRESENTATION or not contexts_ready:
+        if not contexts_accepted(manifest):
             continue
-        if str(task.get("entity") or "") not in {"E0", "E1", "E2"}:
-            continue
-        family = task.get("family")
-        rerun = manifest.get("rerun_training_e0_e2") if family == "principal_training" else manifest.get("rerun_inference_e0_e2")
-        if rerun:
-            continue
-        key = (family, task.get("dataset"), str(task.get("entity")), str(task.get("predicate")), task.get("model"), task.get("seed"))
-        predecessor = historical_done.get(key) or task.get("replaces")
-        if predecessor and (predecessor in historical_done.values() or state.get(predecessor, {}).get("state") in SCIENTIFIC_COMPLETE):
-            state[task["task_id"]] = {
-                "state": "completed",
-                "scientific": "reused_historical_equivalent",
-                "replaces": predecessor,
-            }
+        decision = reuse_decision(task, equivalence.get(task["task_id"]))
+        if decision is not None:
+            state[task["task_id"]] = decision
 
 
 def observe_qwen32_release(state: dict, tasks: list[dict]) -> None:
-    """Write a dataset release file only from files the representative has actually produced."""
-    by_id = {task["task_id"]: task for task in tasks}
+    """Release one dataset only from a verification record whose checks all passed."""
+    from schema_study.checkpoint_roles import release_evidence_complete
+
     for dataset in ("biored", "drugprot"):
         path = qwen32_release_file(dataset)
-        if _release_payload(path):
+        if release_evidence_complete(_release_record(path)):
             continue
-        representative = next(
+        verification = next(
             (
                 task for task in tasks
-                if task.get("family") == "principal_training"
-                and task.get("model") == "qwen32b"
-                and task.get("dataset") == dataset
-                and not task.get("representation_version")
-                and task.get("representative")
+                if task.get("family") == "path_verification" and task.get("dataset") == dataset
             ),
             None,
         )
-        if representative is None:
+        if verification is None:
             continue
-        entry = state.get(representative["task_id"], {})
-        if entry.get("state") != "training_completed":
+        evidence = Path(verification["output"]) / "release_evidence.json"
+        if not evidence.is_file():
             continue
-        output = Path(representative.get("output") or "")
-        boundary = output / "development_boundaries.json"
-        adapter = output / "best_adapter" / "adapter_config.json"
-        inference_done = any(
-            state.get(task["task_id"], {}).get("state") == "inference_completed"
-            for task in tasks
-            if task.get("trains_from") == representative["task_id"] and task.get("family") == "adapter_inference"
-        )
-        checks = []
-        if (output / "adapter_checkpoint.pt").is_file():
-            checks.append("checkpoint_resumed")
-        if boundary.is_file() and any((json.loads(boundary.read_text(encoding="utf-8")).get(key) or {}).get("complete") for key in json.loads(boundary.read_text(encoding="utf-8"))):
-            checks.append("development_generation")
-        if adapter.is_file():
-            checks.append("adapter_export")
-        if inference_done:
-            checks.append("inference_subset")
-        if len(checks) < 4:
+        payload = json.loads(evidence.read_text(encoding="utf-8"))
+        if not release_evidence_complete(payload):
             continue
-        payload = {
-            "verified": True,
-            "dataset": dataset,
-            "representative": representative["task_id"],
-            "checks": checks,
-            "recorded_at": time.time(),
-        }
         temporary = path.with_suffix(".json.tmp")
         temporary.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
         temporary.replace(path)
@@ -724,10 +692,15 @@ def write_programme_status(tasks: list[dict], state: dict, controller_job: str) 
         if state.get(task["task_id"], {}).get("state", "unsubmitted") not in SCIENTIFIC_COMPLETE | {"terminal_failure", "superseded_stored_representation", "reused_historical_equivalent"}
     ]
     blocked = [task["task_id"] for task in principal if state.get(task["task_id"], {}).get("state") == "terminal_failure"]
-    if blocked and not unsettled:
+    from schema_study.scientific_coverage import coverage_report
+
+    coverage = coverage_report(tasks, state)
+    if coverage["passed"]:
+        status_name = "COMPLETE"
+    elif blocked and not unsettled:
         status_name = "BLOCKED_REQUIRES_DECISION"
     elif not unsettled:
-        status_name = "COMPLETE"
+        status_name = "BLOCKED_REQUIRES_DECISION"
     elif blocked:
         status_name = "RUNNING_WITH_ISOLATED_EXCEPTIONS"
     else:
@@ -739,7 +712,8 @@ def write_programme_status(tasks: list[dict], state: dict, controller_job: str) 
         "counts": counts,
         "principal_unsettled": len(unsettled),
         "principal_terminal_failures": blocked[:20],
-        "corrected_inputs": corrected_input_manifest().get("contexts_ready", False),
+        "corrected_inputs": bool((corrected_input_manifest().get("acceptance") or {}).get("contexts_passed")),
+        "coverage": {key: value for key, value in coverage.items() if key != "passed"} | {"passed": coverage["passed"]},
         "qwen32_biored_released": qwen32_core_released("biored"),
         "qwen32_drugprot_released": qwen32_core_released("drugprot"),
     }
@@ -915,6 +889,12 @@ CORRECTED_INPUT_MANIFEST = Path("/home/b5ac/freddieyu.b5ac/projects/project_1/st
 ACTIVE_OR_DONE = {"running", "pending", "submitted", "valid_continuation_required", "training_completed", "inference_completed", "completed"}
 
 
+def _corrected_context_files() -> bool:
+    root = Path("/home/b5ac/freddieyu.b5ac/projects/project_1/data/inputs")
+    version = "target_anchored_mesh_ancestor_v1__biomedbert_e1354b7a"
+    return all((root / corpus / version / "contexts.jsonl").is_file() for corpus in ("biored", "bc8"))
+
+
 def corrected_input_manifest() -> dict:
     if not CORRECTED_INPUT_MANIFEST.is_file():
         return {}
@@ -929,13 +909,17 @@ def representation_hold(task: dict, entry: dict | None = None) -> str | None:
     if task.get("family") == "selection_diagnostic":
         return None
     if task.get("representation_version") == CORRECTED_REPRESENTATION:
+        from schema_study.input_acceptance import contexts_accepted, prompts_accepted
+
         manifest = corrected_input_manifest()
-        if manifest.get("concepts_sha256") != "77fa5b41a6e18c277f987dedd74ea28833b8afa4c823b1396c935f5d7ee850a5":
+        if not contexts_accepted(manifest):
             return "corrected_inputs_not_ready"
-        if task.get("family") in {"zero_shot", "few_shot", "adapter_inference"} and not manifest.get("prompts_ready"):
+        if task.get("family") in {"zero_shot", "few_shot", "adapter_inference"} and not prompts_accepted(manifest):
             return "corrected_prompts_not_ready"
-        if not manifest.get("contexts_ready"):
-            return "corrected_inputs_not_ready"
+        if task.get("family") == "principal_training" and str(task.get("entity") or "") in {"E0", "E1", "E2"}:
+            disposition = (manifest.get("cell_disposition") or {}).get(task["task_id"])
+            if disposition != "retrain":
+                return "equivalence_not_classified" if disposition is None else "equivalent_predecessor_unresolved"
         return None
     if task.get("family") == "final_evaluation" and not task.get("representation_version"):
         return None
@@ -959,12 +943,16 @@ def qwen32_release_file(dataset: str) -> Path:
     return PROGRAMME_ROOT / f"qwen32b_{dataset}_release.json"
 
 
-def _release_payload(path: Path) -> bool:
+def _release_record(path: Path) -> dict:
     if not path.is_file():
-        return False
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    required = {"checkpoint_resumed", "development_generation", "adapter_export", "inference_subset"}
-    return payload.get("verified") is True and required <= set(payload.get("checks") or [])
+        return {}
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _release_payload(path: Path) -> bool:
+    from schema_study.checkpoint_roles import release_evidence_complete
+
+    return release_evidence_complete(_release_record(path))
 
 
 def qwen32_core_released(dataset: str = "biored") -> bool:
@@ -974,11 +962,13 @@ def qwen32_core_released(dataset: str = "biored") -> bool:
     return dataset == "biored" and _release_payload(QWEN32_CORE_RELEASE)
 
 
-def controller_decisions(tasks: list[dict], state: dict, running: int, pending: int, verified_external: set[str] | None = None) -> list[dict]:
+def controller_decisions(tasks: list[dict], state: dict, running: int, pending: int, verified_external: set[str] | None = None, active_job_ids: set[str] | None = None) -> list[dict]:
     """Choose submissions from persistent state. An active or completed task is not submitted again."""
     from schema_study.production_plan import MAX_QUEUED_JOBS
 
     verified = verified_external or set()
+    active_jobs = set(active_job_ids or ())
+    input_build_running = "8904148" in active_jobs
     seen_groups = set()
     for task in tasks:
         if "representative" in task:
@@ -1010,6 +1000,30 @@ def controller_decisions(tasks: list[dict], state: dict, running: int, pending: 
         if hold:
             decisions.append({"task_id": task["task_id"], "action": "skip", "reason": hold})
             continue
+        if task.get("family") in {"input_preparation", "input_validation"} and input_build_running:
+            decisions.append({"task_id": task["task_id"], "action": "skip", "reason": "external_input_build_running"})
+            continue
+        if task.get("family") == "input_validation" and not _corrected_context_files():
+            decisions.append({"task_id": task["task_id"], "action": "skip", "reason": "contexts_not_written"})
+            continue
+        if task.get("family") == "input_preparation" and _corrected_context_files():
+            decisions.append({"task_id": task["task_id"], "action": "skip", "reason": "contexts_already_present"})
+            continue
+        if task.get("family") == "path_verification":
+            source_state = next(
+                (
+                    state.get(item["task_id"], {}).get("state")
+                    for item in tasks
+                    if item.get("family") == "principal_training"
+                    and item.get("model") == "qwen32b"
+                    and item.get("dataset") == task.get("dataset")
+                    and not item.get("representation_version")
+                ),
+                None,
+            )
+            if source_state != "training_completed":
+                decisions.append({"task_id": task["task_id"], "action": "skip", "reason": "representative_not_finished"})
+                continue
         if task.get("family") == "selection_diagnostic":
             source_state = state.get(task.get("source_task"), {}).get("state")
             if source_state not in SCIENTIFIC_COMPLETE:

@@ -100,7 +100,7 @@ def main() -> None:
     if concept_sha != FROZEN:
         raise SystemExit(f"Concept fingerprint {concept_sha} is not the frozen mapping.")
     displayed = _display()
-    code = Path("/home/b5ac/freddieyu.b5ac/project_1")
+    code = Path(__import__("os").environ.get("SCHEMA_STUDY_CODE_ROOT") or "/home/b5ac/freddieyu.b5ac/project_1")
     views = {level: {} for level in LEVELS}
     summaries = {}
     for corpus in ("biored", "bc8"):
@@ -125,8 +125,9 @@ def main() -> None:
     manifest = {
         "representation_version": "mesh_ancestor_v1",
         "concepts_sha256": concept_sha,
-        "contexts_ready": True,
+        "contexts_ready": False,
         "prompts_ready": False,
+        "acceptance": {"contexts_passed": False, "prompts_passed": False, "validator": None},
         "contexts": summaries,
         "rerun_training_e0_e2": any(summaries[corpus]["changed_windows"].get(split, 0) for corpus in summaries for split in ("train", "dev")),
         "rerun_inference_e0_e2": any(summaries[corpus]["changed_windows"].get(split, 0) for corpus in summaries for split in ("test", "bc8")),
@@ -141,9 +142,8 @@ def main() -> None:
         write_zero_shot(corpus, output=PROMPT_ROOT, entities=entities, contexts=contexts)
         write_few_shot(corpus, output=PROMPT_ROOT, entities=entities, contexts=contexts)
     _validation(PROMPT_ROOT)
-    manifest["prompts_ready"] = True
     destination.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
-    print(json.dumps({"ready": True, "rerun_training_e0_e2": manifest["rerun_training_e0_e2"], "rerun_inference_e0_e2": manifest["rerun_inference_e0_e2"]}), flush=True)
+    print(json.dumps({"built": True, "accepted": False, "rerun_training_e0_e2": manifest["rerun_training_e0_e2"]}), flush=True)
 
 
 if __name__ == "__main__":

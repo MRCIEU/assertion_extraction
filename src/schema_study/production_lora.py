@@ -496,10 +496,15 @@ def export_peft_adapter(directory: Path, adapter: dict, configuration: dict) -> 
     if not base or str(base) == str(configuration.get("base_revision")):
         raise RuntimeError("The adapter export needs the base-model path. A revision hash is not that path.")
     weights = {}
+    exported_from = {}
     for name, tensor in adapter.items():
         if "lora_" not in name:
             continue
-        weights[peft_key(name)] = tensor.detach().cpu().contiguous()
+        key = peft_key(name)
+        if key in exported_from:
+            raise RuntimeError(f"Parameter-name collision: {exported_from[key]} and {name} both export as {key}.")
+        exported_from[key] = name
+        weights[key] = tensor.detach().cpu().contiguous()
     if not weights:
         raise RuntimeError("The adapter export contains no LoRA tensors.")
     config = {
@@ -667,8 +672,10 @@ def ensure_standard_adapter(adapter_dir: Path, model_name: str) -> Path:
             saved = torch.load(checkpoint, map_location="cpu", weights_only=False)
             if isinstance(saved, dict) and _remember_configuration(configuration, saved.get("configuration") or {}):
                 configured = True
-            if weights is None and isinstance(saved, dict) and saved.get("adapter"):
-                weights = saved.get("best_adapter") or saved["adapter"]
+            if weights is None and isinstance(saved, dict) and (saved.get("adapter") or saved.get("best_adapter")):
+                from schema_study.checkpoint_roles import role_weights
+
+                weights = role_weights(saved, "best")
             if configured and weights is not None:
                 break
         historical = adapter_dir / "adapter_config.json"
@@ -689,8 +696,10 @@ def ensure_standard_adapter(adapter_dir: Path, model_name: str) -> Path:
                 if not candidate.is_file():
                     continue
                 saved = torch.load(candidate, map_location="cpu", weights_only=False)
-                if isinstance(saved, dict) and "adapter" in saved:
-                    weights = saved.get("best_adapter") or saved["adapter"]
+                if isinstance(saved, dict) and ("adapter" in saved or "best_adapter" in saved):
+                    from schema_study.checkpoint_roles import role_weights
+
+                    weights = role_weights(saved, "best")
                     break
                 if isinstance(saved, dict) and any("lora_" in str(key) for key in saved):
                     weights = saved

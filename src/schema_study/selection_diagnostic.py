@@ -9,12 +9,14 @@ import json
 from pathlib import Path
 
 
-def _weights(path: Path) -> tuple[dict, dict]:
+def _weights(path: Path, role: str) -> tuple[dict, dict]:
     import torch
 
+    from schema_study.checkpoint_roles import role_weights, saved_for_role
+
     saved = torch.load(path, map_location="cpu", weights_only=False)
-    weights = saved.get("best_adapter") or saved.get("adapter") or {}
-    return saved, weights
+    weights = role_weights(saved, role)
+    return saved_for_role(saved, role), weights
 
 
 def _same(left: dict, right: dict) -> bool:
@@ -47,6 +49,7 @@ def score_pair(task: dict, workdir: Path) -> dict:
     """Score the recoverable checkpoints. A missing file is a recorded limitation."""
     import torch
 
+    from schema_study.checkpoint_roles import selected_checkpoint
     from schema_study.production_dispatch import _lora_development_score, _metadata_rows
     from schema_study.production_lora import load_causal_lm, restore_into_new_model
     from schema_study.production_plan import execution_manifest
@@ -66,10 +69,10 @@ def score_pair(task: dict, workdir: Path) -> dict:
     if not best_path.is_file() or not last_path.is_file():
         report["limitation"] = "checkpoint_unavailable"
         (workdir / "diagnostic.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
-        publish_scientific_status(workdir, {"scientific": "inference_completed", "limitation": report["limitation"], "predictions_usable": False})
-        return {"completed": True, "status": "inference_completed", "limitation": report["limitation"]}
-    best_saved, best_weights = _weights(best_path)
-    last_saved, last_weights = _weights(last_path)
+        publish_scientific_status(workdir, {"scientific": "diagnostic_recorded", "limitation": report["limitation"], "predictions_usable": False})
+        return {"completed": True, "status": "diagnostic_recorded", "limitation": report["limitation"]}
+    best_saved, best_weights = _weights(best_path, "best")
+    last_saved, last_weights = _weights(last_path, "last")
     report["checkpoints_identical"] = _same(best_weights, last_weights)
     report["best_step"] = best_saved.get("step")
     report["last_step"] = last_saved.get("step")
@@ -93,8 +96,12 @@ def score_pair(task: dict, workdir: Path) -> dict:
         scores["last"] = scores["best"]
     report["corrected_development_micro_f1"] = scores
     report["agreement"] = _agreement(workdir / "best_development_predictions.jsonl", workdir / "last_development_predictions.jsonl")
-    report["selected_checkpoint"] = "best" if scores["best"] >= scores["last"] else "last"
+    report["selected_checkpoint"] = selected_checkpoint(scores)
     report["complete_historical_trajectory"] = False
+    if report["selected_checkpoint"] is None:
+        (workdir / "diagnostic.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+        publish_scientific_status(workdir, {"scientific": "diagnostic_recorded", "predictions_usable": False, "reason": "incomplete_development_score"})
+        return {"completed": True, "status": "diagnostic_recorded", "report": report}
     (workdir / "diagnostic.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     publish_scientific_status(workdir, {
         "scientific": "inference_completed",

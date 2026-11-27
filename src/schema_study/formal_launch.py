@@ -352,7 +352,7 @@ def matched_main(arguments: list[str]) -> int:
             evidence.update(probe_readiness(task))
         running = occupancy["running"]
         pending = occupancy["pending"]
-        decisions = controller_decisions(tasks, state, running, pending, evidence)
+        decisions = controller_decisions(tasks, state, running, pending, evidence, set(queued))
         by_id = {task["task_id"]: task for task in tasks}
         revision = executing_revision(get_paths().code_root) or ""
         snapshot = publish_execution_snapshot(get_paths().code_root, revision)

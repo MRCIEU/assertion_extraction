@@ -223,6 +223,11 @@ EXECUTORS = {
     "gpt_oss": "schema_study.formal_generate:generate",
     "final_evaluation": "schema_study.formal_train:evaluate",
     "selection_diagnostic": "schema_study.selection_diagnostic:score_pair",
+    "input_validation": "schema_study.input_acceptance:validate_publication",
+    "input_preparation": "schema_study.input_acceptance:prepare_contexts",
+    "adapter_numeric": "schema_study.adapter_numeric:compare_adapters",
+    "backend_control": "schema_study.backend_control:compare_backends",
+    "path_verification": "schema_study.path_verification:verify_representative",
     "qwen36": None,
 }
 
@@ -233,7 +238,8 @@ IMPLEMENTED_FAMILIES = {
     "zero_shot", "few_shot", "adapter_inference", "constrained", "thinking",
     "self_consistency", "evidence", "qualified", "candidate_scoring", "certainty",
     "nli", "verifier_adaptation", "analysis", "gpt_oss", "final_evaluation",
-    "selection_diagnostic",
+    "selection_diagnostic", "input_validation", "input_preparation",
+    "adapter_numeric", "backend_control", "path_verification",
 }
 BLOCKED_MODELS = {
     "qwen36": "Transformers 4.57.5 does not recognise model_type qwen3_5. The optional comparison does not block the principal study.",
@@ -318,8 +324,8 @@ def _configuration(task: dict) -> dict:
 
 def _resources(task: dict) -> dict:
     model = task.get("model", "")
-    if task["family"] in {"certainty", "nli", "analysis"}:
-        return {"gpus": 0, "gpu_options": [0], "cpus": 8, "strategy": "cpu", "partition": "workq", "qos": "normal"}
+    if task["family"] in {"certainty", "nli", "analysis", "input_validation", "input_preparation"}:
+        return {"gpus": 0, "gpu_options": [0], "cpus": 16, "strategy": "cpu", "partition": "workq", "qos": "normal"}
     if str(model).startswith("qwen32") or model == "qwen32b":
         return {"gpus": 2, "gpu_options": [1, 2, 4], "cpus": 8, "strategy": "fsdp_full_shard", "parameter_sharding": True, "partition": "workq", "qos": "normal"}
     if str(model).startswith("qwen") or model in {"gpt_oss_20b", "qwen36"}:
@@ -328,6 +334,12 @@ def _resources(task: dict) -> dict:
 
 
 def _walltime(task: dict) -> str:
+    if task["family"] in {"input_validation", "input_preparation"}:
+        return "12:00:00"
+    if task["family"] == "path_verification":
+        return "04:00:00"
+    if task["family"] in {"adapter_numeric", "backend_control"}:
+        return "03:00:00"
     if task["family"] == "selection_diagnostic":
         return "08:00:00"
     if task.get("dataset") == "drugprot" and task["family"] in {"principal_training", "biolinkbert"}:
@@ -589,6 +601,25 @@ def _supplementary_tasks(training: list[dict]) -> list[dict]:
                 "/checkpoints/best/model.pt" if source["family"] in {"hierarchical_multitask", "hierarchical_consistency"} else "/checkpoints/best/checkpoint.pt"
             )
             tasks.append(evaluation)
+            if (
+                source.get("dataset") == "biored"
+                and source.get("family") == "principal_training"
+                and source.get("representation_version") == CORRECTED_REPRESENTATION
+            ):
+                external_evaluation = _task(
+                    "final_evaluation",
+                    dataset="bc8",
+                    entity=source.get("entity"),
+                    predicate=source.get("predicate"),
+                    model=source.get("model") or "biomedbert",
+                    seed=source.get("seed"),
+                    trains_from=source["task_id"],
+                    source_family=source["family"],
+                    representation_version=source["representation_version"],
+                    evaluation_role="external",
+                )
+                external_evaluation["checkpoint_source"] = evaluation["checkpoint_source"]
+                tasks.append(external_evaluation)
     tasks.append(_task("verifier_adaptation", dataset="scifact", model="deberta_base", split="train_development_held_out_from_reported_baseline"))
     for dataset in ("biored", "drugprot", "bc8"):
         tasks.append(_task("analysis", dataset=dataset, statistic="corpus_micro_f1"))
@@ -672,6 +703,19 @@ def selection_diagnostic_tasks() -> list[dict]:
     return tasks
 
 
+def integrity_tasks() -> list[dict]:
+    """Persistent controls. They are not extra scientific conditions."""
+    tasks = [
+        _task("input_preparation", dataset="biored", role="mesh_ancestor_v1_contexts"),
+        _task("input_validation", dataset="biored", role="mesh_ancestor_v1_acceptance"),
+        _task("adapter_numeric", dataset="biored", model="qwen8b", role="rank_8_16_32"),
+        _task("backend_control", dataset="biored", model="qwen8b", role="matched_vllm_transformers"),
+    ]
+    for dataset in ("biored", "drugprot"):
+        tasks.append(_task("path_verification", dataset=dataset, model="qwen32b", role="representative_release"))
+    return tasks
+
+
 def execution_manifest(reuse_drugprot_encoder: bool = True) -> list[dict]:
     """Training, inference, measurement and analysis. Continuation segments are not extra training runs."""
     training = resolved_tasks(reuse_drugprot_encoder)
@@ -682,7 +726,7 @@ def execution_manifest(reuse_drugprot_encoder: bool = True) -> list[dict]:
         if task["family"] in {"adapter_inference", "final_evaluation"}
     ]
     tasks = training + corrected_training + follow + [
-        annotate_task(task) for task in _inference_tasks() + _supplementary_tasks(training) + corrected_prompt_tasks() + selection_diagnostic_tasks()
+        annotate_task(task) for task in _inference_tasks() + _supplementary_tasks(training) + corrected_prompt_tasks() + selection_diagnostic_tasks() + integrity_tasks()
     ]
     inference_families = {"zero_shot", "few_shot", "adapter_inference", "constrained", "thinking", "self_consistency", "evidence", "qualified", "candidate_scoring", "gpt_oss", "final_evaluation"}
     upstream = {}
