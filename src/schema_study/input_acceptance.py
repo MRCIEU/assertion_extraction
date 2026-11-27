@@ -146,6 +146,7 @@ def validate_context_file(
     mention_display: dict | None = None,
     mention_text: dict | None = None,
     authority: dict | None = None,
+    mention_types: dict | None = None,
 ) -> dict:
     """Stream one generated context file. This does not trust the builder's own ready flag."""
     rows = []
@@ -174,7 +175,7 @@ def validate_context_file(
             count_reasons.append(f"split:{split}:{splits.get(split)}!={count}")
     type_failures = 0
     for row in rows:
-        if type_marker_reasons(row, mention_display or {}, mention_text):
+        if type_marker_reasons(row, mention_display or {}, mention_text, mention_types=mention_types):
             type_failures += 1
     population["type_failures"] = type_failures
     population["identity_failures"] = identity_failures
@@ -237,7 +238,13 @@ def classify_equivalence(train_dev_changed: bool, model: str, selection_protocol
     return "reuse"
 
 
-def type_marker_reasons(row: dict, mention_display: dict, mention_text: dict | None = None, levels: tuple[str, ...] = LEVELS) -> list[str]:
+def type_marker_reasons(
+    row: dict,
+    mention_display: dict,
+    mention_text: dict | None = None,
+    levels: tuple[str, ...] = LEVELS,
+    mention_types: dict | None = None,
+) -> list[str]:
     """The displayed label must wrap the target mention. A label elsewhere in the window is not enough."""
     if not mention_display:
         return ["mention_map_missing"]
@@ -282,10 +289,16 @@ def type_marker_reasons(row: dict, mention_display: dict, mention_text: dict | N
         parsed = [item for role in ("H", "T") for item in occurrences(view, role)]
         if not parsed:
             return [f"type:{level}"]
+        from schema_study.inputs import mapped_type
+
         for mention in chosen:
-            label = (mention_display.get(mention) or {}).get(level)
+            shown = (mention_display.get(mention) or {}).get(level)
+            native = None if mention_types is None else mention_types.get(mention)
+            if mention_types is not None and not native:
+                return ["mention_type_missing"]
+            expected = shown if mention_types is None else mapped_type(native, level, {}, shown)
             body_text = mention_text[mention]
-            if not any(body_text in body and (got == label if label else got is None) for got, body in parsed):
+            if not any(body_text in body and got == expected for got, body in parsed):
                 return [f"type:{level}"]
     return []
 
@@ -412,6 +425,19 @@ def _candidate_authority(corpus: str) -> dict[str, dict]:
     }
 
 
+def _mention_types(corpus: str) -> dict:
+    storage = Path("/home/b5ac/freddieyu.b5ac/projects/project_1")
+    path = storage / "data/prepared" / corpus / f"{corpus}_candidates_v2" / "entities.jsonl"
+    mapping = {}
+    if not path.is_file():
+        return mapping
+    for line in path.open(encoding="utf-8"):
+        row = json.loads(line)
+        if row.get("mention_id") and row.get("entity_type"):
+            mapping[row["mention_id"]] = row["entity_type"]
+    return mapping
+
+
 def _mention_text(corpus: str) -> dict:
     storage = Path("/home/b5ac/freddieyu.b5ac/projects/project_1")
     path = storage / "data/prepared" / corpus / f"{corpus}_candidates_v2" / "entities.jsonl"
@@ -477,7 +503,7 @@ def _validate_contexts(task: dict, workdir: Path) -> dict:
             continue
         authority = _candidate_authority(corpus)
         outcome = validate_context_file(
-            generated, set(authority), corpus, _mention_display(corpus), _mention_text(corpus), authority,
+            generated, set(authority), corpus, _mention_display(corpus), _mention_text(corpus), authority, _mention_types(corpus),
         )
         results[corpus] = {key: value for key, value in outcome.items() if key != "examples"}
         results[corpus]["examples"] = outcome["examples"]
