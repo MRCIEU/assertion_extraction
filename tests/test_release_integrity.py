@@ -451,6 +451,12 @@ def test_population_acceptance_is_not_scientific_provenance():
     )
     assert missing["provenance_passed"] is False
     assert missing["missing_output_status"] == 1
+    no_relation = assess_scientific_provenance(
+        [{"candidate_id": "a", "dataset": "biored", "output_status": "valid", "predicted_labels": [], "illegal_labels": []}],
+        task,
+        {"BR_P1_ANY"},
+    )
+    assert no_relation["provenance_passed"] is True
     present = assess_scientific_provenance(
         [{"candidate_id": "a", "dataset": "biored", "output_status": "valid", "predicted_labels": ["BR_P1_ANY"], "illegal_labels": []}],
         task,

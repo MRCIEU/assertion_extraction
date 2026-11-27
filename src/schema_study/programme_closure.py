@@ -164,6 +164,7 @@ def _selected_checkpoint_fingerprint(training_output: str | None, workdir: Path)
     path = next((
         candidate for candidate in (
             root / "checkpoints/best/checkpoint.pt",
+            root / "checkpoints/best/model.pt",
             root / "best_adapter" / "adapter_model.safetensors",
             root / "best" / "adapter_checkpoint.pt",
         )
@@ -383,7 +384,9 @@ def assess_scientific_provenance(rows: list[dict], task: dict, legal_ids: set[st
         if not isinstance(labels, list):
             illegal += 1
             continue
-        if status == "valid" and (not labels or any(label not in legal_ids for label in labels) or row.get("illegal_labels")):
+        if status == "valid" and labels and any(label not in legal_ids for label in labels):
+            illegal += 1
+        elif status == "valid" and row.get("illegal_labels"):
             illegal += 1
         elif status == "valid_empty" and labels:
             illegal += 1
