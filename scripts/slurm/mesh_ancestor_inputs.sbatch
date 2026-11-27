@@ -11,6 +11,8 @@
 #SBATCH --export=ALL
 
 set -euo pipefail
+export TMPDIR="${SLURM_TMPDIR:-/tmp}"
+mkdir -p "$TMPDIR"
 source /home/b5ac/freddieyu.b5ac/miniforge3/etc/profile.d/conda.sh
 conda activate hf-hpc
 export PYTHONNOUSERSITE=1

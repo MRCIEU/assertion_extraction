@@ -8,7 +8,6 @@ import re
 from pathlib import Path
 
 from schema_study.contexts import build_context_tables
-from schema_study.generation_inputs import write_few_shot, write_zero_shot
 
 STORAGE = Path("/home/b5ac/freddieyu.b5ac/projects/project_1")
 STUDY = STORAGE / "studies/schema_granularity_v1"
@@ -136,6 +135,8 @@ def main() -> None:
     destination = STUDY / "reports/representation_corrected/input_manifest.json"
     destination.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     entities = LEVELS
+    from schema_study.generation_inputs import write_few_shot, write_zero_shot
+
     for corpus in ("biored", "bc8"):
         write_zero_shot(corpus, output=PROMPT_ROOT, entities=entities, contexts=contexts)
         write_few_shot(corpus, output=PROMPT_ROOT, entities=entities, contexts=contexts)
