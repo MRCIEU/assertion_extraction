@@ -747,17 +747,24 @@ def manifest_sha256(commit: str, reuse_drugprot_encoder: bool = True) -> str:
 
 
 def executing_revision(code_root: Path) -> str | None:
-    """The checkout that will run, not an environment variable supplied by the caller."""
+    """The checkout that will run. A snapshot is identified by its publication marker, not by a git directory it does not contain."""
     import subprocess
 
-    try:
-        output = subprocess.check_output(
-            ["git", "-C", str(code_root), "rev-parse", "HEAD"],
-            text=True, stderr=subprocess.DEVNULL,
-        )
-    except (OSError, subprocess.CalledProcessError):
+    root = Path(code_root)
+    if (root / ".git").exists():
+        try:
+            output = subprocess.check_output(
+                ["git", "-C", str(root), "rev-parse", "HEAD"],
+                text=True, stderr=subprocess.DEVNULL,
+            )
+        except (OSError, subprocess.CalledProcessError):
+            return None
+        return output.strip() or None
+    marker = root / ".snapshot_complete"
+    if not marker.is_file():
         return None
-    return output.strip() or None
+    recorded = marker.read_text(encoding="utf-8").strip()
+    return recorded if len(recorded) == 40 and all(character in "0123456789abcdef" for character in recorded) else None
 
 
 def gpu_authorised(study_directory: Path, code_root: Path, reuse_drugprot_encoder: bool = True) -> bool:

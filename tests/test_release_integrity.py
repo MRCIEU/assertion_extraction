@@ -135,6 +135,17 @@ def test_parameter_name_collision_is_rejected_before_export():
         raise AssertionError("A colliding export key was accepted.")
 
 
+def test_snapshot_marker_is_the_execution_revision(tmp_path: Path):
+    from schema_study.production_plan import executing_revision
+
+    snapshot = tmp_path / "execution_snapshots" / "abc"
+    snapshot.mkdir(parents=True)
+    commit = "b07c8000ee5d310e9af17863a54cd0d85d2f8224"
+    (snapshot / ".snapshot_complete").write_text(commit + "\n", encoding="utf-8")
+    assert executing_revision(snapshot) == commit
+    assert executing_revision(tmp_path) is None
+
+
 def test_execution_snapshot_is_not_a_storage_collision():
     from schema_study.paths import get_paths, overlaps
 
