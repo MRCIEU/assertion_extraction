@@ -67,6 +67,8 @@ def _candidates(dataset: str, splits: set[str]) -> dict[str, dict]:
 
 
 def _texts(dataset: str, entity: str, wanted: set[str], split_names: set[str]) -> dict[str, str]:
+    """Read the programme's context file. Evaluation must not stay on the module default."""
+    apply_programme()
     found = {}
     with CONTEXTS[dataset].open(encoding="utf-8") as handle:
         for line in handle:

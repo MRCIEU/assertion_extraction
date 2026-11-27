@@ -1043,12 +1043,22 @@ def _lora_development_score(task: dict, evaluation: list[dict], tokenizer, predi
         was_training = model.training
         model.eval()
         rows = []
+        partial = prediction_path.with_name("development_partial.jsonl") if prediction_path is not None else None
+        done = {}
+        if partial is not None and partial.is_file():
+            for line in partial.read_text(encoding="utf-8").splitlines():
+                if line.strip():
+                    row = json.loads(line)
+                    done[row["candidate_id"]] = row
+            rows.extend(done.values())
         fsdp2 = bool(getattr(model, "_schema_study_fsdp2", False))
         context = nullcontext() if fsdp2 or not hasattr(model, "summon_full_params") else model.summon_full_params(writeback=False, rank0_only=True)
 
         def _generate():
             for start in range(0, len(prompts), 4):
                 chunk = prompts[start:start + 4]
+                if all(item[0]["candidate_id"] in done for item in chunk):
+                    continue
                 encoded = [tokenizer.apply_chat_template([{"role": "user", "content": user}], tokenize=True, add_generation_prompt=True, enable_thinking=False) for _record, _predicate, _historical, user in chunk]
                 width = max(len(ids) for ids in encoded)
                 tokens = torch.full((len(chunk), width), int(tokenizer.pad_token_id or 0), dtype=torch.long, device=device)
@@ -1059,10 +1069,17 @@ def _lora_development_score(task: dict, evaluation: list[dict], tokenizer, predi
                     mask[index, offset:] = 1
                 output = generator.generate(tokens, attention_mask=mask, max_new_tokens=256, do_sample=False)
                 for index, (record, predicate, historical, _user) in enumerate(chunk):
+                    if record["candidate_id"] in done:
+                        continue
                     text = tokenizer.decode(output[index][width:], skip_special_tokens=True)
                     parsed = interpret_generation(text, record["candidate_id"], schema, historical)
                     gold = (record.get("assistant") or {}).get("labels", [])
-                    rows.append({"gold": gold, "predicted": parsed["predicted_labels"], "status": "valid" if parsed["ledger_status"] in {"valid", "valid_empty"} else "invalid", "candidate_id": record["candidate_id"], "raw": text, "illegal_labels": parsed.get("illegal_labels", [])})
+                    row = {"gold": gold, "predicted": parsed["predicted_labels"], "status": "valid" if parsed["ledger_status"] in {"valid", "valid_empty"} else "invalid", "candidate_id": record["candidate_id"], "raw": text, "illegal_labels": parsed.get("illegal_labels", [])}
+                    rows.append(row)
+                    done[record["candidate_id"]] = row
+                    if partial is not None and rank == 0:
+                        with partial.open("a", encoding="utf-8") as handle:
+                            handle.write(json.dumps(row, sort_keys=True) + "\n")
             return rows
 
         def _barrier() -> None:
@@ -1198,7 +1215,7 @@ def _evaluate_hierarchical(task: dict, workdir: Path) -> dict:
 
     import torch
 
-    from schema_study.formal_train import _build_rows
+    from schema_study.formal_train import _bind_encoder_contexts, _build_rows
     from schema_study.learning_conditions import HISTORICAL_PREDICATES, RESEARCH_PREDICATES
     from schema_study.production_encoder import SchemaHierarchicalModel, prepare_marker_encoder
     from schema_study.production_records import head_sizes
@@ -1209,6 +1226,7 @@ def _evaluate_hierarchical(task: dict, workdir: Path) -> dict:
     schema = load_schema(default_schema_path(get_paths().code_root, corpus))
     saved = torch.load(checkpoint, map_location="cpu", weights_only=False)
     encoder_name = "biolinkbert" if task.get("model") == "biolinkbert" else "biomedbert"
+    _bind_encoder_contexts(encoder_name)
     encoder, _tokenizer = prepare_marker_encoder(encoder_name, int(task.get("seed") or 13))
     model = SchemaHierarchicalModel(encoder, int(encoder.config.hidden_size), head_sizes(schema, corpus), corpus)
     model.load_state_dict(saved["state_dict"])

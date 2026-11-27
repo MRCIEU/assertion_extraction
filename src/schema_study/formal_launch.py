@@ -26,6 +26,32 @@ SHARDS = {
 GPU_LIMIT_SECONDS = 1000 * 3600
 
 
+def publish_execution_snapshot(code_root: Path, commit: str) -> Path:
+    """Freeze the commit that a future job imports. The controller itself stays on the live checkout."""
+    import io
+    import tarfile
+
+    if not commit or commit == "unknown":
+        raise RuntimeError("A job cannot be submitted without a Git revision to snapshot.")
+    destination = Path("/home/b5ac/freddieyu.b5ac/projects/project_1/execution_snapshots") / commit
+    marker = destination / ".snapshot_complete"
+    if marker.is_file() and (destination / "src" / "schema_study").is_dir():
+        return destination
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    staging = destination.with_name(commit + ".partial")
+    if staging.exists():
+        import shutil
+        shutil.rmtree(staging)
+    staging.mkdir(parents=True)
+    payload = subprocess.check_output(["git", "archive", commit], cwd=code_root)
+    with tarfile.open(fileobj=io.BytesIO(payload), mode="r:") as archive:
+        archive.extractall(staging)
+    marker_staging = staging / ".snapshot_complete"
+    marker_staging.write_text(commit + "\n", encoding="utf-8")
+    staging.rename(destination)
+    return destination
+
+
 def _read_status() -> list[dict]:
     lines = (ROOT / "execution_manifest.tsv").read_text(encoding="utf-8").splitlines()
     header = lines[0].split("\t")
@@ -326,13 +352,17 @@ def matched_main(arguments: list[str]) -> int:
         decisions = controller_decisions(tasks, state, running, pending, evidence)
         by_id = {task["task_id"]: task for task in tasks}
         revision = executing_revision(get_paths().code_root) or ""
+        snapshot = publish_execution_snapshot(get_paths().code_root, revision)
+        submit_env = os.environ.copy()
+        submit_env["SCHEMA_STUDY_CODE_ROOT"] = str(snapshot)
+        submit_env["SCHEMA_STUDY_CODE_REVISION"] = revision
         submitted = 0
         for decision in decisions:
             if decision["action"] != "submit":
                 continue
             command = sbatch_argv(by_id[decision["task_id"]], "scripts/slurm/matched_task.sbatch")
             command.insert(1, "--parsable")
-            result = subprocess.run(command, check=True, capture_output=True, text=True)
+            result = subprocess.run(command, check=True, capture_output=True, text=True, env=submit_env)
             record_submission(state, decision["task_id"], result.stdout.strip().split(";")[0], revision)
             save_controller_state(state_path, state, external_lock=True)
             submitted += 1

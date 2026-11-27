@@ -679,6 +679,37 @@ def probe_readiness(task: dict) -> dict:
     return evidence
 
 
+DEEPER_ENTITIES = {"E3", "E4", "E5", "E6", "E7"}
+QWEN32_CORE_RELEASE = Path("/home/b5ac/freddieyu.b5ac/projects/project_1/studies/schema_granularity_v1/runs/formal/formal_matched_e0_e7/qwen32b_core_release.json")
+
+
+def representation_hold(task: dict, entry: dict | None = None) -> str | None:
+    """Keep unstarted deeper-view work out of the queue. A started job may continue."""
+    current = (entry or {}).get("state")
+    if current in {"running", "pending", "submitted", "valid_continuation_required", "training_completed", "inference_completed", "completed"}:
+        return None
+    if task.get("family") == "final_evaluation":
+        return None
+    entity = str(task.get("entity") or "")
+    if entity in DEEPER_ENTITIES or task.get("exposure") == "exposure_controlled_all_views" or task.get("withheld") == "E3":
+        return "withheld_pending_representation_decision"
+    return None
+
+
+def representative_group(task: dict) -> str:
+    band = "deeper" if representation_hold(task, {}) else "core"
+    return f"{task.get('family')}|{task.get('model')}|{band}|{(task.get('resources') or {}).get('gpus')}"
+
+
+def qwen32_core_released() -> bool:
+    """Core siblings stay queued until checkpoint, development, export and a real inference subset are recorded."""
+    if not QWEN32_CORE_RELEASE.is_file():
+        return False
+    payload = json.loads(QWEN32_CORE_RELEASE.read_text(encoding="utf-8"))
+    required = {"checkpoint_resumed", "development_generation", "adapter_export", "inference_subset"}
+    return payload.get("verified") is True and required <= set(payload.get("checks") or [])
+
+
 def controller_decisions(tasks: list[dict], state: dict, running: int, pending: int, verified_external: set[str] | None = None) -> list[dict]:
     """Choose submissions from persistent state. An active or completed task is not submitted again."""
     from schema_study.production_plan import MAX_QUEUED_JOBS
@@ -691,7 +722,7 @@ def controller_decisions(tasks: list[dict], state: dict, running: int, pending: 
         if "blocked" in task.get("statuses", []):
             task["representative"] = False
             continue
-        key = f"{task.get('family')}|{task.get('model')}|{(task.get('resources') or {}).get('gpus')}"
+        key = representative_group(task)
         task["representative_group"] = key
         task["representative"] = key not in seen_groups
         seen_groups.add(key)
@@ -709,6 +740,18 @@ def controller_decisions(tasks: list[dict], state: dict, running: int, pending: 
             continue
         if task.get("family") in HELD_FAMILIES:
             decisions.append({"task_id": task["task_id"], "action": "skip", "reason": "held_pending_independent_evidence"})
+            continue
+        hold = representation_hold(task, state.get(task["task_id"], {}))
+        if hold:
+            decisions.append({"task_id": task["task_id"], "action": "skip", "reason": hold})
+            continue
+        if (
+            task.get("family") == "principal_training"
+            and task.get("model") == "qwen32b"
+            and task.get("representative") is False
+            and not qwen32_core_released()
+        ):
+            decisions.append({"task_id": task["task_id"], "action": "skip", "reason": "execution_path_unverified"})
             continue
         if current in {"terminal_failure", "blocked"} or "blocked" in task.get("statuses", []):
             decisions.append({"task_id": task["task_id"], "action": "skip", "reason": current if current != "unsubmitted" else "blocked"})

@@ -233,17 +233,19 @@ def train_hierarchical(model: SchemaHierarchicalModel | None = None, steps: int 
                 if mask is not None:
                     mask = mask.to(device)
                 targets = {name: value.to(device) for name, value in targets.items()}
-                # Four examples per forward. Four forwards keep the global batch of 16.
-                micro = 4 if int(token_ids.shape[0]) > 4 else int(token_ids.shape[0])
-                starts = list(range(0, int(token_ids.shape[0]), micro))
+                # Four examples per forward. The backward weight is the chunk's share of the batch,
+                # so a short final chunk does not count as a full chunk. Equal chunks of 16 are unchanged.
+                width = int(token_ids.shape[0])
+                micro = 4 if width > 4 else width
+                starts = list(range(0, width, micro))
                 optimizer.zero_grad(set_to_none=True)
                 for start in starts:
-                    stop = start + micro
+                    stop = min(start + micro, width)
                     part_targets = {name: value[start:stop] for name, value in targets.items()}
                     part_mask = None if mask is None else mask[start:stop]
                     outputs = model(token_ids[start:stop], part_mask)
                     objective, detail = hierarchical_objective(outputs, part_targets, model.corpus, schema, consistency)
-                    (objective / len(starts)).backward()
+                    (objective * ((stop - start) / width)).backward()
                 optimizer.step()
             else:
                 token_ids, targets = item
@@ -296,6 +298,16 @@ def train_hierarchical(model: SchemaHierarchicalModel | None = None, steps: int 
             raise RuntimeError("Hierarchical training received no batches.")
         if batch_fn is None:
             break
+    if production and score_fn is not None and step >= horizon and best is None:
+        metric = float(score_fn(model))
+        best = {"step": step, "development_micro_f1": metric}
+        best_state = {key: value.detach().cpu() for key, value in model.state_dict().items()}
+        if output_dir is not None:
+            _write_checkpoint(Path(output_dir) / "checkpoints/best/model.pt", {
+                "state_dict": best_state,
+                "best": best,
+                "corpus": model.corpus,
+            })
     head_gradients = {name: value for name, value in gradients.items() if name.startswith("heads.")}
     status = training_status(step, horizon, best is not None) if production else "fixture"
     checkpoint_path = Path(output_dir) / "checkpoints/best/model.pt" if output_dir is not None else None

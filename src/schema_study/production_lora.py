@@ -519,7 +519,42 @@ def export_peft_adapter(directory: Path, adapter: dict, configuration: dict) -> 
     save_file(weights, directory / "adapter_model.safetensors")
     if (directory / "adapter_model.safetensors").stat().st_size <= 0:
         raise RuntimeError("The inference adapter export was not published.")
+    _assert_export_identity(weights, directory / "adapter_model.safetensors", configuration)
     return directory
+
+
+def _assert_export_identity(source: dict, path: Path, configuration: dict) -> None:
+    """The published tensors must be the selected tensors, not merely the same rank."""
+    from safetensors import safe_open
+
+    expected_base = str(configuration.get("base_model_path") or configuration.get("base_model_name_or_path") or "")
+    payload = json.loads(path.with_name("adapter_config.json").read_text(encoding="utf-8"))
+    if expected_base and str(payload.get("base_model_name_or_path") or "") != expected_base:
+        raise RuntimeError("The exported adapter names a different base model from the training configuration.")
+    rank = int(configuration["rank"])
+    alpha = int(configuration["alpha"])
+    if int(payload.get("r", -1)) != rank or int(payload.get("lora_alpha", -1)) != alpha:
+        raise RuntimeError("The exported adapter rank or alpha does not match the selected configuration.")
+    if alpha / rank != alpha / rank:
+        raise RuntimeError("The adapter scaling is not a finite alpha/rank ratio.")
+    with safe_open(path, framework="pt") as handle:
+        exported = {name: handle.get_tensor(name) for name in handle.keys()}
+    if len(exported) != len(source):
+        raise RuntimeError(f"The export has {len(exported)} tensors and the selected adapter has {len(source)}.")
+    for name, tensor in source.items():
+        saved = exported.get(name)
+        if saved is None:
+            raise RuntimeError(f"The export is missing {name}.")
+        if tuple(saved.shape) != tuple(tensor.shape):
+            raise RuntimeError(f"{name} changed shape during export.")
+        if not torch.equal(saved.cpu(), tensor.detach().cpu()):
+            raise RuntimeError(f"{name} changed value during export.")
+    modules = set(configuration.get("target_modules") or LORA_TARGET_MODULES)
+    names = list(exported)
+    if any(not any(module in name for name in names) for module in modules):
+        raise RuntimeError("The export does not cover every target module.")
+    if len(names) != len(set(names)):
+        raise RuntimeError("The export repeats a parameter name.")
 
 
 def _agree(flag: bool, device: torch.device, *, source_rank: int | None = None) -> bool:
@@ -668,7 +703,15 @@ def ensure_standard_adapter(adapter_dir: Path, model_name: str) -> Path:
         if int(configuration["rank"]) != rank:
             raise RuntimeError(f"The recorded rank {configuration['rank']} does not match the adapter tensors ({rank}).")
         if _verified_standard(standard, configuration, rank):
-            return standard
+            exported = {peft_key(name): tensor for name, tensor in weights.items() if "lora_" in str(name)}
+            try:
+                _assert_export_identity(exported, standard / "adapter_model.safetensors", configuration)
+            except RuntimeError:
+                rejected = adapter_dir / f"peft_standard_rejected_r{rank}"
+                if not rejected.exists():
+                    standard.rename(rejected)
+            else:
+                return standard
         if standard.exists():
             rejected = adapter_dir / f"peft_standard_rejected_r{rank}"
             if not rejected.exists():
@@ -842,6 +885,26 @@ def fit(
                         temporary.replace(output_dir / "selection.json")
                         if configuration.get("base_model_path"):
                             export_peft_adapter(output_dir / "selected_adapter", selected, configuration)
+        if score_fn is not None and step >= steps and not (best and best.get("development_micro_f1") is not None):
+            model.eval()
+            metric = float(score_fn(model))
+            model.train()
+            selected = _adapter_state(model)
+            best = {"step": step, "development_micro_f1": metric, "adapter": selected}
+            import os
+
+            if output_dir is not None and int(os.environ.get("RANK", "0")) == 0 and selected:
+                selection = {
+                    "optimiser_step": step,
+                    "development_micro_f1": metric,
+                    "recorded_at": time.time(),
+                    "selection_after_horizon": True,
+                }
+                temporary = output_dir / ".selection.json.tmp"
+                temporary.write_text(json.dumps(selection) + "\n", encoding="utf-8")
+                temporary.replace(output_dir / "selection.json")
+                if configuration.get("base_model_path"):
+                    export_peft_adapter(output_dir / "selected_adapter", selected, configuration)
     finally:
         signal.signal(signal.SIGUSR1, previous)
     from schema_study.production_runtime import training_status

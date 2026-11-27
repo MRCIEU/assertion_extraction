@@ -171,24 +171,35 @@ def main() -> None:
                 continue
             summary = scored["summary"]
             summary["invalid_predictions"] = invalid_count
+            contract_failure = int(invalid_count) > 0 and int(summary.get("n_candidates") or summary.get("n") or 0) == int(invalid_count)
             item = {
                 "task_id": task["task_id"],
-                "eligible": verified,
-                "eligibility": "eligible" if verified else "configuration_unverified",
+                "eligible": verified and not contract_failure,
+                "eligibility": "contract_failure" if contract_failure else ("eligible" if verified else "configuration_unverified"),
                 "family": task["family"],
+                "source_family": task.get("source_family"),
+                "trains_from": task.get("trains_from"),
                 "model": task.get("model"),
                 "dataset": target,
                 "entity": task.get("entity"),
                 "predicate": task.get("predicate"),
                 "schema_predicate": level,
                 "seed": task.get("seed"),
+                "fraction": task.get("fraction"),
+                "strategy": task.get("strategy"),
+                "order": task.get("order"),
+                "exposure": task.get("exposure"),
+                "withheld": task.get("withheld"),
+                "loss": task.get("loss"),
+                "evaluation_role": task.get("evaluation_role"),
                 "backend": (task.get("execution") or {}).get("backend") or recorded.get("inference_backend"),
                 "checkpoint": task.get("checkpoint") or task.get("adapter_path"),
                 "input_fingerprint": (task.get("input") or {}).get("fingerprint"),
+                "invalid_predictions": invalid_count,
                 "metrics": _compact(summary),
             }
             inventory.append(item)
-            if not verified:
+            if not verified or contract_failure:
                 continue
             types = {row["candidate_id"]: (row.get("argument_1_type"), row.get("argument_2_type")) for row in population}
             by_document = defaultdict(lambda: [0, 0])
@@ -225,6 +236,16 @@ def main() -> None:
                         "entity": task.get("entity"),
                         "model": task.get("model"),
                         "family": task["family"],
+                        "source_family": task.get("source_family"),
+                        "trains_from": task.get("trains_from"),
+                        "fraction": task.get("fraction"),
+                        "strategy": task.get("strategy"),
+                        "order": task.get("order"),
+                        "exposure": task.get("exposure"),
+                        "withheld": task.get("withheld"),
+                        "loss": task.get("loss"),
+                        "evaluation_role": task.get("evaluation_role"),
+                        "backend": item["backend"],
                         "seed": task.get("seed"),
                         "level": coarse,
                         "metrics": _compact(rolled_score["summary"]),
@@ -239,6 +260,16 @@ def main() -> None:
                     "entity": task.get("entity"),
                     "model": task.get("model"),
                     "family": task["family"],
+                    "source_family": task.get("source_family"),
+                    "trains_from": task.get("trains_from"),
+                    "fraction": task.get("fraction"),
+                    "strategy": task.get("strategy"),
+                    "order": task.get("order"),
+                    "exposure": task.get("exposure"),
+                    "withheld": task.get("withheld"),
+                    "loss": task.get("loss"),
+                    "evaluation_role": task.get("evaluation_role"),
+                    "backend": item["backend"],
                     "seed": task.get("seed"),
                     "level": level,
                     "metrics": _compact(summary),
@@ -248,12 +279,29 @@ def main() -> None:
     _write(inventory, comparisons, differential, entity_differential, document_recall, by_id, state)
 
 
+def _condition_key(item: dict) -> tuple:
+    return (
+        item.get("dataset"), item.get("entity"), item.get("model"), item.get("family"),
+        item.get("source_family"), item.get("trains_from"), item.get("seed"), item.get("level"),
+        item.get("fraction"), item.get("strategy"), item.get("order"), item.get("exposure"),
+        item.get("withheld"), item.get("loss"), item.get("evaluation_role"), item.get("backend"),
+    )
+
+
 def _matched(comparisons: list[dict]) -> list[dict]:
     direct = {}
     mapped = {}
+    collisions = []
     for item in comparisons:
-        key = (item["dataset"], item["entity"], item["model"], item["family"], item["seed"], item["level"])
-        (direct if item["route"] == "direct" else mapped)[key] = item
+        key = _condition_key(item)
+        slot = direct if item["route"] == "direct" else mapped
+        if key in slot and slot[key]["task_id"] != item["task_id"]:
+            collisions.append({"key": [None if part is None else str(part) for part in key], "kept": slot[key]["task_id"], "dropped": item["task_id"]})
+            continue
+        slot[key] = item
+    if collisions:
+        destination = REPORT / "match_collisions.json"
+        destination.write_text(json.dumps(collisions, indent=2) + "\n", encoding="utf-8")
     rows = []
     for key, coarse in direct.items():
         fine = mapped.get(key)
@@ -264,7 +312,10 @@ def _matched(comparisons: list[dict]) -> list[dict]:
         only_direct = (set(coarse["recovered"]) - set(fine["recovered"])) & shared
         only_mapped = (set(fine["recovered"]) - set(coarse["recovered"])) & shared
         rows.append({
-            "dataset": key[0], "entity": key[1], "model": key[2], "family": key[3], "seed": key[4], "level": key[5],
+            "dataset": coarse["dataset"], "entity": coarse["entity"], "model": coarse["model"],
+            "family": coarse["family"], "source_family": coarse.get("source_family"),
+            "trains_from": coarse.get("trains_from"), "seed": coarse.get("seed"), "level": coarse["level"],
+            "direct_task_id": coarse["task_id"], "mapped_task_id": fine["task_id"],
             "shared_positive_candidates": len(shared),
             "recovered_by_both": len(both),
             "recovered_only_by_direct": len(only_direct),

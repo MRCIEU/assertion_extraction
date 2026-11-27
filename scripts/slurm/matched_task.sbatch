@@ -21,17 +21,19 @@ trap 'pkill -USR1 -P $$ || true; for pid in $(pgrep -P $$ || true); do pkill -US
 export PATH=/home/b5ac/freddieyu.b5ac/miniforge3/envs/hf-hpc/bin:/usr/bin:/bin
 export PYTHONDONTWRITEBYTECODE=1
 export PYTHONNOUSERSITE=1
-export PYTHONPATH=/home/b5ac/freddieyu.b5ac/project_1/src
+CODE_ROOT="${SCHEMA_STUDY_CODE_ROOT:-/home/b5ac/freddieyu.b5ac/project_1}"
+export PYTHONPATH="${CODE_ROOT}/src"
 export SCHEMA_STUDY_STORAGE_ROOT=/home/b5ac/freddieyu.b5ac/projects/project_1
 export SCHEMA_STUDY_PROGRAMME=formal_matched_e0_e7
+export SCHEMA_STUDY_CODE_REVISION="${SCHEMA_STUDY_CODE_REVISION:-unknown}"
 
-cd /home/b5ac/freddieyu.b5ac/project_1
+cd "$CODE_ROOT"
 gpus="${SLURM_GPUS_ON_NODE:-${SLURM_GPUS:-1}}"
 # Training stays on hf-hpc. Generation uses the separate vLLM 0.33 runtime.
 # That runtime has its own PyTorch and is not the training stack.
 case "$1" in
   zero_shot|few_shot|constrained|thinking|self_consistency|evidence|qualified|candidate_scoring|gpt_oss)
-    export PYTHONPATH=/home/b5ac/freddieyu.b5ac/project_1/src
+    export PYTHONPATH="${CODE_ROOT}/src"
     export PYTHONNOUSERSITE=1
     # The bundled nvcc is CUDA 13.5 and its headers report CUDA 13.0, so
     # FlashInfer JIT cannot compile. Use vLLM's native sampler and do not
