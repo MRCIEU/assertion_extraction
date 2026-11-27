@@ -18,8 +18,14 @@ DEFAULT_STORAGE = Path("/home/b5ac/freddieyu.b5ac/projects/project_1")
 STUDY_ID = "schema_granularity_v1"
 
 
-def overlaps(left: Path, right: Path) -> bool:
-    return left == right or left.is_relative_to(right) or right.is_relative_to(left)
+def overlaps(storage: Path, code: Path) -> bool:
+    """A snapshot stored under the project storage is code, not a data collision."""
+    if storage == code or storage.is_relative_to(code):
+        return True
+    if not code.is_relative_to(storage):
+        return False
+    relative = code.relative_to(storage)
+    return not (len(relative.parts) >= 2 and relative.parts[0] == "execution_snapshots")
 
 
 @dataclass(frozen=True)

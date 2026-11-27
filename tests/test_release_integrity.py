@@ -135,6 +135,18 @@ def test_parameter_name_collision_is_rejected_before_export():
         raise AssertionError("A colliding export key was accepted.")
 
 
+def test_execution_snapshot_is_not_a_storage_collision():
+    from schema_study.paths import get_paths, overlaps
+
+    storage = Path("/lus/lfs1aip2/projects/b5ac/project_1")
+    snapshot = storage / "execution_snapshots" / "4e29f048bcd72427ec097c080521971d9f91a269"
+    assert overlaps(storage, snapshot) is False
+    assert overlaps(storage, storage / "data") is True
+    if snapshot.is_dir():
+        paths = get_paths(storage, snapshot)
+        assert paths.storage_root == storage
+
+
 def test_canonical_matrix_counts():
     counts = canonical_counts()
     assert counts["principal_training"] == 360
