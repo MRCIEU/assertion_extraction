@@ -6,6 +6,7 @@ filename, a scheduler state, or a builder's own flag as scientific acceptance.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from schema_study.batch_plan import prompt_sha256
@@ -54,7 +55,7 @@ def expected_cells() -> dict[str, list[dict]]:
     return cells
 
 
-def merge_acceptance(existing: dict | None, *, contexts: dict | None = None, prompts: dict | None = None) -> dict:
+def merge_acceptance(existing: dict | None, *, contexts: dict | None = None, prompts: dict | None = None, model_inputs: dict | None = None) -> dict:
     """Update one acceptance branch. A context run must not clear prompt acceptance, or the reverse."""
     body = dict(existing or {})
     acceptance = dict(body.get("acceptance") or {})
@@ -68,6 +69,9 @@ def merge_acceptance(existing: dict | None, *, contexts: dict | None = None, pro
         acceptance["prompts_passed"] = prompts.get("passed") is True
         acceptance["prompt_results"] = prompts
         acceptance["prompt_validator"] = "input_acceptance"
+    if model_inputs is not None:
+        acceptance["model_inputs_passed"] = model_inputs.get("passed") is True
+        acceptance["model_input_fingerprints"] = model_inputs.get("fingerprints")
     body["acceptance"] = acceptance
     body["contexts_ready"] = acceptance.get("contexts_passed") is True
     body["prompts_ready"] = acceptance.get("prompts_passed") is True
@@ -147,6 +151,80 @@ def publish_ledger_acceptance(directory: Path, corpus: str, rows: list[dict], ex
     temporary.write_text(json.dumps(body, indent=2) + "\n", encoding="utf-8")
     temporary.replace(destination)
     return record
+
+
+def accept_completed_ledgers(task: dict, workdir: Path) -> dict:
+    """Validate finished ledgers in place. This does not load a model or repeat inference."""
+    from schema_study.input_acceptance import _candidate_authority
+    from schema_study.production_plan import execution_manifest
+    from schema_study.production_runtime import publish_scientific_status
+
+    import json
+
+    del task
+    workdir.mkdir(parents=True, exist_ok=True)
+    authorities = {}
+    written = 0
+    rejected = 0
+    for item in execution_manifest():
+        if item.get("family") not in {"zero_shot", "few_shot", "adapter_inference", "final_evaluation"}:
+            continue
+        ledger = Path(item.get("output") or "") / "predictions.jsonl"
+        if not ledger.is_file():
+            continue
+        corpus = str(item.get("dataset") or "")
+        if ledger_acceptance_valid(Path(item["output"]), corpus):
+            continue
+        if corpus not in authorities:
+            authorities[corpus] = _candidate_authority(corpus)
+        split = {"biored": "test", "bc8": "bc8", "drugprot": "eval"}[corpus]
+        expected = {identifier for identifier, row in authorities[corpus].items() if row.get("split") == split}
+        outcome = _assess_ledger_file(ledger, expected, corpus)
+        publish_ledger_acceptance(Path(item["output"]), corpus, [], expected)
+        record_path = Path(item["output"]) / "population_acceptance.json"
+        body = json.loads(record_path.read_text(encoding="utf-8"))
+        body[corpus] = {**body.get(corpus, {}), **outcome, "corpus": corpus, "expected_count": len(expected), "ledger_sha256": body.get(corpus, {}).get("ledger_sha256")}
+        temporary = record_path.with_suffix(".json.tmp")
+        temporary.write_text(json.dumps(body, indent=2) + "\n", encoding="utf-8")
+        temporary.replace(record_path)
+        written += 1
+        rejected += 0 if outcome["passed"] else 1
+    publish_scientific_status(workdir, {"scientific": "inference_completed", "ledgers_validated": written, "ledgers_rejected": rejected})
+    return {"completed": True, "status": "inference_completed", "ledgers_validated": written, "ledgers_rejected": rejected}
+
+
+def _assess_ledger_file(path: Path, expected_ids: set[str], corpus: str) -> dict:
+    observed = []
+    contract_failures = 0
+    rows = 0
+    with path.open(encoding="utf-8") as handle:
+        for line in handle:
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            if row.get("dataset") not in {None, corpus}:
+                continue
+            rows += 1
+            status = row.get("output_status") or row.get("status")
+            if status not in {None, "valid", "valid_empty"}:
+                contract_failures += 1
+            identifier = row.get("candidate_id")
+            if identifier:
+                observed.append(identifier)
+    duplicate = len(observed) - len(set(observed))
+    missing = len(expected_ids - set(observed))
+    unexpected = len(set(observed) - expected_ids)
+    contract = rows > 0 and contract_failures == rows
+    passed = not contract and duplicate == 0 and missing == 0 and unexpected == 0 and len(observed) == len(expected_ids) and len(expected_ids) > 0
+    return {
+        "passed": passed,
+        "rows": rows,
+        "duplicate_candidates": duplicate,
+        "missing_candidates": missing,
+        "unexpected_candidates": unexpected,
+        "contract_failures": contract_failures,
+        "reason": "output_contract" if contract else ("identity" if not passed else "accepted"),
+    }
 
 
 def ledger_acceptance_valid(directory: Path, corpus: str) -> bool:

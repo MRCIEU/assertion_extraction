@@ -295,3 +295,82 @@ def test_rolling_checkpoint_and_population_count_do_not_accept_a_cell(tmp_path: 
     assert _cell_accepted("evaluations", cell, supplementary, {"scientific": "inference_completed"}) is False
     assert continuation_is_verified(10, 10, False, 10, 4) is False
     assert continuation_is_verified(10, 10, True, 10, 0) is False
+
+
+def test_continuation_keeps_matching_optimiser_and_selected_weights_apart():
+    from schema_study.path_verification import continuation_package, selected_adapter
+
+    saved = {"step": 4, "scheduler": {"step": 4}, "optimizer": {"state": 1}, "adapter": {"last": 1}, "best_adapter": {"best": 1}}
+    assert continuation_package(saved)["adapter"] == {"last": 1}
+    assert selected_adapter(saved) == {"best": 1}
+    saved["scheduler"]["step"] = 3
+    try:
+        continuation_package(saved)
+    except ValueError:
+        return
+    raise AssertionError("a mismatched scheduler was accepted")
+
+
+def test_repeated_same_step_continuation_blocks_and_advancement_does_not():
+    from schema_study.production_runtime import reconcile_entry
+
+    first = reconcile_entry(
+        {"state": "running", "attempts": 1},
+        "terminal",
+        {"checkpoint_validated": True, "technical_preflight": True, "steps": 100},
+        task_id="cell",
+        slurm_state="FAILED",
+    )
+    assert first["state"] == "valid_continuation_required"
+    second = reconcile_entry(
+        first,
+        "terminal",
+        {"checkpoint_validated": True, "technical_preflight": True, "steps": 100},
+        task_id="cell",
+        slurm_state="FAILED",
+    )
+    assert second["state"] == "valid_continuation_required"
+    third = reconcile_entry(
+        second,
+        "terminal",
+        {"checkpoint_validated": True, "technical_preflight": True, "steps": 100},
+        task_id="cell",
+        slurm_state="FAILED",
+    )
+    assert third["state"] == "terminal_failure"
+    advanced = reconcile_entry(
+        {"state": "running", "attempts": 1, "continuation_step": 100},
+        "terminal",
+        {"checkpoint_validated": True, "scientific": "valid_continuation_required", "checkpoint_validated": True, "steps": 140},
+        task_id="cell",
+        slurm_state="FAILED",
+    )
+    assert advanced["state"] == "valid_continuation_required"
+    assert advanced["continuation_step"] == 140
+
+
+def test_finished_ledger_is_accepted_without_rerunning_inference(tmp_path: Path):
+    from schema_study.programme_closure import _assess_ledger_file, ledger_acceptance_valid, publish_ledger_acceptance
+
+    ledger = tmp_path / "predictions.jsonl"
+    ledger.write_text('{"candidate_id": "a", "dataset": "biored", "output_status": "valid", "predicted_labels": ["x"]}\n', encoding="utf-8")
+    outcome = _assess_ledger_file(ledger, {"a"}, "biored")
+    assert outcome["passed"] is True
+    publish_ledger_acceptance(tmp_path, "biored", [{"candidate_id": "a", "dataset": "biored"}], {"a"})
+    record = __import__("json").loads((tmp_path / "population_acceptance.json").read_text())
+    record["biored"]["passed"] = True
+    record["biored"]["missing_candidates"] = 0
+    (tmp_path / "population_acceptance.json").write_text(__import__("json").dumps(record), encoding="utf-8")
+    assert ledger_acceptance_valid(tmp_path, "biored") is True
+
+
+def test_prompt_preparation_is_submitted_ahead_of_bulk_training():
+    from schema_study.production_plan import MAX_QUEUED_JOBS
+    from schema_study.production_runtime import controller_decisions
+
+    prompt = {"task_id": "prompt-prep", "family": "input_preparation", "role": "mesh_ancestor_v1_prompts", "dataset": "biored", "model": None, "resources": {"gpus": 0}, "statuses": []}
+    training = {"task_id": "train-cell", "family": "principal_training", "dataset": "drugprot", "model": "biomedbert", "entity": "native", "predicate": "P0", "seed": 13, "resources": {"gpus": 1}, "statuses": []}
+    decisions = controller_decisions([training, prompt], {}, 0, MAX_QUEUED_JOBS - 1, set(), set())
+    by_id = {row["task_id"]: row for row in decisions}
+    assert by_id["prompt-prep"]["action"] == "submit"
+    assert by_id["train-cell"]["action"] == "defer"

@@ -556,6 +556,64 @@ def merge_group_block(state: dict, entry: dict) -> dict:
     return entry
 
 
+def _continuation_stalled(current: dict, output: dict) -> bool:
+    """Two exits at the same optimiser step are not useful continuation."""
+    end = output.get("steps")
+    if end is None:
+        end = output.get("optimiser_steps")
+    start = current.get("continuation_step")
+    current["continuation_started_step"] = start
+    current["continuation_ended_step"] = end
+    current["failure_signature"] = output.get("scientific")
+    stalled = start is not None and end is not None and int(end) <= int(start)
+    if stalled:
+        current["unproductive_continuations"] = int(current.get("unproductive_continuations") or 0) + 1
+    else:
+        current["unproductive_continuations"] = 0
+        if end is not None:
+            current["continuation_step"] = int(end)
+    return int(current.get("unproductive_continuations") or 0) >= 2
+
+
+def queue_ledger_acceptance(state: dict, tasks: list[dict]) -> bool:
+    """A finished prediction task still needs identity acceptance. Completion does not publish that record."""
+    from schema_study.programme_closure import ledger_acceptance_valid
+
+    needed = False
+    for task in tasks:
+        if task.get("family") not in {"zero_shot", "few_shot", "adapter_inference", "final_evaluation"}:
+            continue
+        entry = state.get(task["task_id"], {})
+        if entry.get("state") != "inference_completed":
+            continue
+        corpus = str(task.get("dataset") or "")
+        directory = Path(task.get("output") or "")
+        if ledger_acceptance_valid(directory, corpus):
+            continue
+        record = directory / "population_acceptance.json"
+        if record.is_file():
+            body = json.loads(record.read_text(encoding="utf-8"))
+            cell = body.get(corpus) if isinstance(body.get(corpus), dict) else {}
+            if cell.get("passed") is False and not entry.get("ledger_replacement"):
+                state[task["task_id"]] = {
+                    "state": "unsubmitted",
+                    "attempts": int(entry.get("attempts") or 0),
+                    "ledger_replacement": 1,
+                    "reason": cell.get("reason") or "ledger_incompatible",
+                    "job_id": entry.get("job_id"),
+                }
+                continue
+        needed = True
+    if needed:
+        for task in tasks:
+            if task.get("family") != "ledger_acceptance":
+                continue
+            current = state.get(task["task_id"], {}).get("state")
+            if current in SCIENTIFIC_COMPLETE:
+                state[task["task_id"]] = {"state": "unsubmitted", "attempts": 0}
+    return needed
+
+
 def reconcile_entry(entry: dict, scheduler: str, output: dict | None, *, task_id: str = "", group: str | None = None, slurm_state: str = "", elapsed_seconds: int = 0, observation_seconds: float | None = None) -> dict:
     """Join one Slurm observation with the scientific output. Queue time is not useful computation."""
     del elapsed_seconds
@@ -591,6 +649,11 @@ def reconcile_entry(entry: dict, scheduler: str, output: dict | None, *, task_id
         output_record.get("scientific") == "valid_continuation_required" or output_record.get("technical_preflight") is True
     )
     if scheduler == "terminal" and checkpoint_continues:
+        if _continuation_stalled(current, output_record):
+            current["state"] = "terminal_failure"
+            current["reason"] = "unproductive_continuation"
+            current["systematic"] = False
+            return current
         current["state"] = "valid_continuation_required"
         current["scientific"] = "preflight_passed" if output.get("technical_preflight") else "valid_continuation_required"
         current["continuation_segments"] = int(current.get("continuation_segments", 0)) + 1
@@ -999,6 +1062,8 @@ def representation_hold(task: dict, entry: dict | None = None) -> str | None:
         manifest = corrected_input_manifest()
         if not contexts_accepted(manifest):
             return "corrected_inputs_not_ready"
+        if task.get("family") == "principal_training" and (manifest.get("acceptance") or {}).get("model_inputs_passed") is not True:
+            return "model_inputs_unverified"
         if task.get("family") in {"zero_shot", "few_shot", "adapter_inference"} and not prompts_accepted(manifest):
             return "corrected_prompts_not_ready"
         if task.get("family") == "principal_training" and str(task.get("entity") or "") in {"E0", "E1", "E2"}:
@@ -1055,6 +1120,8 @@ def controller_decisions(tasks: list[dict], state: dict, running: int, pending: 
     """Choose submissions from persistent state. An active or completed task is not submitted again."""
     from schema_study.production_plan import MAX_QUEUED_JOBS
 
+    priority = {"input_preparation", "input_validation", "ledger_acceptance", "path_verification"}
+    tasks = sorted(tasks, key=lambda item: 0 if item.get("family") in priority else 1)
     verified = verified_external or set()
     input_build_running = external_input_build_active()
     seen_groups = set()
@@ -1129,6 +1196,9 @@ def controller_decisions(tasks: list[dict], state: dict, running: int, pending: 
             if source_state != "training_completed":
                 decisions.append({"task_id": task["task_id"], "action": "skip", "reason": "representative_not_finished"})
                 continue
+        if task.get("family") == "selection_diagnostic" and task.get("dataset") == "biored":
+            decisions.append({"task_id": task["task_id"], "action": "skip", "reason": "superseded_corrected_retraining"})
+            continue
         if task.get("family") == "selection_diagnostic":
             source_state = state.get(task.get("source_task"), {}).get("state")
             if source_state not in SCIENTIFIC_COMPLETE:

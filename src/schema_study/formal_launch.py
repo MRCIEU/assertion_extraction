@@ -292,6 +292,7 @@ def matched_main(arguments: list[str]) -> int:
         merge_group_block,
         probe_readiness,
         programme_remaining,
+        queue_ledger_acceptance,
         reconcile_entry,
         record_submission,
         save_controller_state,
@@ -352,6 +353,7 @@ def matched_main(arguments: list[str]) -> int:
             evidence.update(probe_readiness(task))
         running = occupancy["running"]
         pending = occupancy["pending"]
+        queue_ledger_acceptance(state, tasks)
         decisions = controller_decisions(tasks, state, running, pending, evidence, set(queued))
         by_id = {task["task_id"]: task for task in tasks}
         revision = executing_revision(get_paths().code_root) or ""

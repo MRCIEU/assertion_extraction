@@ -415,7 +415,7 @@ def _candidate_authority(corpus: str) -> dict[str, dict]:
     """Approved prepared candidates. A historical context file is not this authority."""
     import pyarrow.parquet as pq
 
-    name = "biored_candidates_v2" if corpus == "biored" else "bc8_candidates_v2"
+    name = {"biored": "biored_candidates_v2", "bc8": "bc8_candidates_v2", "drugprot": "drugprot_candidates_v1"}[corpus]
     path = Path("/home/b5ac/freddieyu.b5ac/projects/project_1/data/prepared") / corpus / name / "candidates.parquet"
     table = pq.read_table(path, columns=["candidate_id", "document_id", "split"])
     rows = table.to_pydict()
@@ -469,6 +469,8 @@ def validate_publication(task: dict, workdir: Path) -> dict:
     """Validate one branch. Context acceptance does not reset prompt acceptance."""
     if task.get("role") == "mesh_ancestor_v1_prompts":
         return _validate_prompts(task, workdir)
+    if task.get("role") == "mesh_ancestor_v1_model_inputs":
+        return _validate_model_inputs(task, workdir)
     return _validate_contexts(task, workdir)
 
 
@@ -619,3 +621,75 @@ def _prepare_prompts(workdir: Path) -> dict:
         write_few_shot(corpus, output=root, entities=entities, contexts=contexts)
     publish_scientific_status(workdir, {"scientific": "inference_completed", "action": "prompts_written", "predictions_usable": False})
     return {"completed": True, "status": "inference_completed"}
+
+
+def _validate_model_inputs(task: dict, workdir: Path) -> dict:
+    """Fingerprint the records the production loaders consume. A context file hash is not this record."""
+    import hashlib
+
+    from schema_study.formal_prepare import _fill
+    from schema_study.formal_train import _build_rows
+    from schema_study.learning_conditions import HISTORICAL_PREDICATES
+    from schema_study.production_dispatch import _bind_corrected_contexts, _context_texts, _metadata_rows
+    from schema_study.production_assets import GENERATIVE
+    from schema_study.production_lora import IGNORE_INDEX, batches_from_records
+    from schema_study.production_plan import execution_manifest
+    from schema_study.production_runtime import publish_scientific_status
+    from schema_study.programme_closure import merge_acceptance
+    from schema_study.schemas import default_schema_path, load_schema
+    from schema_study.paths import get_paths
+
+    workdir.mkdir(parents=True, exist_ok=True)
+    storage = Path("/home/b5ac/freddieyu.b5ac/projects/project_1/data/inputs/biored/target_anchored_mesh_ancestor_v1__biomedbert_e1354b7a/contexts.jsonl")
+    source_row = None
+    with storage.open(encoding="utf-8") as handle:
+        for line in handle:
+            row = json.loads(line)
+            if row.get("split") == "train" and (row.get("views") or {}).get("E8"):
+                source_row = row
+                break
+    if source_row is None:
+        publish_scientific_status(workdir, {"scientific": "invalid", "reason": "e8_source_missing"})
+        return {"completed": True, "status": "invalid"}
+    e8_text = source_row["views"]["E8"]
+    _bind_corrected_contexts({"representation_version": "mesh_ancestor_v1", "dataset": "biored"})
+    loaded = _context_texts("biored", {(source_row["candidate_id"], "E8")})[(source_row["candidate_id"], "E8")]
+    encoder_rows, _classes, _schema = _build_rows("biored", "E8", "P0", {"train"})
+    encoder_match = any(row["candidate_id"] == source_row["candidate_id"] and row["text"] == e8_text for row in encoder_rows)
+    schema = load_schema(default_schema_path(get_paths().code_root, "biored"))
+    block = "\n".join(f"- {name}" for name in schema.positive_display_names(HISTORICAL_PREDICATES["P0"]))
+    user = _fill("biored", source_row["candidate_id"], HISTORICAL_PREDICATES["P0"], loaded, {("biored", HISTORICAL_PREDICATES["P0"]): block})
+    fingerprints = {
+        "encoder_rows": len(encoder_rows),
+        "e8_text_sha256": hashlib.sha256(e8_text.encode("utf-8")).hexdigest(),
+        "loader_matches_e8": loaded == e8_text and encoder_match,
+    }
+    passed = loaded == e8_text and encoder_match and len(encoder_rows) == 21755
+    from transformers import AutoTokenizer
+
+    for model_name in ("qwen8b", "qwen32b"):
+        spec = GENERATIVE[model_name]
+        tokenizer = AutoTokenizer.from_pretrained(spec["path"], local_files_only=True, revision=spec.get("revision"))
+        batch = next(batches_from_records([{"user": user, "assistant": json.dumps({"labels": []})}], tokenizer, 1))
+        labels = batch["labels"]
+        masked = bool((labels == IGNORE_INDEX).any()) and bool((labels != IGNORE_INDEX).any())
+        fingerprints[model_name] = {
+            "masked": masked,
+            "tokens": int(batch["input_ids"].shape[-1]),
+            "token_sha256": hashlib.sha256(batch["input_ids"].detach().cpu().numpy().tobytes()).hexdigest(),
+        }
+        passed = passed and masked and int(batch["input_ids"].shape[-1]) <= 512
+    source = next(
+        item for item in execution_manifest()
+        if item.get("representation_version") == "mesh_ancestor_v1" and item.get("entity") == "E8" and item.get("model") == "qwen8b"
+    )
+    e8_rows = [row for row in _metadata_rows(source) if row.get("entity_level") == "E8" and row.get("split") == "train"]
+    fingerprints["e8_metadata_rows"] = len(e8_rows)
+    passed = passed and len(e8_rows) > 0
+    destination = _manifest_path()
+    existing = _load_manifest(destination)
+    payload = merge_acceptance(existing, model_inputs={"passed": passed, "fingerprints": fingerprints})
+    publish_acceptance(destination, payload)
+    status = "inference_completed" if passed else "invalid"
+    publish_scientific_status(workdir, {"scientific": status, "model_inputs_passed": passed})
+    return {"completed": True, "status": status, "model_inputs_passed": passed}

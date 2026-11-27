@@ -228,6 +228,7 @@ EXECUTORS = {
     "adapter_numeric": "schema_study.adapter_numeric:compare_adapters",
     "backend_control": "schema_study.backend_control:compare_backends",
     "path_verification": "schema_study.path_verification:verify_representative",
+    "ledger_acceptance": "schema_study.programme_closure:accept_completed_ledgers",
     "qwen36": None,
 }
 
@@ -239,7 +240,7 @@ IMPLEMENTED_FAMILIES = {
     "self_consistency", "evidence", "qualified", "candidate_scoring", "certainty",
     "nli", "verifier_adaptation", "analysis", "gpt_oss", "final_evaluation",
     "selection_diagnostic", "input_validation", "input_preparation",
-    "adapter_numeric", "backend_control", "path_verification",
+    "adapter_numeric", "backend_control", "path_verification", "ledger_acceptance",
 }
 BLOCKED_MODELS = {
     "qwen36": "Transformers 4.57.5 does not recognise model_type qwen3_5. The optional comparison does not block the principal study.",
@@ -324,7 +325,7 @@ def _configuration(task: dict) -> dict:
 
 def _resources(task: dict) -> dict:
     model = task.get("model", "")
-    if task["family"] in {"certainty", "nli", "analysis", "input_validation", "input_preparation"}:
+    if task["family"] in {"certainty", "nli", "analysis", "input_validation", "input_preparation", "ledger_acceptance"}:
         return {"gpus": 0, "gpu_options": [0], "cpus": 16, "strategy": "cpu", "partition": "workq", "qos": "normal"}
     if str(model).startswith("qwen32") or model == "qwen32b":
         return {"gpus": 2, "gpu_options": [1, 2, 4], "cpus": 8, "strategy": "fsdp_full_shard", "parameter_sharding": True, "partition": "workq", "qos": "normal"}
@@ -334,7 +335,7 @@ def _resources(task: dict) -> dict:
 
 
 def _walltime(task: dict) -> str:
-    if task["family"] in {"input_validation", "input_preparation"}:
+    if task["family"] in {"input_validation", "input_preparation", "ledger_acceptance"}:
         return "12:00:00"
     if task["family"] == "path_verification":
         return "04:00:00"
@@ -712,6 +713,8 @@ def integrity_tasks() -> list[dict]:
         _task("input_validation", dataset="biored", role="mesh_ancestor_v1_acceptance"),
         _task("input_preparation", dataset="biored", role="mesh_ancestor_v1_prompts"),
         _task("input_validation", dataset="biored", role="mesh_ancestor_v1_prompts"),
+        _task("input_validation", dataset="biored", role="mesh_ancestor_v1_model_inputs"),
+        _task("ledger_acceptance", dataset="biored", role="existing_ledgers"),
         _task("adapter_numeric", dataset="biored", model="qwen8b", role="rank_8_16_32"),
         _task("backend_control", dataset="biored", model="qwen8b", role="matched_vllm_transformers"),
     ]

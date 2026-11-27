@@ -74,6 +74,31 @@ def _status_payload(task: dict) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _principal_training_id(cell: dict, representation: str | None) -> str | None:
+    dataset = "biored" if cell["dataset"] == "bc8" else cell["dataset"]
+    key = (cell["model"], dataset, str(cell["entity"]), str(cell["predicate"]), int(cell["seed"]), representation)
+    return _training_ids().get(key)
+
+
+def _training_ids() -> dict:
+    cached = getattr(_training_ids, "values", None)
+    if isinstance(cached, dict):
+        return cached
+    from schema_study.production_plan import execution_manifest
+
+    found = {}
+    for task in execution_manifest():
+        if task.get("family") != "principal_training":
+            continue
+        key = (
+            task.get("model"), task.get("dataset"), str(task.get("entity")), str(task.get("predicate")),
+            int(task.get("seed") or 0), task.get("representation_version"),
+        )
+        found[key] = task["task_id"]
+    _training_ids.values = found
+    return found
+
+
 def _matches(task: dict, cell: dict, kind: str) -> bool:
     if task.get("model") != cell["model"] or str(task.get("entity")) != cell["entity"] or str(task.get("predicate")) != cell["predicate"]:
         return False
@@ -116,6 +141,8 @@ def _cell_accepted(kind: str, cell: dict, task: dict, entry: dict) -> bool:
     from schema_study.programme_closure import ledger_acceptance_valid
 
     if task.get("source_family") not in {None, "principal_training"}:
+        return False
+    if task.get("trains_from") != _principal_training_id(cell, task.get("representation_version")):
         return False
     return ledger_acceptance_valid(Path(task.get("output") or ""), cell["dataset"])
 

@@ -136,6 +136,10 @@ def _invoke_production(task: dict, workdir: Path, *, gpu_permitted: bool = False
         from schema_study.path_verification import verify_representative
 
         return verify_representative(task, workdir)
+    if executor == "schema_study.programme_closure:accept_completed_ledgers":
+        from schema_study.programme_closure import accept_completed_ledgers
+
+        return accept_completed_ledgers(task, workdir)
     if executor == "schema_study.formal_train:train":
         from schema_study.formal_train import train
 
