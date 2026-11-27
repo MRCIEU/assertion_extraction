@@ -62,11 +62,33 @@ def execute_task(task: dict, workdir: Path, *, gpu_permitted: bool) -> dict:
     return _invoke_production(task, workdir, gpu_permitted=gpu_permitted)
 
 
+def _bind_corrected_contexts(task: dict) -> None:
+    """Corrected tasks read mesh_ancestor_v1. Historical tasks keep the stored v2 contexts."""
+    if task.get("representation_version") != "mesh_ancestor_v1":
+        return
+    from schema_study.formal_train import CONTEXTS, _CONTEXT_OVERRIDE
+    from schema_study.production_records import INPUTS
+
+    root = Path("/home/b5ac/freddieyu.b5ac/projects/project_1/data/inputs")
+    for corpus in ("biored", "bc8"):
+        path = root / corpus / "target_anchored_mesh_ancestor_v1__biomedbert_e1354b7a" / "contexts.jsonl"
+        if not path.is_file():
+            raise RuntimeError(f"Corrected contexts are not published for {corpus}.")
+        INPUTS[f"contexts_{corpus}"] = path
+        CONTEXTS[corpus] = path
+        _CONTEXT_OVERRIDE[corpus] = path
+
+
 def _invoke_production(task: dict, workdir: Path, *, gpu_permitted: bool = False) -> dict:
     """Call the registered executor with the task's model, inputs and configuration."""
+    _bind_corrected_contexts(task)
     executor = task["executor"]
     if task.get("model") == "qwen36" or "blocked" in task.get("statuses", []):
         return {"completed": False, "status": "blocked", "reason": task.get("blocked_reason", "blocked")}
+    if executor == "schema_study.selection_diagnostic:score_pair":
+        from schema_study.selection_diagnostic import score_pair
+
+        return score_pair(task, workdir)
     if executor == "schema_study.formal_train:train":
         from schema_study.formal_train import train
 
@@ -234,6 +256,9 @@ def _metadata_rows(task: dict) -> list[dict]:
                 "split": row.get("split", "train"),
                 "assistant": row.get("assistant") or {"labels": []},
             })
+    if task.get("representation_version") == "mesh_ancestor_v1" and task.get("dataset") != "drugprot":
+        if not any(row["entity_level"] == "E8" for row in rows):
+            rows.extend({**row, "entity_level": "E8"} for row in rows if row["entity_level"] == "E2")
     return rows
 
 
@@ -1004,6 +1029,32 @@ def _resume_lora(workdir: Path, model, configuration: dict, fingerprints: dict):
     return saved, model
 
 
+def _trainable_fingerprint(model) -> str:
+    """Hash trainable LoRA tensors. Distributed ranks combine their shard hashes."""
+    import hashlib
+
+    import torch
+
+    digest = hashlib.sha256()
+    pairs = []
+    for name, parameter in model.named_parameters():
+        if not parameter.requires_grad or "lora_" not in name:
+            continue
+        local = parameter.detach()
+        if hasattr(local, "to_local"):
+            local = local.to_local()
+        pairs.append((name, local.float().cpu().contiguous().numpy().tobytes()))
+    for name, blob in sorted(pairs):
+        digest.update(name.encode("utf-8"))
+        digest.update(blob)
+    local_hex = digest.hexdigest()
+    if torch.distributed.is_available() and torch.distributed.is_initialized():
+        gathered = [None] * torch.distributed.get_world_size()
+        torch.distributed.all_gather_object(gathered, f"{torch.distributed.get_rank()}:{local_hex}")
+        return hashlib.sha256("|".join(sorted(str(item) for item in gathered)).encode("utf-8")).hexdigest()
+    return local_hex
+
+
 def _lora_development_score(task: dict, evaluation: list[dict], tokenizer, prediction_path: Path | None = None):
     """Score the development population with the causal model. Test and BC8 rows are not used."""
     from schema_study.formal_prepare import _fill
@@ -1061,7 +1112,7 @@ def _lora_development_score(task: dict, evaluation: list[dict], tokenizer, predi
             str(task.get("task_id")),
             int(optimiser_step),
             expected,
-            checkpoint_fingerprint=str(int(optimiser_step)),
+            checkpoint_fingerprint=_trainable_fingerprint(model),
             population_fingerprint=population_fingerprint,
             prompt_fingerprint=prompt_fingerprint,
             generation_fingerprint="left_pad,slice_at_padded_width,max_new_tokens=256,do_sample=false",

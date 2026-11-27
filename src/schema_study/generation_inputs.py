@@ -69,16 +69,19 @@ class _ConditionWriter:
         return {"directory": str(self.directory), "preserved": False, "requests": self.count, "shards": len(shards)}
 
 
-def write_zero_shot(dataset: str) -> dict:
+def write_zero_shot(dataset: str, *, output: Path | None = None, entities: tuple[str, ...] | None = None, contexts: dict | None = None) -> dict:
     """Render evaluation prompts. Training rows are not generation requests."""
+    destination_root = output or OUTPUT
     tokenizer = _tokenizer()
     blocks = _blocks("biored" if dataset == "bc8" else dataset)
     target_split = EVALUATION_SPLIT[dataset]
-    entities = ("native",) if dataset == "drugprot" else tuple(f"E{level}" for level in range(8))
+    if entities is None:
+        entities = ("native",) if dataset == "drugprot" else tuple(f"E{level}" for level in range(8))
+    context_map = contexts or CONTEXTS
     predicates = ("P0", "P1", "P2", "P3")
-    writers = {(entity, predicate): _ConditionWriter(OUTPUT / "zero_shot" / dataset / entity / predicate) for entity in entities for predicate in predicates}
+    writers = {(entity, predicate): _ConditionWriter(destination_root / "zero_shot" / dataset / entity / predicate) for entity in entities for predicate in predicates}
     split_counts: dict[str, int] = {}
-    with CONTEXTS[dataset].open(encoding="utf-8") as handle:
+    with context_map[dataset].open(encoding="utf-8") as handle:
         for line in handle:
             row = json.loads(line)
             split_counts[row.get("split", "")] = split_counts.get(row.get("split", ""), 0) + 1
@@ -97,20 +100,22 @@ def write_zero_shot(dataset: str) -> dict:
                     writers[(entity, predicate)].add(_request(dataset, row, entity, predicate, prompt, rendered))
     written = [writers[key].finish() for key in sorted(writers)]
     summary = {"dataset": dataset, "split": target_split, "split_counts": split_counts, "conditions": written, "prompt_source": "zero_shot"}
-    destination = OUTPUT / "zero_shot" / dataset / "inventory.json"
+    destination = destination_root / "zero_shot" / dataset / "inventory.json"
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(json.dumps(summary) + "\n", encoding="utf-8")
     return summary
 
 
-def write_few_shot(dataset: str) -> dict:
+def write_few_shot(dataset: str, *, output: Path | None = None, entities: tuple[str, ...] | None = None, contexts: dict | None = None) -> dict:
     """Render retrieved five-shot prompts. A missing demonstration is recorded and not omitted silently."""
+    destination_root = output or OUTPUT
     tokenizer = _tokenizer()
-    entities = ("native",) if dataset == "drugprot" else tuple(f"E{level}" for level in range(8))
+    if entities is None:
+        entities = ("native",) if dataset == "drugprot" else tuple(f"E{level}" for level in range(8))
     predicates = ("P0", "P1", "P2", "P3")
-    texts = _texts(dataset, entities)
+    texts = _texts(dataset, entities, contexts)
     blocks = _blocks("biored" if dataset == "bc8" else dataset)
-    writers = {(entity, predicate): _ConditionWriter(OUTPUT / "few_shot" / dataset / entity / predicate) for entity in entities for predicate in predicates}
+    writers = {(entity, predicate): _ConditionWriter(destination_root / "few_shot" / dataset / entity / predicate) for entity in entities for predicate in predicates}
     eligible = missing_target = missing_demonstration = 0
     with (PREPARATION / f"few_shot_{dataset}.jsonl").open(encoding="utf-8") as handle:
         for line in handle:
@@ -148,7 +153,7 @@ def write_few_shot(dataset: str) -> dict:
         "conditions": written,
         "omitted_unresolved_demonstrations": False,
     }
-    destination = OUTPUT / "few_shot" / dataset / "inventory.json"
+    destination = destination_root / "few_shot" / dataset / "inventory.json"
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(json.dumps(summary) + "\n", encoding="utf-8")
     return summary

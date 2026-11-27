@@ -284,6 +284,7 @@ def matched_main(arguments: list[str]) -> int:
         return 3
     from schema_study.production_plan import executing_revision, execution_manifest
     from schema_study.production_runtime import (
+        account_representation,
         controller_decisions,
         controller_transaction,
         interpret_slurm,
@@ -295,6 +296,7 @@ def matched_main(arguments: list[str]) -> int:
         record_submission,
         save_controller_state,
         sbatch_argv,
+        write_programme_status,
     )
 
     tasks = [task for task in execution_manifest() if "blocked" not in task["statuses"]]
@@ -307,6 +309,7 @@ def matched_main(arguments: list[str]) -> int:
         return 3
     try:
         state = load_controller_state(state_path)
+        account_representation(state, tasks)
         queued, occupancy = _queue_snapshot()
         if queued is None:
             print("formal_gpu_submission=queue_unreadable", flush=True)
@@ -373,6 +376,10 @@ def matched_main(arguments: list[str]) -> int:
     requeue = controller_requeue(os.environ.get("SLURM_JOB_ID", "0"), True, finished=not programme_remaining(tasks, state), active_job_ids=active_ids)
     if requeue is not None:
         subprocess.run(requeue, check=True)
+    try:
+        write_programme_status(tasks, state, os.environ.get("SLURM_JOB_ID", ""))
+    except Exception as error:
+        print(json.dumps({"programme_status_error": str(error)}), flush=True)
     print(json.dumps({"submitted": submitted, "remaining": programme_remaining(tasks, state)}), flush=True)
     return 0
 

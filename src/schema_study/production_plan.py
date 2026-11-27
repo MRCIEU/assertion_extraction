@@ -222,6 +222,7 @@ EXECUTORS = {
     "analysis": "schema_study.analysis_plan:analyse_records",
     "gpt_oss": "schema_study.formal_generate:generate",
     "final_evaluation": "schema_study.formal_train:evaluate",
+    "selection_diagnostic": "schema_study.selection_diagnostic:score_pair",
     "qwen36": None,
 }
 
@@ -232,6 +233,7 @@ IMPLEMENTED_FAMILIES = {
     "zero_shot", "few_shot", "adapter_inference", "constrained", "thinking",
     "self_consistency", "evidence", "qualified", "candidate_scoring", "certainty",
     "nli", "verifier_adaptation", "analysis", "gpt_oss", "final_evaluation",
+    "selection_diagnostic",
 }
 BLOCKED_MODELS = {
     "qwen36": "Transformers 4.57.5 does not recognise model_type qwen3_5. The optional comparison does not block the principal study.",
@@ -326,6 +328,8 @@ def _resources(task: dict) -> dict:
 
 
 def _walltime(task: dict) -> str:
+    if task["family"] == "selection_diagnostic":
+        return "08:00:00"
     if task.get("dataset") == "drugprot" and task["family"] in {"principal_training", "biolinkbert"}:
         return "08:00:00"
     if task["family"] in {"schema_conditioned_lora", "curriculum", "lora_sensitivity"} or task.get("adaptation") == "lora_sft":
@@ -404,10 +408,18 @@ def annotate_task(task: dict) -> dict:
         else:
             source = "few_shot" if task["family"] == "few_shot" else "zero_shot"
             dependencies.append(f"shards:{source}:{dataset}:{entity}:{predicate}")
+            parent = "generation_inputs/mesh_ancestor_v1" if task.get("representation_version") == CORRECTED_REPRESENTATION else "generation_inputs"
             task["shard_directory"] = (
                 "/home/b5ac/freddieyu.b5ac/projects/project_1/studies/schema_granularity_v1/runs/formal/"
-                f"formal_matched_e0_e7/generation_inputs/{source}/{dataset}/{entity}/{predicate}"
+                f"formal_matched_e0_e7/{parent}/{source}/{dataset}/{entity}/{predicate}"
             )
+    if task.get("representation_version") == CORRECTED_REPRESENTATION:
+        task["input"] = {
+            "kind": "mesh_ancestor_v1",
+            "fingerprint": FROZEN_CONCEPT_SHA256,
+            "dataset": dataset,
+            "concepts": "reports/representation_corrected/concepts.jsonl",
+        }
     task["depends_on"] = dependencies
     task["resources"] = _resources(task)
     task["walltime"] = _walltime(task)
@@ -457,8 +469,10 @@ SCIENTIFIC_FIELDS = (
     "family", "dataset", "entity", "predicate", "system", "model", "adaptation", "seed",
     "exposure", "order", "loss", "strategy", "fraction", "withheld", "training_views",
     "learning_rate", "change", "heads", "consistency", "consistency_weight", "final_block",
-    "new_training", "historical_predicate",
+    "new_training", "historical_predicate", "representation_version", "replaces", "source_task",
 )
+CORRECTED_REPRESENTATION = "mesh_ancestor_v1"
+FROZEN_CONCEPT_SHA256 = "77fa5b41a6e18c277f987dedd74ea28833b8afa4c823b1396c935f5d7ee850a5"
 
 
 def resolved_tasks(reuse_drugprot_encoder: bool = True) -> list[dict]:
@@ -538,14 +552,20 @@ def _supplementary_tasks(training: list[dict]) -> list[dict]:
                 fields["exposure"] = source.get("exposure")
                 fields["withheld"] = source.get("withheld")
                 fields["order"] = source.get("order")
+            if source.get("representation_version"):
+                fields["representation_version"] = source["representation_version"]
             inference = _task("adapter_inference", **fields)
             inference["adapter_path"] = task_directory(source) + "/best_adapter"
             tasks.append(inference)
             if source.get("dataset") == "biored" and entity and predicate and "population_filter" not in fields:
-                external = _task(
-                    "adapter_inference", dataset="bc8", entity=entity, predicate=predicate,
-                    model=source.get("model"), seed=source.get("seed"), trains_from=source["task_id"], evaluation_role="external",
-                )
+                external_fields = {
+                    "dataset": "bc8", "entity": entity, "predicate": predicate,
+                    "model": source.get("model"), "seed": source.get("seed"),
+                    "trains_from": source["task_id"], "evaluation_role": "external",
+                }
+                if source.get("representation_version"):
+                    external_fields["representation_version"] = source["representation_version"]
+                external = _task("adapter_inference", **external_fields)
                 external["adapter_path"] = inference["adapter_path"]
                 tasks.append(external)
             elif source.get("dataset") == "biored" and source["family"] == "schema_conditioned_lora":
@@ -557,11 +577,14 @@ def _supplementary_tasks(training: list[dict]) -> list[dict]:
                 external["adapter_path"] = inference["adapter_path"]
                 tasks.append(external)
         if encoder:
-            evaluation = _task(
-                "final_evaluation", dataset=source.get("dataset"), entity=source.get("entity"), predicate=source.get("predicate"),
-                model=source.get("model") or "biomedbert", seed=source.get("seed"), trains_from=source["task_id"],
-                source_family=source["family"],
-            )
+            evaluation_fields = {
+                "dataset": source.get("dataset"), "entity": source.get("entity"), "predicate": source.get("predicate"),
+                "model": source.get("model") or "biomedbert", "seed": source.get("seed"), "trains_from": source["task_id"],
+                "source_family": source["family"],
+            }
+            if source.get("representation_version"):
+                evaluation_fields["representation_version"] = source["representation_version"]
+            evaluation = _task("final_evaluation", **evaluation_fields)
             evaluation["checkpoint_source"] = task_directory(source) + (
                 "/checkpoints/best/model.pt" if source["family"] in {"hierarchical_multitask", "hierarchical_consistency"} else "/checkpoints/best/checkpoint.pt"
             )
@@ -574,10 +597,93 @@ def _supplementary_tasks(training: list[dict]) -> list[dict]:
     return tasks
 
 
+def _historical_principal(model: str, dataset: str, entity: str, predicate: str, seed: int) -> dict:
+    """The stored task identity. Corrected tasks point at it and do not reuse it."""
+    system = {"biomedbert": "M1", "qwen8b": "M4", "qwen32b": "M7"}[model]
+    adaptation = "full_finetune" if model == "biomedbert" else "lora_sft"
+    fields = {
+        "dataset": dataset, "entity": entity, "predicate": predicate, "system": system,
+        "model": model, "adaptation": adaptation, "seed": seed,
+        "new_training": not (dataset == "drugprot" and model == "biomedbert"),
+    }
+    if dataset == "drugprot":
+        fields["historical_predicate"] = {"P0": "P1", "P1": "P2", "P2": "P3", "P3": "P4"}[predicate]
+    return _task("principal_training", **fields)
+
+
+def corrected_principal_tasks() -> list[dict]:
+    """E0–E8 BioRED conditions on mesh_ancestor_v1. DrugProt stays on its native tasks."""
+    tasks = []
+    for model in ("biomedbert", "qwen8b", "qwen32b"):
+        for level in range(9):
+            entity = f"E{level}"
+            for predicate in PREDICATES:
+                for seed in SEEDS:
+                    historical = _historical_principal(model, "biored", entity, predicate, seed) if level <= 7 else None
+                    fields = {
+                        "dataset": "biored", "entity": entity, "predicate": predicate,
+                        "system": {"biomedbert": "M1", "qwen8b": "M4", "qwen32b": "M7"}[model],
+                        "model": model,
+                        "adaptation": "full_finetune" if model == "biomedbert" else "lora_sft",
+                        "seed": seed, "new_training": True,
+                        "representation_version": CORRECTED_REPRESENTATION,
+                    }
+                    if historical is not None:
+                        fields["replaces"] = historical["task_id"]
+                    tasks.append(_task("principal_training", **fields))
+    return tasks
+
+
+def corrected_prompt_tasks() -> list[dict]:
+    """Corrected BioRED and BC8 prompts. E3–E8 are required. E0–E2 run only if the source window changed."""
+    tasks = []
+    for model in ("qwen8b", "qwen32b"):
+        for dataset in ("biored", "bc8"):
+            for level in range(9):
+                entity = f"E{level}"
+                for predicate in PREDICATES:
+                    for paradigm, family in (("zero_shot", "zero_shot"), ("few_shot", "few_shot")):
+                        fields = {
+                            "dataset": dataset, "entity": entity, "predicate": predicate,
+                            "model": model, "paradigm": paradigm, "seed": None,
+                            "representation_version": CORRECTED_REPRESENTATION,
+                        }
+                        if level <= 7:
+                            fields["replaces"] = _task(
+                                family, dataset=dataset, entity=entity, predicate=predicate,
+                                model=model, paradigm=paradigm, seed=None,
+                            )["task_id"]
+                        tasks.append(_task(family, **fields))
+    return tasks
+
+
+def selection_diagnostic_tasks() -> list[dict]:
+    """Best-versus-last rescore. DrugProt waits until its source training has finished."""
+    tasks = []
+    for dataset, entity in (("biored", "E0"), ("biored", "E2"), ("drugprot", "native")):
+        for predicate in ("P0", "P3"):
+            for seed in SEEDS:
+                source = _historical_principal("qwen8b", dataset, entity, predicate, seed)
+                tasks.append(_task(
+                    "selection_diagnostic", dataset=dataset, entity=entity, predicate=predicate,
+                    model="qwen8b", seed=seed, source_task=source["task_id"],
+                    role="best_versus_last",
+                ))
+    return tasks
+
+
 def execution_manifest(reuse_drugprot_encoder: bool = True) -> list[dict]:
     """Training, inference, measurement and analysis. Continuation segments are not extra training runs."""
     training = resolved_tasks(reuse_drugprot_encoder)
-    tasks = training + [annotate_task(task) for task in _inference_tasks() + _supplementary_tasks(training)]
+    corrected_training = [annotate_task(task) for task in corrected_principal_tasks()]
+    follow = [
+        annotate_task(task)
+        for task in _supplementary_tasks(corrected_training)
+        if task["family"] in {"adapter_inference", "final_evaluation"}
+    ]
+    tasks = training + corrected_training + follow + [
+        annotate_task(task) for task in _inference_tasks() + _supplementary_tasks(training) + corrected_prompt_tasks() + selection_diagnostic_tasks()
+    ]
     inference_families = {"zero_shot", "few_shot", "adapter_inference", "constrained", "thinking", "self_consistency", "evidence", "qualified", "candidate_scoring", "gpt_oss", "final_evaluation"}
     upstream = {}
     for task in tasks:

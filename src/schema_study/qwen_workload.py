@@ -53,13 +53,15 @@ def _tokenizer():
     return AutoTokenizer.from_pretrained(TOKENIZER, local_files_only=True)
 
 
-def _texts(corpus: str, entities: tuple[str, ...]) -> dict[str, dict[str, str]]:
+def _texts(corpus: str, entities: tuple[str, ...], contexts: dict | None = None) -> dict[str, dict[str, str]]:
+    table = contexts or CONTEXTS
     found = {}
     for source in context_sources(corpus):
-        with CONTEXTS[source].open(encoding="utf-8") as handle:
+        with table[source].open(encoding="utf-8") as handle:
             for line in handle:
                 row = json.loads(line)
-                found.setdefault(row["candidate_id"], {}).update({entity: row["views"][entity] for entity in entities})
+                views = row.get("views") or {}
+                found.setdefault(row["candidate_id"], {}).update({entity: views[entity] for entity in entities if entity in views})
     return found
 
 

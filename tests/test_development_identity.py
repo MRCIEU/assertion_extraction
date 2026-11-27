@@ -39,6 +39,19 @@ def test_checkpoint_ledgers_do_not_reuse_each_other(tmp_path: Path):
         raise AssertionError("A later checkpoint accepted an earlier ledger.")
 
 
+def test_same_step_different_weights_differ():
+    population = [development_request_key({"candidate_id": "c1", "entity": "E0"}, "P0")]
+    first = development_evaluation_identity("task", 4, population, checkpoint_fingerprint="weights-a")
+    second = development_evaluation_identity("task", 4, population, checkpoint_fingerprint="weights-b")
+    assert first != second
+
+
+def test_historical_principal_identity_is_unchanged():
+    from schema_study.production_plan import _historical_principal
+
+    assert _historical_principal("qwen8b", "biored", "E0", "P0", 13)["task_id"] == "c4057ec5116a397b"
+
+
 def test_prompt_and_parser_bind_the_ledger():
     population = [development_request_key({"candidate_id": "c1", "entity": "E0"}, "P0")]
     first = development_evaluation_identity("task", 4, population, prompt_fingerprint="a", parser_version="interpret_generation")

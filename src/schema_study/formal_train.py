@@ -612,6 +612,9 @@ def _bind_encoder_contexts(model_name: str) -> None:
         CONTEXTS[corpus] = path
 
 
+_CONTEXT_OVERRIDE: dict[str, Path] = {}
+
+
 def apply_programme() -> str:
     """Point a new run at the matched E0–E7 inputs without moving the frozen 2026-11-15 run."""
     global ROOT
@@ -620,6 +623,8 @@ def apply_programme() -> str:
         ROOT = STORAGE / "studies/schema_granularity_v1/runs/formal/formal_matched_e0_e7"
         CONTEXTS["biored"] = STORAGE / "data/inputs/biored/target_anchored_v2__biomedbert_e1354b7a_matched_e0_e7/contexts.jsonl"
         CONTEXTS["bc8"] = STORAGE / "data/inputs/bc8/target_anchored_v2__biomedbert_e1354b7a_matched_e0_e7/contexts.jsonl"
+    for corpus, path in _CONTEXT_OVERRIDE.items():
+        CONTEXTS[corpus] = path
     return programme
 
 
