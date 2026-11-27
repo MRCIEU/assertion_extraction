@@ -39,6 +39,20 @@ def test_checkpoint_ledgers_do_not_reuse_each_other(tmp_path: Path):
         raise AssertionError("A later checkpoint accepted an earlier ledger.")
 
 
+def test_prompt_and_parser_bind_the_ledger():
+    population = [development_request_key({"candidate_id": "c1", "entity": "E0"}, "P0")]
+    first = development_evaluation_identity("task", 4, population, prompt_fingerprint="a", parser_version="interpret_generation")
+    second = development_evaluation_identity("task", 4, population, prompt_fingerprint="b", parser_version="interpret_generation")
+    third = development_evaluation_identity("task", 4, population, prompt_fingerprint="a", parser_version="other_parser")
+    assert len({first, second, third}) == 3
+
+
+def test_incomplete_metric_is_not_a_score():
+    from schema_study.production_runtime import training_status
+
+    assert training_status(12, 12, False) == "valid_continuation_required"
+
+
 def test_shared_schema_views_stay_distinct():
     coarse = development_request_key({"candidate_id": "c1", "entity": "E0"}, "P0")
     fine = development_request_key({"candidate_id": "c1", "entity": "E2"}, "P0")

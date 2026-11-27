@@ -810,6 +810,8 @@ def fit(
     def _apply_development(current: int) -> None:
         nonlocal best
         metric = float(score_fn(model, int(current)))
+        if metric < 0:
+            return
         if best is None or metric > float(best.get("development_micro_f1", -1)):
             selected = _adapter_state(model)
             best = {"step": int(current), "development_micro_f1": metric, "adapter": selected}

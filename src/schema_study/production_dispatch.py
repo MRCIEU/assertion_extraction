@@ -1053,7 +1053,20 @@ def _lora_development_score(task: dict, evaluation: list[dict], tokenizer, predi
         expected = [item[4] for item in prompts]
         if len(expected) != len(set(expected)):
             raise RuntimeError("The development population repeats a candidate, entity and predicate request.")
-        evaluation_id = development_evaluation_identity(str(task.get("task_id")), int(optimiser_step), expected)
+        import hashlib
+
+        prompt_fingerprint = hashlib.sha256("\n".join(item[3] for item in prompts).encode("utf-8")).hexdigest()
+        population_fingerprint = hashlib.sha256(repr(sorted(expected)).encode("utf-8")).hexdigest()
+        evaluation_id = development_evaluation_identity(
+            str(task.get("task_id")),
+            int(optimiser_step),
+            expected,
+            checkpoint_fingerprint=str(int(optimiser_step)),
+            population_fingerprint=population_fingerprint,
+            prompt_fingerprint=prompt_fingerprint,
+            generation_fingerprint="left_pad,slice_at_padded_width,max_new_tokens=256,do_sample=false",
+            parser_version="interpret_generation",
+        )
         ledger_dir = prediction_path.parent / "development_ledgers" if prediction_path is not None else None
         partial = ledger_dir / f"{evaluation_id}.jsonl" if ledger_dir is not None else None
         done = load_development_ledger(partial, evaluation_id, set(expected)) if partial is not None else {}
@@ -1112,12 +1125,12 @@ def _lora_development_score(task: dict, evaluation: list[dict], tokenizer, predi
                 _barrier()
             else:
                 rank0_generation(rank, _generate, _barrier)
-        metric = float(positive_micro_f1(rows)["f1"]) if rank == 0 else 0.0
+        complete = len(done) == len(expected) if rank == 0 else False
+        metric = float(positive_micro_f1(rows)["f1"]) if rank == 0 and complete else -1.0
         if torch.distributed.is_available() and torch.distributed.is_initialized():
             value = torch.tensor([metric], dtype=torch.float64, device=device if device.type == "cuda" else "cpu")
             torch.distributed.broadcast(value, src=0)
             metric = float(value.item())
-        complete = len(done) == len(expected)
         if rank == 0 and prediction_path is not None and complete:
             prediction_path.parent.mkdir(parents=True, exist_ok=True)
             ordered = [done[key] for key in expected]

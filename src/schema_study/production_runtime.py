@@ -307,13 +307,28 @@ def development_request_key(row: dict, predicate: str) -> tuple[str, str, str]:
     )
 
 
-def development_evaluation_identity(task_id: str, optimiser_step: int, request_keys: list[tuple]) -> str:
-    """Bind a ledger to one checkpoint and one request population."""
+def development_evaluation_identity(
+    task_id: str,
+    optimiser_step: int,
+    request_keys: list[tuple],
+    *,
+    checkpoint_fingerprint: str = "",
+    population_fingerprint: str = "",
+    prompt_fingerprint: str = "",
+    generation_fingerprint: str = "",
+    parser_version: str = "",
+) -> str:
+    """Bind a ledger to one checkpoint, one request population, and one decoding contract."""
     import hashlib
 
     payload = {
         "task_id": str(task_id),
         "optimiser_step": int(optimiser_step),
+        "checkpoint_fingerprint": str(checkpoint_fingerprint),
+        "population_fingerprint": str(population_fingerprint),
+        "prompt_fingerprint": str(prompt_fingerprint),
+        "generation_fingerprint": str(generation_fingerprint),
+        "parser_version": str(parser_version),
         "requests": [list(key) for key in sorted(request_keys)],
     }
     return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()[:20]
