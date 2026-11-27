@@ -393,6 +393,8 @@ def restore_into_new_model(saved: dict, model: nn.Module, optimizer, expected: d
     if any("lora_" not in name for name in adapter):
         raise RuntimeError("The checkpoint contains a parameter that is not an adapter weight.")
     required = [name for name, parameter in model.named_parameters() if parameter.requires_grad and "lora_" in name]
+    if not required:
+        raise RuntimeError("The model has no adapter parameters. Restoration would leave the frozen base model.")
     missing = [name for name in required if name not in adapter]
     if missing:
         raise RuntimeError("The checkpoint is missing adapter parameters: " + ", ".join(missing[:5]))

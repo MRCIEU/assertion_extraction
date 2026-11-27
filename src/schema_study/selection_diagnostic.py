@@ -51,7 +51,7 @@ def score_pair(task: dict, workdir: Path) -> dict:
 
     from schema_study.checkpoint_roles import selected_checkpoint
     from schema_study.production_dispatch import _lora_development_score, _metadata_rows
-    from schema_study.production_lora import load_causal_lm, restore_into_new_model
+    from schema_study.production_lora import attach_lora, load_causal_lm, production_configuration, restore_into_new_model
     from schema_study.production_plan import execution_manifest
     from schema_study.production_runtime import publish_scientific_status, select_population
 
@@ -81,6 +81,9 @@ def score_pair(task: dict, workdir: Path) -> dict:
     if any(row.get("split") == "test" for row in development):
         raise RuntimeError("A test row entered the selection diagnostic.")
     model, tokenizer = load_causal_lm(task["model"])
+    attached = attach_lora(model, production_configuration())
+    if not attached:
+        raise RuntimeError("The diagnostic model has no LoRA modules.")
     if torch.cuda.is_available():
         model.to("cuda")
     scores = {}
@@ -104,9 +107,10 @@ def score_pair(task: dict, workdir: Path) -> dict:
         return {"completed": True, "status": "diagnostic_recorded", "report": report}
     (workdir / "diagnostic.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     publish_scientific_status(workdir, {
-        "scientific": "inference_completed",
-        "predictions_usable": True,
+        "scientific": "diagnostic_recorded",
+        "predictions_usable": False,
+        "diagnostic_complete": True,
         "selected_checkpoint": report["selected_checkpoint"],
         "checkpoints_identical": report["checkpoints_identical"],
     })
-    return {"completed": True, "status": "inference_completed", "report": report}
+    return {"completed": True, "status": "diagnostic_recorded", "report": report}

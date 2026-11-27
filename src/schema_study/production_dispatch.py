@@ -84,9 +84,31 @@ def _bind_corrected_contexts(task: dict) -> None:
         _CONTEXT_OVERRIDE[corpus] = path
 
 
+def bind_resolved_artifact(task: dict, entry: dict | None = None) -> None:
+    """A reused training condition supplies its verified weights. An empty corrected directory does not."""
+    source = task.get("trains_from")
+    if not source or task.get("family") not in {"adapter_inference", "final_evaluation"}:
+        return
+    from schema_study.production_runtime import PROGRAMME_ROOT, load_controller_state
+    from schema_study.programme_closure import artifact_valid
+
+    if entry is None:
+        entry = load_controller_state(PROGRAMME_ROOT / "controller_state.json").get(source) or {}
+    if entry.get("scientific") != "reused_historical_equivalent":
+        return
+    artifact = Path(str(entry.get("artifact") or ""))
+    if not artifact_valid(artifact):
+        raise RuntimeError(f"{task.get('task_id')} resolved a reuse record without weights.")
+    if task.get("family") == "adapter_inference":
+        task["adapter_path"] = str(artifact)
+    else:
+        task["checkpoint_source"] = str(artifact)
+
+
 def _invoke_production(task: dict, workdir: Path, *, gpu_permitted: bool = False) -> dict:
     """Call the registered executor with the task's model, inputs and configuration."""
     _bind_corrected_contexts(task)
+    bind_resolved_artifact(task)
     executor = task["executor"]
     if task.get("model") == "qwen36" or "blocked" in task.get("statuses", []):
         return {"completed": False, "status": "blocked", "reason": task.get("blocked_reason", "blocked")}
@@ -1015,6 +1037,9 @@ def _run_generation(task: dict, workdir: Path) -> dict:
         "scientific": status_name,
         "requests": len(expected),
         "predictions_usable": scientific_done,
+        "population_complete": scientific_done,
+        "dataset": task.get("dataset"),
+        "populations": {task.get("dataset"): len(expected)} if scientific_done else {},
         "engine_loads": session.loads,
         "configuration_verified": True,
         "evidence_grounded": task.get("family") == "evidence",

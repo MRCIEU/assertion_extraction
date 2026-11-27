@@ -25,11 +25,15 @@ def verify_representative(task: dict, workdir: Path) -> dict:
 
     workdir.mkdir(parents=True, exist_ok=True)
     dataset = task["dataset"]
+    entity = "native" if dataset == "drugprot" else "E0"
     source = next(
         item for item in execution_manifest()
         if item.get("family") == "principal_training"
         and item.get("model") == "qwen32b"
         and item.get("dataset") == dataset
+        and item.get("entity") == entity
+        and item.get("predicate") == "P0"
+        and int(item.get("seed") or 0) == 13
         and not item.get("representation_version")
     )
     checkpoint = Path(source["output"]) / "adapter_checkpoint.pt"
@@ -50,29 +54,46 @@ def verify_representative(task: dict, workdir: Path) -> dict:
     boundary = Path(source["output"]) / "development_boundaries.json"
     if boundary.is_file():
         record = json.loads(boundary.read_text(encoding="utf-8"))
-        checks["development_evaluation"] = any((value or {}).get("complete") and (value or {}).get("metric", -1) >= 0 for value in record.values())
+        checks["development_evaluation"] = bool(record) and all(
+            isinstance(value, dict) and value.get("complete") is True and int(value.get("requests") or 0) > 0
+            for value in record.values()
+        )
     configuration = production_configuration()
     configuration["device_policy"] = "fsdp"
     configuration["requested_gpus"] = int(task["resources"]["gpus"])
-    checks["effective_batch"] = int(configuration["effective_batch_size"]) == 16
+    recorded_batch = (saved.get("configuration") or {}).get("effective_batch_size")
+    checks["effective_batch"] = int(recorded_batch or 0) == 16
     exported = export_peft_adapter(workdir / "peft_standard", best or last, configuration)
     reloaded_names = set(json.loads((exported / "adapter_config.json").read_text(encoding="utf-8")).get("target_modules") or [])
     checks["adapter_export"] = (exported / "adapter_model.safetensors").is_file() and bool(reloaded_names)
     process = prepare_process(int(task["resources"]["gpus"]))
     model, tokenizer = load_causal_lm("qwen32b")
     attach_lora(model, configuration)
-    restore_into_new_model(saved_for_role(saved, "best") if best is not None else saved, model, None, load_optimizer=False)
-    checks["checkpoint_restored"] = True
+    payload = saved_for_role(saved, "best") if best is not None else saved
+    restored_step, _position = restore_into_new_model(payload, model, None, load_optimizer=False)
+    reference = best or last
+    restored = {
+        name: parameter.detach().cpu()
+        for name, parameter in model.named_parameters()
+        if parameter.requires_grad and "lora_" in name and name in reference
+    }
+    checks["checkpoint_restored"] = int(restored_step) == int(saved.get("step") or -1) and bool(restored)
+    checks["adapter_restored"] = bool(reference) and set(reference) == set(restored) and all(
+        torch.equal(restored[name], reference[name].detach().cpu()) for name in reference
+    )
     device, placement = _apply_device_policy(model, configuration)
     model = placement["model"]
-    checks["sharding"] = bool(getattr(model, "_schema_study_fsdp2", False)) or process["world"] == 1
-    checks["adapter_restored"] = checks["checkpoint_restored"] and checks["adapter_export"]
+    checks["sharding"] = bool(getattr(model, "_schema_study_fsdp2", False)) and int(process["world"]) == int(task["resources"]["gpus"])
     model.eval()
-    tokens = tokenizer("relation", return_tensors="pt")
-    tokens = {key: value.to(device) for key, value in tokens.items()}
-    with torch.no_grad():
-        logits = model(**tokens).logits
-    checks["inference_diagnostic"] = bool(torch.isfinite(logits).all())
+    generated_requests = 0
+    for prompt in ("No relation.", "The gene inhibits the disease."):
+        encoded = tokenizer(prompt, return_tensors="pt")
+        encoded = {key: value.to(device) for key, value in encoded.items()}
+        with torch.no_grad():
+            generated = model.generate(**encoded, max_new_tokens=4, do_sample=False)
+        if generated.shape[-1] > encoded["input_ids"].shape[-1]:
+            generated_requests += 1
+    checks["inference_diagnostic"] = generated_requests == 2
     evidence = {
         "verified": all(checks.values()),
         "dataset": dataset,

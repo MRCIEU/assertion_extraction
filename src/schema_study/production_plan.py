@@ -708,6 +708,8 @@ def integrity_tasks() -> list[dict]:
     tasks = [
         _task("input_preparation", dataset="biored", role="mesh_ancestor_v1_contexts"),
         _task("input_validation", dataset="biored", role="mesh_ancestor_v1_acceptance"),
+        _task("input_preparation", dataset="biored", role="mesh_ancestor_v1_prompts"),
+        _task("input_validation", dataset="biored", role="mesh_ancestor_v1_prompts"),
         _task("adapter_numeric", dataset="biored", model="qwen8b", role="rank_8_16_32"),
         _task("backend_control", dataset="biored", model="qwen8b", role="matched_vllm_transformers"),
     ]

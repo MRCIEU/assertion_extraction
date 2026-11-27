@@ -537,7 +537,13 @@ def predict(dataset: str, entity: str, predicate: str, seed: int, model_name: st
     encoder.load_state_dict(saved["encoder"])
     dropout.load_state_dict(saved["dropout"])
     head.load_state_dict(saved["classifier"])
-    targets = [("biored", "test"), ("bc8", "bc8")] if dataset == "biored" else [("drugprot", "eval")]
+    if dataset == "biored":
+        targets = [("biored", "test"), ("bc8", "bc8")]
+    elif dataset == "bc8":
+        targets = [("bc8", "bc8")]
+    else:
+        targets = [("drugprot", "eval")]
+    populations: dict[str, int] = {}
     with prediction_path.open("w", encoding="utf-8") as handle:
         for target_dataset, split in targets:
             rows, _target_classes, target_schema = _build_rows(target_dataset, entity, predicate, {split})
@@ -548,6 +554,7 @@ def predict(dataset: str, entity: str, predicate: str, seed: int, model_name: st
                 encoder, dropout, head, ids, lengths, rows, classes, "drugprot" if dataset == "drugprot" else "biored",
                 target_schema, predicate, saved["threshold"], torch,
             )
+            populations[target_dataset] = populations.get(target_dataset, 0) + len(rows)
             for row, predicted, scores in zip(rows, labels, probabilities):
                 handle.write(json.dumps({
                     "candidate_id": row["candidate_id"],
@@ -571,7 +578,10 @@ def predict(dataset: str, entity: str, predicate: str, seed: int, model_name: st
 
     publish_scientific_status(output, {
         "scientific": "inference_completed",
-        "predictions_usable": prediction_path.is_file() and prediction_path.stat().st_size > 0,
+        "predictions_usable": prediction_path.is_file() and prediction_path.stat().st_size > 0 and all(populations.values()),
+        "population_complete": bool(populations) and all(count > 0 for count in populations.values()),
+        "populations": populations,
+        "dataset": dataset,
         "checkpoint_validated": True,
         "technical_preflight": True,
         "useful_computation_started": time.time(),

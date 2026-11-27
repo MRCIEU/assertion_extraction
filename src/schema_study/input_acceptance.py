@@ -12,8 +12,9 @@ TARGET_MARKER = re.compile(r"<<T>>")
 LEVELS = tuple(f"E{i}" for i in range(9))
 EXPECTED_COUNTS = {
     "biored": {"all": 35136, "train": 21755, "dev": 6334, "test": 7047},
-    "bc8": {"all": 28734},
+    "bc8": {"all": 28734, "bc8": 28734},
 }
+ALLOWED_SPLITS = {"train", "dev", "test", "bc8"}
 FROZEN_CONCEPT_SHA256 = "77fa5b41a6e18c277f987dedd74ea28833b8afa4c823b1396c935f5d7ee850a5"
 
 
@@ -31,15 +32,26 @@ def assess_context_record(row: dict, levels: tuple[str, ...] = LEVELS) -> list[s
     if row.get("anomaly"):
         reasons.append("anomaly:" + str(row.get("anomaly")))
     lengths = row.get("encoded_length_by_view") or {}
-    if any(int(lengths.get(level) or 0) > 512 for level in levels):
-        reasons.append("over_512")
+    for level in levels:
+        value = lengths.get(level) if isinstance(lengths, dict) else None
+        if value is None:
+            reasons.append("encoded_length_missing:" + level)
+            break
+        try:
+            number = int(value)
+        except (TypeError, ValueError):
+            reasons.append("encoded_length_missing:" + level)
+            break
+        if number <= 0 or number > 512:
+            reasons.append("encoded_length:" + level)
+            break
     if not row.get("candidate_id"):
         reasons.append("missing_candidate_id")
     if not row.get("document_id"):
         reasons.append("missing_document_id")
-    if row.get("split") not in {"train", "dev", "test"}:
+    if row.get("split") not in ALLOWED_SPLITS:
         reasons.append("bad_split")
-    if sum(1 for level in present if len(TARGET_MARKER.findall(views[level])) < 2) and present:
+    if any("<<H>>" not in views[level] or "<<T>>" not in views[level] for level in present):
         reasons.append("target_markers_missing")
     if not row.get("fragments"):
         reasons.append("missing_source_window")
@@ -127,10 +139,18 @@ def _expected_ids(historical: Path) -> set[str]:
     return found
 
 
-def validate_context_file(path: Path, expected_ids: set[str], corpus: str, mention_display: dict | None = None) -> dict:
+def validate_context_file(
+    path: Path,
+    expected_ids: set[str],
+    corpus: str,
+    mention_display: dict | None = None,
+    mention_text: dict | None = None,
+    authority: dict | None = None,
+) -> dict:
     """Stream one generated context file. This does not trust the builder's own ready flag."""
     rows = []
     splits: dict[str, int] = {}
+    identity_failures = 0
     with path.open(encoding="utf-8") as handle:
         for line in handle:
             if not line.strip():
@@ -138,6 +158,10 @@ def validate_context_file(path: Path, expected_ids: set[str], corpus: str, menti
             row = json.loads(line)
             rows.append(row)
             splits[row.get("split") or "missing"] = splits.get(row.get("split") or "missing", 0) + 1
+            if authority is not None:
+                record = authority.get(row.get("candidate_id"))
+                if record is None or record.get("document_id") != row.get("document_id") or record.get("split") != row.get("split"):
+                    identity_failures += 1
     population = assess_population(rows, expected_ids)
     expected = EXPECTED_COUNTS[corpus]
     count_reasons = []
@@ -149,12 +173,12 @@ def validate_context_file(path: Path, expected_ids: set[str], corpus: str, menti
         if splits.get(split) != count:
             count_reasons.append(f"split:{split}:{splits.get(split)}!={count}")
     type_failures = 0
-    if mention_display:
-        for row in rows:
-            if type_marker_reasons(row, mention_display):
-                type_failures += 1
+    for row in rows:
+        if type_marker_reasons(row, mention_display or {}, mention_text):
+            type_failures += 1
     population["type_failures"] = type_failures
-    population["passed"] = bool(population["passed"] and not count_reasons and type_failures == 0)
+    population["identity_failures"] = identity_failures
+    population["passed"] = bool(population["passed"] and not count_reasons and type_failures == 0 and identity_failures == 0)
     population["count_reasons"] = count_reasons
     population["splits"] = splits
     population["sha256"] = _sha(path)
@@ -167,7 +191,6 @@ def publish_acceptance(destination: Path, payload: dict) -> None:
     acceptance = body.setdefault("acceptance", {})
     body["contexts_ready"] = acceptance.get("contexts_passed") is True
     body["prompts_ready"] = acceptance.get("prompts_passed") is True
-    body["concepts_sha256"] = FROZEN_CONCEPT_SHA256
     temporary = destination.with_suffix(".json.tmp")
     temporary.write_text(json.dumps(body, indent=2) + "\n", encoding="utf-8")
     temporary.replace(destination)
@@ -183,13 +206,14 @@ def reuse_decision(task: dict, record: dict | None) -> dict | None:
         return None
     if record.get("model") != task.get("model"):
         return None
-    if record.get("training_tokens_match") is not True or record.get("development_tokens_match") is not True:
+    from schema_study.programme_closure import EQUIVALENCE_METHODS, artifact_valid
+
+    if record.get("rendered_input_match") is not True:
+        return None
+    if record.get("equivalence_method") not in EQUIVALENCE_METHODS:
         return None
     artifact = Path(str(record.get("artifact") or ""))
-    if artifact.is_dir():
-        if not (artifact / "adapter_config.json").is_file() and not (artifact / "checkpoint.pt").is_file():
-            return None
-    elif not artifact.is_file():
+    if not artifact_valid(artifact):
         return None
     if record.get("selection_protocol") == "unrecoverable":
         return None
@@ -200,36 +224,70 @@ def reuse_decision(task: dict, record: dict | None) -> dict | None:
         "artifact": str(artifact),
         "artifact_sha256": record.get("artifact_sha256"),
         "source_task": task["replaces"],
-        "release_evaluation": record.get("evaluation_tokens_match") is not True,
+        "release_evaluation": record.get("evaluation_rendered_match") is not True,
         "selection_protocol": record.get("selection_protocol"),
+        "equivalence_method": record.get("equivalence_method"),
     }
 
 
 def classify_equivalence(train_dev_changed: bool, model: str, selection_protocol: str) -> str:
-    """One condition's disposition. A global window flag is not an argument."""
-    if train_dev_changed:
+    """Rendered-view identity is an encoder input. It is not a Qwen token sequence."""
+    if train_dev_changed or str(model).startswith("qwen") or selection_protocol == "unrecoverable":
         return "retrain"
-    if str(model).startswith("qwen") and selection_protocol != "left_pad_online":
-        return "retrain"
-    if str(model).startswith("qwen"):
-        return "reuse_when_complete"
     return "reuse"
 
 
-def type_marker_reasons(row: dict, mention_display: dict, levels: tuple[str, ...] = LEVELS) -> list[str]:
-    """The displayed label must appear in that level's rendered view."""
-    reasons = []
+def type_marker_reasons(row: dict, mention_display: dict, mention_text: dict | None = None, levels: tuple[str, ...] = LEVELS) -> list[str]:
+    """The displayed label must wrap the target mention. A label elsewhere in the window is not enough."""
+    if not mention_display:
+        return ["mention_map_missing"]
     views = row.get("views") or {}
-    for mention in row.get("marked_mention_ids") or []:
-        shown = mention_display.get(mention) or {}
-        for level in levels:
-            label = shown.get(level)
-            if not label:
-                continue
-            if f"<<TYPE:{label}>>" not in (views.get(level) or ""):
-                reasons.append(f"type:{level}")
-                return reasons
-    return reasons
+    mentions = row.get("anchor_mention_ids") or row.get("marked_mention_ids") or []
+    if len(mentions) < 2:
+        return ["anchor_mentions"]
+    chosen = mentions[:2]
+    if mention_text is not None and any(not mention_text.get(mention) for mention in chosen):
+        return ["mention_text_missing"]
+
+    def occurrences(view: str, role: str) -> list[tuple[str | None, str]]:
+        found = []
+        cursor = 0
+        token = f"<<{role}>>"
+        while True:
+            opened = view.find(token, cursor)
+            if opened < 0:
+                return found
+            rest = view[opened + len(token):]
+            label = None
+            if rest.startswith("<<TYPE:"):
+                end = rest.find(">>")
+                if end < 0:
+                    return found
+                label = rest[len("<<TYPE:"):end]
+                rest = rest[end + 2:]
+            closed = rest.find(f"<</{role}>>")
+            if closed < 0:
+                return found
+            found.append((label, rest[:closed]))
+            cursor = opened + len(token)
+
+    for level in levels:
+        view = views.get(level) or ""
+        if mention_text is None:
+            for mention in chosen:
+                label = (mention_display.get(mention) or {}).get(level)
+                if label and f"<<TYPE:{label}>>" not in view:
+                    return [f"type:{level}"]
+            continue
+        parsed = [item for role in ("H", "T") for item in occurrences(view, role)]
+        if not parsed:
+            return [f"type:{level}"]
+        for mention in chosen:
+            label = (mention_display.get(mention) or {}).get(level)
+            body_text = mention_text[mention]
+            if not any(body_text in body and (got == label if label else got is None) for got, body in parsed):
+                return [f"type:{level}"]
+    return []
 
 
 def _window_changes(new_path: Path, old_path: Path) -> dict[str, dict[str, int]]:
@@ -315,83 +373,212 @@ def _cell_dispositions() -> dict:
         changed = level_changes["train"] + level_changes["dev"] > 0
         label = classify_equivalence(changed, task["model"], protocol)
         artifact = Path(task_directory(predecessor)) / ("checkpoints/best/checkpoint.pt" if task["model"] == "biomedbert" else "best_adapter")
-        finished = (state.get(predecessor["task_id"]) or {}).get("state") == "training_completed"
-        if label == "reuse_when_complete" and finished and not artifact.exists():
-            label = "retrain"
-        if label == "reuse" and not artifact.exists():
+        predecessor_state = (state.get(predecessor["task_id"]) or {}).get("state")
+        method = "encoder_rendered_view" if task["model"] == "biomedbert" and not changed else None
+        if label == "reuse" and predecessor_state in {"terminal_failure", "retryable_failure"} :
             label = "retrain"
         disposition[task["task_id"]] = label
-        if label == "reuse" or (label == "reuse_when_complete" and finished and artifact.exists()):
-            equivalence[task["task_id"]] = {
-                "predecessor": predecessor["task_id"],
-                "source_family": "principal_training",
-                "model": task["model"],
-                "training_tokens_match": not changed,
-                "development_tokens_match": not changed,
-                "evaluation_tokens_match": level_changes["test"] == 0,
-                "selection_protocol": protocol,
-                "artifact": str(artifact),
-            }
+        equivalence[task["task_id"]] = {
+            "predecessor": predecessor["task_id"],
+            "source_family": "principal_training",
+            "model": task["model"],
+            "rendered_input_match": not changed,
+            "evaluation_rendered_match": level_changes["test"] == 0,
+            "equivalence_method": method,
+            "selection_protocol": protocol,
+            "artifact": str(artifact),
+        }
     return {"cell_disposition": disposition, "equivalence": equivalence, "window_changes": changes}
 
 
+def _concept_sha256() -> str:
+    path = Path("/home/b5ac/freddieyu.b5ac/projects/project_1/studies/schema_granularity_v1/reports/representation_corrected/concepts.jsonl")
+    if not path.is_file():
+        return ""
+    return _sha(path)
+
+
+def _candidate_authority(corpus: str) -> dict[str, dict]:
+    """Approved prepared candidates. A historical context file is not this authority."""
+    import pyarrow.parquet as pq
+
+    name = "biored_candidates_v2" if corpus == "biored" else "bc8_candidates_v2"
+    path = Path("/home/b5ac/freddieyu.b5ac/projects/project_1/data/prepared") / corpus / name / "candidates.parquet"
+    table = pq.read_table(path, columns=["candidate_id", "document_id", "split"])
+    rows = table.to_pydict()
+    return {
+        rows["candidate_id"][index]: {"document_id": rows["document_id"][index], "split": rows["split"][index]}
+        for index in range(table.num_rows)
+    }
+
+
+def _mention_text(corpus: str) -> dict:
+    storage = Path("/home/b5ac/freddieyu.b5ac/projects/project_1")
+    path = storage / "data/prepared" / corpus / f"{corpus}_candidates_v2" / "entities.jsonl"
+    mapping = {}
+    if not path.is_file():
+        return mapping
+    for line in path.open(encoding="utf-8"):
+        row = json.loads(line)
+        if row.get("mention_id") and row.get("text"):
+            mapping[row["mention_id"]] = row["text"]
+    return mapping
+
+
+def context_files_complete() -> bool:
+    """Both corrected context files contain the approved row counts. A non-empty file is not complete."""
+    storage = Path("/home/b5ac/freddieyu.b5ac/projects/project_1/data/inputs")
+    version = "target_anchored_mesh_ancestor_v1__biomedbert_e1354b7a"
+    for corpus, expected in (("biored", 35136), ("bc8", 28734)):
+        path = storage / corpus / version / "contexts.jsonl"
+        if not path.is_file():
+            return False
+        count = sum(1 for line in path.open(encoding="utf-8") if line.strip())
+        if count != expected:
+            return False
+    return True
+
+
 def validate_publication(task: dict, workdir: Path) -> dict:
-    """Read the generated files and publish acceptance only when the checks pass."""
+    """Validate one branch. Context acceptance does not reset prompt acceptance."""
+    if task.get("role") == "mesh_ancestor_v1_prompts":
+        return _validate_prompts(task, workdir)
+    return _validate_contexts(task, workdir)
+
+
+def _manifest_path() -> Path:
+    return Path("/home/b5ac/freddieyu.b5ac/projects/project_1/studies/schema_granularity_v1/reports/representation_corrected/input_manifest.json")
+
+
+def _load_manifest(path: Path) -> dict:
+    if not path.is_file():
+        return {}
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _validate_contexts(task: dict, workdir: Path) -> dict:
+    from schema_study.programme_closure import merge_acceptance
     from schema_study.production_runtime import publish_scientific_status
 
     storage = Path("/home/b5ac/freddieyu.b5ac/projects/project_1")
-    study = storage / "studies/schema_granularity_v1"
     version = "target_anchored_mesh_ancestor_v1__biomedbert_e1354b7a"
-    destination = study / "reports/representation_corrected/input_manifest.json"
+    destination = _manifest_path()
     workdir.mkdir(parents=True, exist_ok=True)
+    measured = _concept_sha256()
     results = {}
-    passed = True
+    passed = measured == FROZEN_CONCEPT_SHA256
+    if measured != FROZEN_CONCEPT_SHA256:
+        results["concepts"] = {"passed": False, "measured": measured}
     for corpus in ("biored", "bc8"):
         generated = storage / "data/inputs" / corpus / version / "contexts.jsonl"
-        historical = storage / "data/inputs" / corpus / f"target_anchored_v2__biomedbert_e1354b7a_matched_e0_e7/contexts.jsonl"
         if not generated.is_file():
             results[corpus] = {"passed": False, "reason": "context_file_missing"}
             passed = False
             continue
-        outcome = validate_context_file(generated, _expected_ids(historical), corpus, _mention_display(corpus))
+        authority = _candidate_authority(corpus)
+        outcome = validate_context_file(
+            generated, set(authority), corpus, _mention_display(corpus), _mention_text(corpus), authority,
+        )
         results[corpus] = {key: value for key, value in outcome.items() if key != "examples"}
         results[corpus]["examples"] = outcome["examples"]
         passed = passed and outcome["passed"]
     disposition = _cell_dispositions() if passed else {}
-    payload = {
-        "representation_version": "mesh_ancestor_v1",
-        "concepts_sha256": FROZEN_CONCEPT_SHA256,
-        "acceptance": {
-            "validator": "input_acceptance",
-            "contexts_passed": passed,
-            "prompts_passed": False,
-            "results": results,
-        },
-        "contexts": results,
-        "cell_disposition": disposition.get("cell_disposition") or {},
-        "equivalence": disposition.get("equivalence") or {},
-    }
+    existing = _load_manifest(destination)
+    payload = merge_acceptance(existing, contexts={"passed": passed, "results": results, "concepts_sha256": measured})
+    payload["representation_version"] = "mesh_ancestor_v1"
+    payload["contexts"] = results
+    if disposition:
+        payload["cell_disposition"] = disposition.get("cell_disposition") or {}
+        payload["equivalence"] = disposition.get("equivalence") or {}
+        payload["window_changes"] = disposition.get("window_changes") or {}
     publish_acceptance(destination, payload)
     status = "inference_completed" if passed else "invalid"
-    publish_scientific_status(workdir, {"scientific": status, "predictions_usable": False, "contexts_passed": passed})
+    publish_scientific_status(workdir, {"scientific": status, "predictions_usable": False, "contexts_passed": passed, "population_complete": passed})
     return {"completed": True, "status": status}
 
 
+def _validate_prompts(task: dict, workdir: Path) -> dict:
+    """Read shard bytes. A context acceptance record cannot set this branch."""
+    from schema_study.programme_closure import assess_prompt_requests, merge_acceptance
+    from schema_study.production_runtime import publish_scientific_status
+
+    root = Path("/home/b5ac/freddieyu.b5ac/projects/project_1/studies/schema_granularity_v1/runs/formal/formal_matched_e0_e7/generation_inputs/mesh_ancestor_v1")
+    workdir.mkdir(parents=True, exist_ok=True)
+    failures = []
+    checked = 0
+    expected_by_corpus = {}
+    version = "target_anchored_mesh_ancestor_v1__biomedbert_e1354b7a"
+    storage = Path("/home/b5ac/freddieyu.b5ac/projects/project_1/data/inputs")
+    for corpus, split in (("biored", "test"), ("bc8", "bc8")):
+        ids = set()
+        path = storage / corpus / version / "contexts.jsonl"
+        if path.is_file():
+            for line in path.open(encoding="utf-8"):
+                if not line.strip():
+                    continue
+                row = json.loads(line)
+                if row.get("split") == split:
+                    ids.add(row["candidate_id"])
+        expected_by_corpus[corpus] = ids
+    for source in ("zero_shot", "few_shot"):
+        for corpus in ("biored", "bc8"):
+            for entity in LEVELS:
+                for predicate in ("P0", "P1", "P2", "P3"):
+                    directory = root / source / corpus / entity / predicate
+                    rows = []
+                    if directory.is_dir():
+                        for shard in sorted(directory.glob("shard_*.jsonl")):
+                            for line in shard.open(encoding="utf-8"):
+                                if line.strip():
+                                    rows.append(json.loads(line))
+                    outcome = assess_prompt_requests(rows, expected_by_corpus[corpus], entity, predicate)
+                    checked += 1
+                    if not outcome["passed"]:
+                        failures.append({"directory": str(directory), **outcome})
+    passed = checked == 144 and not failures
+    destination = _manifest_path()
+    existing = _load_manifest(destination)
+    payload = merge_acceptance(existing, prompts={"passed": passed, "conditions": checked, "failures": failures[:8]})
+    publish_acceptance(destination, payload)
+    status = "inference_completed" if passed else "invalid"
+    publish_scientific_status(workdir, {"scientific": status, "predictions_usable": False, "prompts_passed": passed, "population_complete": passed})
+    return {"completed": True, "status": status, "prompts_passed": passed}
+
+
 def prepare_contexts(task: dict, workdir: Path) -> dict:
-    """Build corrected contexts only when the generated file is absent. Do not overwrite a running build."""
+    """Rebuild only an incomplete context file. A non-empty partial file is not finished."""
     import os
     import subprocess
 
     from schema_study.production_runtime import publish_scientific_status
 
-    storage = Path("/home/b5ac/freddieyu.b5ac/projects/project_1")
-    version = "target_anchored_mesh_ancestor_v1__biomedbert_e1354b7a"
-    existing = [storage / "data/inputs" / corpus / version / "contexts.jsonl" for corpus in ("biored", "bc8")]
     workdir.mkdir(parents=True, exist_ok=True)
-    if all(path.is_file() and path.stat().st_size > 0 for path in existing):
-        publish_scientific_status(workdir, {"scientific": "inference_completed", "action": "files_already_present"})
+    if task.get("role") == "mesh_ancestor_v1_prompts":
+        return _prepare_prompts(workdir)
+    if context_files_complete():
+        publish_scientific_status(workdir, {"scientific": "inference_completed", "action": "complete_files_preserved"})
         return {"completed": True, "status": "inference_completed"}
     code = Path(os.environ.get("SCHEMA_STUDY_CODE_ROOT") or "/home/b5ac/freddieyu.b5ac/project_1")
     subprocess.run(["python", str(code / "scripts/build_mesh_ancestor_inputs.py")], check=True, cwd=code)
-    publish_scientific_status(workdir, {"scientific": "inference_completed", "action": "built"})
+    complete = context_files_complete()
+    publish_scientific_status(workdir, {"scientific": "inference_completed" if complete else "invalid", "action": "built", "population_complete": complete})
+    return {"completed": True, "status": "inference_completed" if complete else "invalid"}
+
+
+def _prepare_prompts(workdir: Path) -> dict:
+    from schema_study.generation_inputs import write_few_shot, write_zero_shot
+    from schema_study.production_runtime import publish_scientific_status
+
+    version = "target_anchored_mesh_ancestor_v1__biomedbert_e1354b7a"
+    storage = Path("/home/b5ac/freddieyu.b5ac/projects/project_1/data/inputs")
+    contexts = {corpus: storage / corpus / version / "contexts.jsonl" for corpus in ("biored", "bc8")}
+    if not all(path.is_file() for path in contexts.values()):
+        publish_scientific_status(workdir, {"scientific": "invalid", "reason": "contexts_absent"})
+        return {"completed": True, "status": "invalid"}
+    root = Path("/home/b5ac/freddieyu.b5ac/projects/project_1/studies/schema_granularity_v1/runs/formal/formal_matched_e0_e7/generation_inputs/mesh_ancestor_v1")
+    entities = LEVELS
+    for corpus in ("biored", "bc8"):
+        write_zero_shot(corpus, output=root, entities=entities, contexts=contexts)
+        write_few_shot(corpus, output=root, entities=entities, contexts=contexts)
+    publish_scientific_status(workdir, {"scientific": "inference_completed", "action": "prompts_written", "predictions_usable": False})
     return {"completed": True, "status": "inference_completed"}

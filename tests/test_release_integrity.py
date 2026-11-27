@@ -12,14 +12,15 @@ from schema_study.input_acceptance import (
     reuse_decision,
     type_marker_reasons,
 )
-from schema_study.scientific_coverage import canonical_counts, completion_allowed
+from schema_study.programme_closure import assess_prompt_requests, merge_acceptance, resolve_equivalence
+from schema_study.scientific_coverage import canonical_counts, completion_allowed, coverage_report
 
 
 def _row(candidate: str, levels: tuple[str, ...] = tuple(f"E{i}" for i in range(9))) -> dict:
     views = {level: f"<<T>>alpha<</T>> and <<T>>beta<</T>> <<TYPE:{level}>>" for level in levels}
     views = {level: text.replace(f"<<TYPE:{level}>>", "") if level == "E0" else text for level, text in views.items()}
     bare = "source"
-    views = {level: bare + ("" if level == "E0" else f"<<TYPE:{level}>>") + "<<T>>a<</T>><<T>>b<</T>>" for level in levels}
+    views = {level: bare + ("" if level == "E0" else f"<<TYPE:{level}>>") + "<<H>>a<</H>><<T>>b<</T>>" for level in levels}
     return {
         "candidate_id": candidate,
         "document_id": "1",
@@ -68,8 +69,8 @@ def test_loose_and_supplementary_predecessors_are_rejected(tmp_path: Path):
         "predecessor": "principal-1",
         "source_family": "lora_sensitivity",
         "model": "biomedbert",
-        "training_tokens_match": True,
-        "development_tokens_match": True,
+        "rendered_input_match": True,
+        "equivalence_method": "encoder_rendered_view",
         "artifact": str(artifact),
         "selection_protocol": "encoder_loss",
     }
@@ -89,9 +90,9 @@ def test_reused_model_releases_changed_evaluation(tmp_path: Path):
             "predecessor": "principal-1",
             "source_family": "principal_training",
             "model": "biomedbert",
-            "training_tokens_match": True,
-            "development_tokens_match": True,
-            "evaluation_tokens_match": False,
+            "rendered_input_match": True,
+            "equivalence_method": "encoder_rendered_view",
+            "evaluation_rendered_match": False,
             "selection_protocol": "encoder_loss",
             "artifact": str(artifact),
         },
@@ -114,6 +115,7 @@ def test_incomplete_score_selects_nothing():
     assert selected_checkpoint({"best": 0.4, "last": -1}) is None
     assert selected_checkpoint({"best": 0.2, "last": 0.4}) == "last"
     assert classify_equivalence(False, "qwen8b", "unrecoverable") == "retrain"
+    assert classify_equivalence(False, "qwen8b", "left_pad_online") == "retrain"
     assert classify_equivalence(False, "biomedbert", "encoder_loss") == "reuse"
 
 
@@ -138,3 +140,81 @@ def test_canonical_matrix_counts():
     assert counts["principal_training"] == 360
     assert counts["principal_prompts"] == 304
     assert counts["principal_evaluations"] == 684
+    assert counts["biored_evaluations"] == 324
+    assert counts["bc8_evaluations"] == 324
+    assert counts["drugprot_evaluations"] == 36
+    report = coverage_report([], {})
+    assert report["passed"] is False
+    assert report["cells"] == 1348
+    assert report["missing"] == 1348
+
+
+def test_missing_encoded_length_and_empty_type_map_are_rejected():
+    row = _row("c1")
+    del row["encoded_length_by_view"]["E8"]
+    assert any(reason.startswith("encoded_length_missing") for reason in assess_context_record(row))
+    assert type_marker_reasons(row, {}) == ["mention_map_missing"]
+    row["split"] = "bc8"
+    assert "bad_split" not in assess_context_record(row)
+
+
+def test_prompt_acceptance_is_independent_and_checks_request_identity():
+    kept = merge_acceptance({"acceptance": {"contexts_passed": True, "prompts_passed": True, "validator": "input_acceptance"}}, contexts={"passed": True, "concepts_sha256": "abc"})
+    assert kept["acceptance"]["prompts_passed"] is True
+    cleared = merge_acceptance(kept, prompts={"passed": False})
+    assert cleared["acceptance"]["contexts_passed"] is True
+    assert cleared["acceptance"]["prompts_passed"] is False
+    row = {
+        "candidate_id": "a", "dataset": "biored", "entity_level": "E0", "predicate_level": "P0",
+        "rendered": "prompt", "rendered_sha256": __import__("schema_study.batch_plan", fromlist=["prompt_sha256"]).prompt_sha256("prompt"),
+        "request_id": "biored:a:E0:P0",
+    }
+    assert assess_prompt_requests([row, dict(row)], {"a"}, "E0", "P0")["passed"] is False
+    assert assess_prompt_requests([row], {"a", "b"}, "E0", "P0")["passed"] is False
+    assert assess_prompt_requests([row], {"a"}, "E0", "P0")["passed"] is True
+
+
+def test_controller_binds_a_predecessor_that_finishes_later(tmp_path: Path):
+    from schema_study.input_acceptance import FROZEN_CONCEPT_SHA256
+    from schema_study.production_dispatch import bind_resolved_artifact
+    from schema_study.production_runtime import resolve_task_equivalence
+
+    artifact = tmp_path / "checkpoint.pt"
+    artifact.write_bytes(b"weights")
+    task = {
+        "task_id": "corrected", "family": "principal_training", "representation_version": "mesh_ancestor_v1",
+        "entity": "E0", "model": "biomedbert", "replaces": "historical",
+    }
+    info = {
+        "predecessor": "historical", "source_family": "principal_training", "model": "biomedbert",
+        "rendered_input_match": True, "equivalence_method": "encoder_rendered_view",
+        "evaluation_rendered_match": True, "selection_protocol": "encoder_loss", "artifact": str(artifact),
+    }
+    manifest = {
+        "concepts_sha256": FROZEN_CONCEPT_SHA256,
+        "acceptance": {"contexts_passed": True, "validator": "input_acceptance"},
+        "cell_disposition": {"corrected": "reuse"},
+        "equivalence": {"corrected": info},
+    }
+    state = {"historical": {"state": "running"}, "corrected": {"state": "unsubmitted"}}
+    resolve_task_equivalence(state, task, manifest)
+    assert state["corrected"]["equivalence_resolution"] == "wait"
+    state["historical"]["state"] = "training_completed"
+    resolve_task_equivalence(state, task, manifest)
+    assert state["corrected"]["scientific"] == "reused_historical_equivalent"
+    assert state["corrected"]["artifact"] == str(artifact)
+    failed = {"historical": {"state": "terminal_failure"}, "corrected": {"state": "unsubmitted"}}
+    resolve_task_equivalence(failed, task, manifest)
+    assert failed["corrected"]["equivalence_resolution"] == "retrain"
+    downstream = {"family": "final_evaluation", "trains_from": "corrected", "checkpoint_source": str(tmp_path / "empty")}
+    bind_resolved_artifact(downstream, state["corrected"])
+    assert downstream["checkpoint_source"] == str(artifact)
+
+
+def test_predecessor_completion_resolves_without_another_validation_run():
+    assert resolve_equivalence("reuse", "running", True, True) == "wait"
+    assert resolve_equivalence("reuse", "training_completed", True, True) == "reuse"
+    assert resolve_equivalence("reuse", "terminal_failure", True, True) == "retrain"
+    assert resolve_equivalence("reuse", "training_completed", False, True) == "retrain"
+    assert resolve_equivalence("reuse_when_complete", "training_completed", True, False) == "retrain"
+    assert resolve_equivalence("retrain", "training_completed", True, True) == "retrain"

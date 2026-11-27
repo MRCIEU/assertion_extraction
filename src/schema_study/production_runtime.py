@@ -616,8 +616,44 @@ def reconcile_entry(entry: dict, scheduler: str, output: dict | None, *, task_id
     return _failure_entry(current, task_id, "slurm_completed_without_scientific_record", group=group)
 
 
+def resolve_task_equivalence(state: dict, task: dict, manifest: dict) -> bool:
+    """Apply one corrected condition's current predecessor state. Returns whether this task was handled."""
+    from schema_study.input_acceptance import reuse_decision
+    from schema_study.programme_closure import EQUIVALENCE_METHODS, artifact_valid, resolve_equivalence
+
+    if not (
+        task.get("representation_version") == CORRECTED_REPRESENTATION
+        and task.get("family") == "principal_training"
+        and str(task.get("entity") or "") in {"E0", "E1", "E2"}
+    ):
+        return False
+    current = state.get(task["task_id"], {})
+    info = (manifest.get("equivalence") or {}).get(task["task_id"]) or {}
+    predecessor = info.get("predecessor") or task.get("replaces")
+    predecessor_state = state.get(predecessor, {}).get("state") if predecessor else None
+    evidence_ok = (
+        info.get("equivalence_method") in EQUIVALENCE_METHODS
+        and info.get("rendered_input_match") is True
+        and info.get("selection_protocol") != "unrecoverable"
+    )
+    resolution = resolve_equivalence(
+        (manifest.get("cell_disposition") or {}).get(task["task_id"]),
+        predecessor_state,
+        artifact_valid(Path(str(info.get("artifact") or ""))),
+        evidence_ok,
+    )
+    if resolution == "reuse":
+        decision = reuse_decision(task, info)
+        state[task["task_id"]] = decision or {"state": "unsubmitted", "equivalence_resolution": "retrain"}
+    elif resolution == "wait":
+        state[task["task_id"]] = {**current, "state": current.get("state", "unsubmitted"), "equivalence_resolution": "wait"}
+    else:
+        state[task["task_id"]] = {**current, "state": "unsubmitted", "equivalence_resolution": "retrain"}
+    return True
+
+
 def account_representation(state: dict, tasks: list[dict]) -> None:
-    """Archive unstarted stored deeper tasks. Reuse only an exact predecessor with an artifact."""
+    """Archive unstarted stored deeper tasks and resolve a predecessor that finished after classification."""
     from schema_study.input_acceptance import contexts_accepted, reuse_decision
 
     manifest = corrected_input_manifest()
@@ -627,7 +663,7 @@ def account_representation(state: dict, tasks: list[dict]) -> None:
         if current.get("scientific") == "reused_historical_equivalent" or current.get("state") == "reused_historical_equivalent":
             decision = reuse_decision(task, equivalence.get(task["task_id"]))
             if decision is None:
-                state[task["task_id"]] = {"state": "unsubmitted", "scientific": None, "reuse_revoked": True}
+                state[task["task_id"]] = {"state": "unsubmitted", "scientific": None, "reuse_revoked": True, "equivalence_resolution": "retrain"}
             continue
         if current.get("state") in ACTIVE_OR_DONE | {"terminal_failure", "superseded_stored_representation"}:
             continue
@@ -639,6 +675,8 @@ def account_representation(state: dict, tasks: list[dict]) -> None:
             }
             continue
         if not contexts_accepted(manifest):
+            continue
+        if resolve_task_equivalence(state, task, manifest):
             continue
         decision = reuse_decision(task, equivalence.get(task["task_id"]))
         if decision is not None:
@@ -889,6 +927,38 @@ CORRECTED_INPUT_MANIFEST = Path("/home/b5ac/freddieyu.b5ac/projects/project_1/st
 ACTIVE_OR_DONE = {"running", "pending", "submitted", "valid_continuation_required", "training_completed", "inference_completed", "completed"}
 
 
+def external_input_build_active() -> bool:
+    """A named input job, not one historical job identifier."""
+    import os
+    import subprocess
+
+    user = os.environ.get("USER") or "brics.b5ac"
+    result = subprocess.run(
+        ["squeue", "-u", user, "-n", "p1-inputs", "-h", "-o", "%T"],
+        capture_output=True, text=True, check=False,
+    )
+    return bool(result.stdout.strip())
+
+
+def prompt_shards_present() -> bool:
+    root = Path("/home/b5ac/freddieyu.b5ac/projects/project_1/studies/schema_granularity_v1/runs/formal/formal_matched_e0_e7/generation_inputs/mesh_ancestor_v1")
+    present = 0
+    for source in ("zero_shot", "few_shot"):
+        for corpus in ("biored", "bc8"):
+            for level in range(9):
+                for predicate in range(4):
+                    directory = root / source / corpus / f"E{level}" / f"P{predicate}"
+                    if any(directory.glob("shard_*.jsonl")):
+                        present += 1
+    return present == 144
+
+
+def prompts_ready_to_build() -> bool:
+    from schema_study.input_acceptance import contexts_accepted
+
+    return contexts_accepted(corrected_input_manifest())
+
+
 def _corrected_context_files() -> bool:
     root = Path("/home/b5ac/freddieyu.b5ac/projects/project_1/data/inputs")
     version = "target_anchored_mesh_ancestor_v1__biomedbert_e1354b7a"
@@ -917,9 +987,13 @@ def representation_hold(task: dict, entry: dict | None = None) -> str | None:
         if task.get("family") in {"zero_shot", "few_shot", "adapter_inference"} and not prompts_accepted(manifest):
             return "corrected_prompts_not_ready"
         if task.get("family") == "principal_training" and str(task.get("entity") or "") in {"E0", "E1", "E2"}:
+            resolution = (entry or {}).get("equivalence_resolution")
             disposition = (manifest.get("cell_disposition") or {}).get(task["task_id"])
-            if disposition != "retrain":
-                return "equivalence_not_classified" if disposition is None else "equivalent_predecessor_unresolved"
+            if resolution == "retrain" or disposition == "retrain":
+                return None
+            if resolution == "wait" or disposition in {"reuse", "reuse_when_complete"}:
+                return "equivalent_predecessor_unresolved"
+            return "equivalence_not_classified"
         return None
     if task.get("family") == "final_evaluation" and not task.get("representation_version"):
         return None
@@ -967,8 +1041,7 @@ def controller_decisions(tasks: list[dict], state: dict, running: int, pending: 
     from schema_study.production_plan import MAX_QUEUED_JOBS
 
     verified = verified_external or set()
-    active_jobs = set(active_job_ids or ())
-    input_build_running = "8904148" in active_jobs
+    input_build_running = external_input_build_active()
     seen_groups = set()
     for task in tasks:
         if "representative" in task:
@@ -1003,12 +1076,25 @@ def controller_decisions(tasks: list[dict], state: dict, running: int, pending: 
         if task.get("family") in {"input_preparation", "input_validation"} and input_build_running:
             decisions.append({"task_id": task["task_id"], "action": "skip", "reason": "external_input_build_running"})
             continue
-        if task.get("family") == "input_validation" and not _corrected_context_files():
-            decisions.append({"task_id": task["task_id"], "action": "skip", "reason": "contexts_not_written"})
-            continue
-        if task.get("family") == "input_preparation" and _corrected_context_files():
-            decisions.append({"task_id": task["task_id"], "action": "skip", "reason": "contexts_already_present"})
-            continue
+        if task.get("family") in {"input_preparation", "input_validation"}:
+            from schema_study.input_acceptance import context_files_complete
+
+            prompts = task.get("role") == "mesh_ancestor_v1_prompts"
+            if prompts and not prompts_ready_to_build():
+                decisions.append({"task_id": task["task_id"], "action": "skip", "reason": "contexts_not_accepted"})
+                continue
+            if prompts and task.get("family") == "input_validation" and not prompt_shards_present():
+                decisions.append({"task_id": task["task_id"], "action": "skip", "reason": "prompts_not_written"})
+                continue
+            if prompts and task.get("family") == "input_preparation" and prompt_shards_present():
+                decisions.append({"task_id": task["task_id"], "action": "skip", "reason": "prompts_already_present"})
+                continue
+            if not prompts and task.get("family") == "input_validation" and not context_files_complete():
+                decisions.append({"task_id": task["task_id"], "action": "skip", "reason": "contexts_not_written"})
+                continue
+            if not prompts and task.get("family") == "input_preparation" and context_files_complete():
+                decisions.append({"task_id": task["task_id"], "action": "skip", "reason": "contexts_already_present"})
+                continue
         if task.get("family") == "path_verification":
             source_state = next(
                 (
