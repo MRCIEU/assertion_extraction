@@ -11,9 +11,11 @@ import json
 import os
 import platform
 import socket
+import subprocess
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable, Mapping, Sequence
+from typing import Callable, Iterable, Mapping, Sequence
 
 import pandas as pd
 import yaml
@@ -74,18 +76,116 @@ def environment_record() -> dict:
     }
 
 
+def publish_file(path: Path, write) -> Path:
+    """Write to a unique temporary file and replace the destination only after success.
+
+    Concurrent writers do not share one temporary name. An exception leaves the
+    previous destination in place and removes the temporary file.
+    """
+    destination = Path(path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    handle = tempfile.NamedTemporaryFile(
+        mode="wb",
+        prefix=f".{destination.name}.",
+        suffix=".partial",
+        dir=destination.parent,
+        delete=False,
+    )
+    temporary = Path(handle.name)
+    handle.close()
+    try:
+        write(temporary)
+        os.replace(temporary, destination)
+    except Exception:
+        if temporary.exists():
+            temporary.unlink()
+        raise
+    return destination
+
+
+def publish_collection(directory: Path, files: Mapping[str, Callable[[Path], None]], manifest: Mapping) -> Path:
+    """Publish every member, then the completion manifest.
+
+    The previous manifest is moved aside before any member is replaced. A
+    failure leaves no manifest that describes a mixture of old and new files.
+    """
+    destination = Path(directory)
+    destination.mkdir(parents=True, exist_ok=True)
+    staged: list[tuple[Path, Path]] = []
+    manifest_path = destination / "completion.json"
+    previous = destination / "completion.json.previous"
+    try:
+        for name, write in files.items():
+            handle = tempfile.NamedTemporaryFile(
+                mode="wb",
+                prefix=f".{name}.",
+                suffix=".partial",
+                dir=destination,
+                delete=False,
+            )
+            temporary = Path(handle.name)
+            handle.close()
+            staged.append((destination / name, temporary))
+            write(temporary)
+        if manifest_path.exists():
+            os.replace(manifest_path, previous)
+        for final, temporary in staged:
+            os.replace(temporary, final)
+        write_json(manifest_path, dict(manifest))
+        if previous.exists():
+            previous.unlink()
+    except Exception:
+        for _final, temporary in staged:
+            if temporary.exists():
+                temporary.unlink()
+        raise
+    return manifest_path
+
+
+def repository_provenance(code_root: Path) -> dict:
+    """The revision that actually ran. A stored expected hash is not provenance."""
+
+    def _git(*args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            ["git", *args],
+            cwd=code_root,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+    revision = _git("rev-parse", "HEAD")
+    status = _git("status", "--porcelain")
+    lines = [line for line in status.stdout.splitlines() if line.strip()] if status.returncode == 0 else []
+    return {
+        "revision": revision.stdout.strip() if revision.returncode == 0 else None,
+        "revision_available": revision.returncode == 0,
+        "working_tree_dirty": bool(lines) if status.returncode == 0 else None,
+        "uncommitted_paths": lines[:80],
+        "hard_coded_commit_is_not_provenance": True,
+    }
+
+
 def write_json(path: Path, payload: Mapping | Sequence) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    text = json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+
+    def _write(temporary: Path) -> None:
+        temporary.write_text(text, encoding="utf-8")
+
+    publish_file(path, _write)
 
 
 def write_jsonl(path: Path, rows: Iterable[Mapping]) -> int:
-    path.parent.mkdir(parents=True, exist_ok=True)
     count = 0
-    with path.open("w", encoding="utf-8") as handle:
-        for row in rows:
-            handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True, default=str) + "\n")
-            count += 1
+
+    def _write(temporary: Path) -> None:
+        nonlocal count
+        with temporary.open("w", encoding="utf-8") as handle:
+            for row in rows:
+                handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True, default=str) + "\n")
+                count += 1
+
+    publish_file(path, _write)
     return count
 
 
@@ -104,15 +204,21 @@ def write_yaml(path: Path, payload: Mapping) -> None:
 
 
 def write_parquet(path: Path, rows: Sequence[Mapping], columns: Sequence[str]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
     frame = pd.DataFrame(list(rows), columns=list(columns))
-    frame.to_parquet(path, index=False)
+
+    def _write(temporary: Path) -> None:
+        frame.to_parquet(temporary, index=False)
+
+    publish_file(path, _write)
 
 
 def write_tsv(path: Path, rows: Sequence[Mapping], columns: Sequence[str]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
     frame = pd.DataFrame(list(rows), columns=list(columns))
-    frame.to_csv(path, sep="\t", index=False)
+
+    def _write(temporary: Path) -> None:
+        frame.to_csv(temporary, sep="\t", index=False)
+
+    publish_file(path, _write)
 
 
 def write_run_skeleton(

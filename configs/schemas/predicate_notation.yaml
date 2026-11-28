@@ -1,0 +1,36 @@
+# Research predicate notation and its correspondence to historical experiment ids.
+# Historical directories, prompts, and saved predictions keep their original names.
+version: research_predicate_notation_v1
+negative_outcome:
+  research_name: NO_RELATION
+  historical_name: No_Relation
+  inside_positive_hierarchy: false
+  meaning: Absence of an annotated positive relation within the dataset annotation scope.
+correspondence:
+  - research_level: P0
+    historical_level: P1
+    research_positive_name: RELATED_TO
+    historical_positive_name: Any_Relation
+    native: false
+    label_spaces_equivalent: true
+    prompted_wording_may_differ: true
+  - research_level: P1
+    historical_level: P2
+    native: false
+    label_spaces_equivalent: true
+    prompted_wording_may_differ: false
+  - research_level: P2
+    historical_level: P3
+    native: false
+    label_spaces_equivalent: true
+    prompted_wording_may_differ: false
+  - research_level: P3
+    historical_level: P4
+    native: true
+    label_spaces_equivalent: true
+    prompted_wording_may_differ: false
+reuse_rule: >
+  A saved prediction is reusable when the candidate population, label membership,
+  and model input are unchanged. Renaming P1 to P0 does not authorise a new
+  training run. A prompt that says RELATED_TO rather than Any_Relation is a
+  wording change and is not reused as if the strings were identical.

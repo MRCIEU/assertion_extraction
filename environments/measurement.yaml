@@ -1,0 +1,22 @@
+name: hf-hpc
+purpose: CPU execution of the small certainty and verification models
+installer: conda
+prefix: /home/b5ac/freddieyu.b5ac/miniforge3/envs/hf-hpc
+python: "3.10.19"
+activation: source /home/b5ac/freddieyu.b5ac/miniforge3/etc/profile.d/conda.sh && conda activate hf-hpc
+packages:
+  torch: "2.9.1"
+  transformers: "4.57.5"
+  tokenizers: "0.22.2"
+  sentencepiece: "0.2.1"
+  spacy: absent
+  scispacy: absent
+cuda_available_on_this_login_node: false
+shared_environment_modified: false
+gpu_required: false
+notes: >
+  Neural measurement uses the existing hf-hpc environment and does not install
+  packages into it. The analysis environment remains without PyTorch. spaCy is
+  not installed in hf-hpc, so the biomedical sentence comparison was run with
+  en_core_sci_sm 0.5.4 and spaCy 3.7.5 and is recorded separately. Agreement
+  between segmenters is not boundary accuracy.

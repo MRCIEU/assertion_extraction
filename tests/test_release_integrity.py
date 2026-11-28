@@ -1,0 +1,501 @@
+"""Acceptance tests for the consolidated release gates."""
+
+from pathlib import Path
+
+from schema_study.adapter_numeric import mapped_keys
+from schema_study.checkpoint_roles import release_evidence_complete, role_weights, selected_checkpoint
+from schema_study.input_acceptance import (
+    assess_context_record,
+    assess_population,
+    classify_equivalence,
+    contexts_accepted,
+    reuse_decision,
+    type_marker_reasons,
+)
+from schema_study.programme_closure import assess_prompt_requests, merge_acceptance, resolve_equivalence
+from schema_study.scientific_coverage import canonical_counts, completion_allowed, coverage_report
+
+
+def _row(candidate: str, levels: tuple[str, ...] = tuple(f"E{i}" for i in range(9))) -> dict:
+    views = {level: f"<<T>>alpha<</T>> and <<T>>beta<</T>> <<TYPE:{level}>>" for level in levels}
+    views = {level: text.replace(f"<<TYPE:{level}>>", "") if level == "E0" else text for level, text in views.items()}
+    bare = "source"
+    views = {level: bare + ("" if level == "E0" else f"<<TYPE:{level}>>") + "<<H>>a<</H>><<T>>b<</T>>" for level in levels}
+    return {
+        "candidate_id": candidate,
+        "document_id": "1",
+        "split": "train",
+        "views": views,
+        "fragments": [{"char_start": 0, "char_end": 5}],
+        "marked_mention_ids": ["m1", "m2"],
+        "encoded_length_by_view": {level: 12 for level in levels},
+    }
+
+
+def test_incomplete_context_and_missing_e8_are_rejected():
+    row = _row("c1", tuple(f"E{i}" for i in range(8)))
+    assert any(reason.startswith("missing_view") and "E8" in reason for reason in assess_context_record(row))
+
+
+def test_duplicate_candidates_are_rejected():
+    rows = [_row("c1"), _row("c1")]
+    outcome = assess_population(rows, {"c1"})
+    assert outcome["passed"] is False
+    assert outcome["duplicate_candidates"] == 1
+
+
+def test_source_window_and_type_mismatch_are_rejected():
+    row = _row("c1")
+    row["views"]["E8"] = "different source<<T>>a<</T>><<T>>b<</T>>"
+    assert "source_text_differs_across_levels" in assess_context_record(row)
+    truncated = _row("c1")
+    truncated["views"]["E3"] = "source<<T>>a<</T>>"
+    assert "target_markers_missing" in assess_context_record(truncated)
+    assert type_marker_reasons(_row("c1"), {"m1": {"E4": "Disease"}})
+
+
+def test_file_existence_is_not_acceptance_or_release():
+    assert contexts_accepted({"contexts_ready": True, "concepts_sha256": "77fa5b41a6e18c277f987dedd74ea28833b8afa4c823b1396c935f5d7ee850a5"}) is False
+    assert release_evidence_complete({"verified": True, "checks": ["checkpoint_resumed", "adapter_export"]}) is False
+    assert release_evidence_complete({"verified": True, "checks": {"adapter_config_json": True}}) is False
+
+
+def test_loose_and_supplementary_predecessors_are_rejected(tmp_path: Path):
+    artifact = tmp_path / "best_adapter"
+    artifact.mkdir()
+    (artifact / "adapter_config.json").write_text("{}", encoding="utf-8")
+    task = {"replaces": "principal-1", "model": "biomedbert"}
+    record = {
+        "predecessor": "principal-1",
+        "source_family": "lora_sensitivity",
+        "model": "biomedbert",
+        "rendered_input_match": True,
+        "equivalence_method": "encoder_rendered_view",
+        "artifact": str(artifact),
+        "selection_protocol": "encoder_loss",
+    }
+    assert reuse_decision(task, record) is None
+    assert reuse_decision({"model": "biomedbert"}, record) is None
+    record["source_family"] = "principal_training"
+    record["predecessor"] = "other"
+    assert reuse_decision(task, record) is None
+
+
+def test_reused_model_releases_changed_evaluation(tmp_path: Path):
+    artifact = tmp_path / "checkpoint.pt"
+    artifact.write_text("weights", encoding="utf-8")
+    decision = reuse_decision(
+        {"replaces": "principal-1", "model": "biomedbert"},
+        {
+            "predecessor": "principal-1",
+            "source_family": "principal_training",
+            "model": "biomedbert",
+            "rendered_input_match": True,
+            "equivalence_method": "encoder_rendered_view",
+            "evaluation_rendered_match": False,
+            "selection_protocol": "encoder_loss",
+            "artifact": str(artifact),
+        },
+    )
+    assert decision["artifact"] == str(artifact)
+    assert decision["release_evaluation"] is True
+    assert decision["scientific"] == "reused_historical_equivalent"
+
+
+def test_best_and_last_weights_stay_distinct():
+    rolling = {"adapter": {"w": "B"}, "best_adapter": {"w": "A"}, "step": 10}
+    best = {"adapter": {"w": "A"}, "best_adapter": {"w": "A"}, "role": "best", "step": 4}
+    assert role_weights(best, "best")["w"] == "A"
+    assert role_weights(rolling, "last")["w"] == "B"
+    assert role_weights(rolling, "best")["w"] == "A"
+    assert (rolling.get("best_adapter") or rolling.get("adapter"))["w"] == "A"
+
+
+def test_incomplete_score_selects_nothing():
+    assert selected_checkpoint({"best": 0.4, "last": -1}) is None
+    assert selected_checkpoint({"best": 0.2, "last": 0.4}) == "last"
+    assert classify_equivalence(False, "qwen8b", "unrecoverable") == "retrain"
+    assert classify_equivalence(False, "qwen8b", "left_pad_online") == "retrain"
+    assert classify_equivalence(False, "biomedbert", "encoder_loss") == "reuse"
+
+
+def test_missing_or_superseded_cells_cannot_complete():
+    assert completion_allowed([]) is False
+    assert completion_allowed([{"status": "training_completed", "artifact_present": False}]) is False
+    assert completion_allowed([{"status": "superseded_stored_representation", "artifact_present": True, "superseded_without_replacement": True}]) is False
+    assert completion_allowed([{"status": "training_completed", "artifact_present": True}]) is True
+
+
+def test_parameter_name_collision_is_rejected_before_export():
+    try:
+        mapped_keys(["lora_A", "lora_B"], lambda name: "same")
+    except ValueError as error:
+        assert "collision" in str(error)
+    else:
+        raise AssertionError("A colliding export key was accepted.")
+
+
+def test_snapshot_marker_is_the_execution_revision(tmp_path: Path):
+    from schema_study.production_plan import executing_revision
+
+    snapshot = tmp_path / "execution_snapshots" / "abc"
+    snapshot.mkdir(parents=True)
+    commit = "b07c8000ee5d310e9af17863a54cd0d85d2f8224"
+    (snapshot / ".snapshot_complete").write_text(commit + "\n", encoding="utf-8")
+    assert executing_revision(snapshot) == commit
+    assert executing_revision(tmp_path) is None
+
+
+def test_execution_snapshot_is_not_a_storage_collision():
+    from schema_study.paths import get_paths, overlaps
+
+    storage = Path("/lus/lfs1aip2/projects/b5ac/project_1")
+    snapshot = storage / "execution_snapshots" / "4e29f048bcd72427ec097c080521971d9f91a269"
+    assert overlaps(storage, snapshot) is False
+    assert overlaps(storage, storage / "data") is True
+    if snapshot.is_dir():
+        paths = get_paths(storage, snapshot)
+        assert paths.storage_root == storage
+
+
+def test_canonical_matrix_counts():
+    counts = canonical_counts()
+    assert counts["principal_training"] == 360
+    assert counts["principal_prompts"] == 304
+    assert counts["principal_evaluations"] == 684
+    assert counts["biored_evaluations"] == 324
+    assert counts["bc8_evaluations"] == 324
+    assert counts["drugprot_evaluations"] == 36
+    report = coverage_report([], {})
+    assert report["passed"] is False
+    assert report["cells"] == 1348
+    assert report["missing"] == 1348
+
+
+def test_missing_encoded_length_and_empty_type_map_are_rejected():
+    row = _row("c1")
+    del row["encoded_length_by_view"]["E8"]
+    assert any(reason.startswith("encoded_length_missing") for reason in assess_context_record(row))
+    assert type_marker_reasons(row, {}) == ["mention_map_missing"]
+    row["split"] = "bc8"
+    assert "bad_split" not in assess_context_record(row)
+
+
+def test_prompt_acceptance_is_independent_and_checks_request_identity():
+    kept = merge_acceptance({"acceptance": {"contexts_passed": True, "prompts_passed": True, "validator": "input_acceptance"}}, contexts={"passed": True, "concepts_sha256": "abc"})
+    assert kept["acceptance"]["prompts_passed"] is True
+    cleared = merge_acceptance(kept, prompts={"passed": False})
+    assert cleared["acceptance"]["contexts_passed"] is True
+    assert cleared["acceptance"]["prompts_passed"] is False
+    row = {
+        "candidate_id": "a", "dataset": "biored", "entity_level": "E0", "predicate_level": "P0",
+        "rendered": "prompt", "rendered_sha256": __import__("schema_study.batch_plan", fromlist=["prompt_sha256"]).prompt_sha256("prompt"),
+        "request_id": "biored:a:E0:P0",
+    }
+    assert assess_prompt_requests([row, dict(row)], {"a"}, "E0", "P0")["passed"] is False
+    assert assess_prompt_requests([row], {"a", "b"}, "E0", "P0")["passed"] is False
+    assert assess_prompt_requests([row], {"a"}, "E0", "P0")["passed"] is True
+
+
+def test_controller_binds_a_predecessor_that_finishes_later(tmp_path: Path):
+    from schema_study.input_acceptance import FROZEN_CONCEPT_SHA256
+    from schema_study.production_dispatch import bind_resolved_artifact
+    from schema_study.production_runtime import resolve_task_equivalence
+
+    artifact = tmp_path / "checkpoint.pt"
+    artifact.write_bytes(b"weights")
+    task = {
+        "task_id": "corrected", "family": "principal_training", "representation_version": "mesh_ancestor_v1",
+        "entity": "E0", "model": "biomedbert", "replaces": "historical",
+    }
+    info = {
+        "predecessor": "historical", "source_family": "principal_training", "model": "biomedbert",
+        "rendered_input_match": True, "equivalence_method": "encoder_rendered_view",
+        "evaluation_rendered_match": True, "selection_protocol": "encoder_loss", "artifact": str(artifact),
+    }
+    manifest = {
+        "concepts_sha256": FROZEN_CONCEPT_SHA256,
+        "acceptance": {"contexts_passed": True, "validator": "input_acceptance"},
+        "cell_disposition": {"corrected": "reuse"},
+        "equivalence": {"corrected": info},
+    }
+    state = {"historical": {"state": "running"}, "corrected": {"state": "unsubmitted"}}
+    resolve_task_equivalence(state, task, manifest)
+    assert state["corrected"]["equivalence_resolution"] == "wait"
+    state["historical"]["state"] = "training_completed"
+    resolve_task_equivalence(state, task, manifest)
+    assert state["corrected"]["scientific"] == "reused_historical_equivalent"
+    assert state["corrected"]["artifact"] == str(artifact)
+    failed = {"historical": {"state": "terminal_failure"}, "corrected": {"state": "unsubmitted"}}
+    resolve_task_equivalence(failed, task, manifest)
+    assert failed["corrected"]["equivalence_resolution"] == "retrain"
+    downstream = {"family": "final_evaluation", "trains_from": "corrected", "checkpoint_source": str(tmp_path / "empty")}
+    bind_resolved_artifact(downstream, state["corrected"])
+    assert downstream["checkpoint_source"] == str(artifact)
+
+
+def test_predecessor_completion_resolves_without_another_validation_run():
+    assert resolve_equivalence("reuse", "running", True, True) == "wait"
+    assert resolve_equivalence("reuse", "training_completed", True, True) == "reuse"
+    assert resolve_equivalence("reuse", "terminal_failure", True, True) == "retrain"
+    assert resolve_equivalence("reuse", "training_completed", False, True) == "retrain"
+    assert resolve_equivalence("reuse_when_complete", "training_completed", True, False) == "retrain"
+    assert resolve_equivalence("retrain", "training_completed", True, True) == "retrain"
+
+
+def test_validated_checkpoint_exit_is_continuation_not_terminal():
+    from schema_study.production_runtime import reconcile_entry
+
+    continued = reconcile_entry(
+        {"state": "running", "attempts": 7},
+        "terminal",
+        {"scientific": "valid_continuation_required", "checkpoint_validated": True},
+        task_id="task",
+        slurm_state="FAILED",
+    )
+    assert continued["state"] == "valid_continuation_required"
+    assert continued["attempts"] == 7
+    failed = reconcile_entry({"state": "running", "attempts": 3}, "terminal", {"scientific": "failed"}, task_id="task", slurm_state="FAILED")
+    assert failed["state"] == "terminal_failure"
+    preflight = reconcile_entry(
+        {"state": "submitted", "attempts": 1},
+        "terminal",
+        {"checkpoint_validated": True, "technical_preflight": True, "optimiser_steps": 1},
+        task_id="representative",
+        slurm_state="FAILED",
+    )
+    assert preflight["state"] == "valid_continuation_required"
+
+
+def test_rolling_checkpoint_and_population_count_do_not_accept_a_cell(tmp_path: Path):
+    from schema_study.programme_closure import assess_prediction_rows, continuation_is_verified, publish_ledger_acceptance
+    from schema_study.scientific_coverage import _cell_accepted
+
+    output = tmp_path / "train"
+    output.mkdir()
+    (output / "adapter_checkpoint.pt").write_bytes(b"rolling")
+    (output / "scientific_status.json").write_text(
+        '{"selection_recorded": true, "checkpoint_validated": true}\n', encoding="utf-8",
+    )
+    cell = {"model": "qwen8b", "dataset": "drugprot", "entity": "native", "predicate": "P0", "seed": 13}
+    task = {"output": str(output), "model": "qwen8b", "family": "principal_training", "source_family": "principal_training"}
+    assert _cell_accepted("training", cell, task, {"scientific": "training_completed"}) is False
+    rows = [{"candidate_id": "a", "dataset": "biored"}, {"candidate_id": "b", "dataset": "bc8"}]
+    assert assess_prediction_rows(rows, {"a"}, "biored")["passed"] is True
+    assert assess_prediction_rows(rows, {"b", "c"}, "bc8")["passed"] is False
+    ledger = tmp_path / "eval"
+    ledger.mkdir()
+    (ledger / "predictions.jsonl").write_text('{"candidate_id": "a", "dataset": "biored"}\n', encoding="utf-8")
+    publish_ledger_acceptance(ledger, "biored", [{"candidate_id": "a", "dataset": "biored"}], {"a"})
+    (ledger / "predictions.jsonl").write_text('{"candidate_id": "changed", "dataset": "biored"}\n', encoding="utf-8")
+    from schema_study.programme_closure import ledger_acceptance_valid
+
+    assert ledger_acceptance_valid(ledger, "biored") is False
+    supplementary = {**task, "output": str(ledger), "source_family": "schema_conditioned_lora", "family": "adapter_inference"}
+    assert _cell_accepted("evaluations", cell, supplementary, {"scientific": "inference_completed"}) is False
+    assert continuation_is_verified(10, 10, False, 10, 4) is False
+    assert continuation_is_verified(10, 10, True, 10, 0) is False
+
+
+def test_continuation_keeps_matching_optimiser_and_selected_weights_apart():
+    from schema_study.path_verification import continuation_package, selected_adapter
+
+    saved = {"step": 4, "scheduler": {"step": 4}, "optimizer": {"state": 1}, "adapter": {"last": 1}, "best_adapter": {"best": 1}}
+    assert continuation_package(saved)["adapter"] == {"last": 1}
+    assert selected_adapter(saved) == {"best": 1}
+    saved["scheduler"]["step"] = 3
+    try:
+        continuation_package(saved)
+    except ValueError:
+        return
+    raise AssertionError("a mismatched scheduler was accepted")
+
+
+def test_repeated_same_step_continuation_blocks_and_advancement_does_not():
+    from schema_study.production_runtime import reconcile_entry
+
+    first = reconcile_entry(
+        {"state": "running", "attempts": 1},
+        "terminal",
+        {"checkpoint_validated": True, "technical_preflight": True, "steps": 100},
+        task_id="cell",
+        slurm_state="FAILED",
+    )
+    assert first["state"] == "valid_continuation_required"
+    second = reconcile_entry(
+        first,
+        "terminal",
+        {"checkpoint_validated": True, "technical_preflight": True, "steps": 100},
+        task_id="cell",
+        slurm_state="FAILED",
+    )
+    assert second["state"] == "valid_continuation_required"
+    third = reconcile_entry(
+        second,
+        "terminal",
+        {"checkpoint_validated": True, "technical_preflight": True, "steps": 100},
+        task_id="cell",
+        slurm_state="FAILED",
+    )
+    assert third["state"] == "terminal_failure"
+    advanced = reconcile_entry(
+        {"state": "running", "attempts": 1, "continuation_step": 100},
+        "terminal",
+        {"checkpoint_validated": True, "scientific": "valid_continuation_required", "checkpoint_validated": True, "steps": 140},
+        task_id="cell",
+        slurm_state="FAILED",
+    )
+    assert advanced["state"] == "valid_continuation_required"
+    assert advanced["continuation_step"] == 140
+
+
+def test_finished_ledger_is_accepted_without_rerunning_inference(tmp_path: Path):
+    from schema_study.programme_closure import _assess_ledger_file, ledger_acceptance_valid, publish_ledger_acceptance
+
+    ledger = tmp_path / "predictions.jsonl"
+    ledger.write_text('{"candidate_id": "a", "dataset": "biored", "output_status": "valid", "predicted_labels": ["x"]}\n', encoding="utf-8")
+    outcome = _assess_ledger_file(ledger, {"a"}, "biored")
+    assert outcome["passed"] is True
+    publish_ledger_acceptance(tmp_path, "biored", [{"candidate_id": "a", "dataset": "biored"}], {"a"})
+    record = __import__("json").loads((tmp_path / "population_acceptance.json").read_text())
+    record["biored"]["passed"] = True
+    record["biored"]["missing_candidates"] = 0
+    (tmp_path / "population_acceptance.json").write_text(__import__("json").dumps(record), encoding="utf-8")
+    assert ledger_acceptance_valid(tmp_path, "biored") is True
+
+
+def test_prompt_cell_does_not_require_a_training_seed(tmp_path: Path):
+    from schema_study.scientific_coverage import _cell_accepted
+
+    cell = {"model": "qwen8b", "dataset": "drugprot", "entity": "native", "predicate": "P0", "strategy": "zero_shot"}
+    task = {"output": str(tmp_path), "family": "zero_shot", "model": "qwen8b", "dataset": "drugprot"}
+    assert _cell_accepted("prompts", cell, task, {"state": "inference_completed"}) is False
+
+
+def test_prompt_preparation_is_submitted_ahead_of_bulk_training():
+    from schema_study.production_plan import MAX_QUEUED_JOBS
+    from schema_study.production_runtime import controller_decisions
+
+    prompt = {"task_id": "prompt-prep", "family": "input_preparation", "role": "mesh_ancestor_v1_prompts", "dataset": "biored", "model": None, "resources": {"gpus": 0}, "statuses": []}
+    training = {"task_id": "train-cell", "family": "principal_training", "dataset": "drugprot", "model": "biomedbert", "entity": "native", "predicate": "P0", "seed": 13, "resources": {"gpus": 1}, "statuses": []}
+    decisions = controller_decisions([training, prompt], {}, 0, MAX_QUEUED_JOBS - 1, set(), set())
+    by_id = {row["task_id"]: row for row in decisions}
+    assert by_id["prompt-prep"]["action"] == "submit"
+    assert by_id["train-cell"]["action"] == "defer"
+
+
+def test_prompt_validation_waits_until_preparation_finishes():
+    from schema_study.production_plan import MAX_QUEUED_JOBS
+    from schema_study.production_runtime import controller_decisions
+
+    preparation = {"task_id": "prep", "family": "input_preparation", "role": "mesh_ancestor_v1_prompts", "dataset": "biored", "resources": {"gpus": 0}, "statuses": []}
+    validation = {"task_id": "check", "family": "input_validation", "role": "mesh_ancestor_v1_prompts", "dataset": "biored", "resources": {"gpus": 0}, "statuses": []}
+    decisions = controller_decisions([preparation, validation], {"prep": {"state": "running"}}, 1, 0, set(), set())
+    assert {row["task_id"]: row["reason"] for row in decisions}["check"] == "prompt_preparation_running"
+
+
+def test_model_input_acceptance_requires_every_population():
+    from schema_study.input_acceptance import model_inputs_complete
+
+    one = {"E8/P0/train": {"rows": 1}}
+    assert model_inputs_complete(one) is False
+    complete = {
+        f"E{entity}/P{predicate}/{split}": {"rows": 2}
+        for entity in range(9)
+        for predicate in range(4)
+        for split in ("train", "dev")
+    }
+    assert model_inputs_complete(complete) is True
+
+
+def test_missing_loss_is_not_continuation_progress():
+    from schema_study.path_verification import adapter_names_match, continuation_advanced
+
+    assert continuation_advanced(10, 11, []) is False
+    assert continuation_advanced(10, 11, [0.2]) is True
+    assert continuation_advanced(10, 10, [0.2]) is False
+    assert adapter_names_match(["base.lora_A"], []) is False
+    assert adapter_names_match(["base.lora_A", "other"], ["base.lora_A"]) is True
+
+
+def test_missing_step_metadata_cannot_continue_indefinitely():
+    from schema_study.production_runtime import reconcile_entry
+
+    first = reconcile_entry(
+        {"state": "running", "attempts": 1},
+        "terminal",
+        {"checkpoint_validated": True, "technical_preflight": True},
+        task_id="cell",
+        slurm_state="FAILED",
+    )
+    assert first["state"] == "valid_continuation_required"
+    second = reconcile_entry(
+        first,
+        "terminal",
+        {"checkpoint_validated": True, "technical_preflight": True},
+        task_id="cell",
+        slurm_state="FAILED",
+    )
+    assert second["state"] == "terminal_failure"
+    assert second["reason"] == "unproductive_continuation"
+
+
+def test_population_acceptance_is_not_scientific_provenance():
+    from schema_study.programme_closure import assess_scientific_provenance
+
+    task = {"family": "final_evaluation", "dataset": "biored", "model": "biomedbert", "predicate": "P0", "schema_predicate": "P1"}
+    missing = assess_scientific_provenance(
+        [{"candidate_id": "a", "dataset": "biored", "predicted_labels": ["BR_P1_ANY"]}],
+        task,
+        {"BR_P1_ANY"},
+    )
+    assert missing["provenance_passed"] is False
+    assert missing["missing_output_status"] == 1
+    no_relation = assess_scientific_provenance(
+        [{"candidate_id": "a", "dataset": "biored", "output_status": "valid", "predicted_labels": [], "illegal_labels": []}],
+        task,
+        {"BR_P1_ANY"},
+    )
+    assert no_relation["provenance_passed"] is True
+    present = assess_scientific_provenance(
+        [{"candidate_id": "a", "dataset": "biored", "output_status": "valid", "predicted_labels": ["BR_P1_ANY"], "illegal_labels": []}],
+        task,
+        {"BR_P1_ANY"},
+    )
+    assert present["provenance_passed"] is True
+    assert present["model"] == "biomedbert"
+
+
+def test_pre_horizon_checkpoint_releases_path_verification(tmp_path: Path):
+    from schema_study.production_plan import MAX_QUEUED_JOBS
+    from schema_study.production_runtime import controller_decisions
+
+    source = tmp_path / "train"
+    source.mkdir()
+    (source / "adapter_checkpoint.pt").write_bytes(b"checkpoint")
+    training = {
+        "task_id": "representative",
+        "family": "principal_training",
+        "dataset": "drugprot",
+        "model": "qwen32b",
+        "entity": "native",
+        "predicate": "P0",
+        "seed": 13,
+        "output": str(source),
+        "resources": {"gpus": 2},
+        "statuses": [],
+    }
+    verification = {
+        "task_id": "verify",
+        "family": "path_verification",
+        "dataset": "drugprot",
+        "model": "qwen32b",
+        "output": str(tmp_path / "verify"),
+        "resources": {"gpus": 2},
+        "statuses": [],
+    }
+    absent = controller_decisions([training, {**verification, "task_id": "verify-absent"}], {"representative": {"state": "running"}}, 0, 0, set(), set())
+    assert {row["task_id"]: row["reason"] for row in absent}["verify-absent"] == "representative_writing"
+    present = controller_decisions([training, verification], {"representative": {"state": "valid_continuation_required"}}, 0, MAX_QUEUED_JOBS - 1, set(), set())
+    chosen = {row["task_id"]: row for row in present}
+    assert chosen["verify"]["action"] == "submit"

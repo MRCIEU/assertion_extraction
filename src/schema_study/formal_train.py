@@ -67,6 +67,8 @@ def _candidates(dataset: str, splits: set[str]) -> dict[str, dict]:
 
 
 def _texts(dataset: str, entity: str, wanted: set[str], split_names: set[str]) -> dict[str, str]:
+    """Read the programme's context file. Evaluation must not stay on the module default."""
+    apply_programme()
     found = {}
     with CONTEXTS[dataset].open(encoding="utf-8") as handle:
         for line in handle:
@@ -147,7 +149,7 @@ def _targets(dataset: str, rows: list[dict], classes: list[str]) -> np.ndarray:
 
 
 def _capture(torch) -> dict:
-    state = {"python": random.getstate(), "torch": torch.get_rng_state()}
+    state = {"python": random.getstate(), "numpy": np.random.get_state(), "torch": torch.get_rng_state()}
     if torch.cuda.is_available():
         state["cuda"] = torch.cuda.get_rng_state_all()
     return state
@@ -155,30 +157,69 @@ def _capture(torch) -> dict:
 
 def _restore(state: dict, torch) -> None:
     random.setstate(state["python"])
+    if "numpy" in state:
+        np.random.set_state(state["numpy"])
     torch.set_rng_state(state["torch"])
     if "cuda" in state and torch.cuda.is_available():
         torch.cuda.set_rng_state_all(state["cuda"])
 
 
-def _model(tokenizer, classes: list[str], seed: int, entity: str, predicate: str, torch):
+def encoder_tokenizer(model_name: str):
+    """Build the tokenizer used for both training and final evaluation."""
+    if model_name == "biomedbert":
+        tokenizer = load_biomedbert_tokenizer(str(TOKENIZER_DIR))
+        observed = [tokenizer.convert_tokens_to_ids(marker) for marker in SPECIAL_MARKERS]
+        if observed != list(range(30522, 30522 + len(SPECIAL_MARKERS))):
+            raise RuntimeError("Marker ids differ from the accepted tokenizer.")
+        return tokenizer
+    from transformers import AutoTokenizer
+
+    from schema_study.production_assets import encoder_layout
+
+    tokenizer = AutoTokenizer.from_pretrained(encoder_layout(model_name)["tokenizer"], local_files_only=True)
+    missing = [marker for marker in SPECIAL_MARKERS if marker not in tokenizer.get_vocab()]
+    if missing:
+        added = tokenizer.add_special_tokens({"additional_special_tokens": missing})
+        if added != len(missing):
+            raise RuntimeError("The encoder tokenizer did not accept the context markers.")
+    absent = [marker for marker in SPECIAL_MARKERS if marker not in tokenizer.get_vocab()]
+    if absent:
+        raise RuntimeError("The encoder tokenizer is missing context markers.")
+    return tokenizer
+
+
+def _model(tokenizer, classes: list[str], seed: int, entity: str, predicate: str, torch, model_name: str = "biomedbert"):
     from torch.nn import Dropout, Linear
     from transformers import AutoModel
 
+    from schema_study.production_assets import encoder_layout
+
     if not torch.cuda.is_available() or not torch.cuda.is_bf16_supported():
         raise RuntimeError("Stopping: this GPU does not support bf16.")
-    loaded = AutoModel.from_pretrained(MODEL_DIR, local_files_only=True, use_safetensors=True)
+    layout = encoder_layout(model_name)
+    if model_name == "biolinkbert" and "BiomedNLP" in str(layout["model"]):
+        raise RuntimeError("BioLinkBERT was routed to the BiomedBERT checkpoint.")
+    loaded = AutoModel.from_pretrained(layout["model"], local_files_only=True)
     encoder = loaded.bert if hasattr(loaded, "bert") else loaded
     before = encoder.get_input_embeddings().weight.shape[0]
-    encoder.resize_token_embeddings(len(tokenizer))
+    target = len(tokenizer)
+    if before < target:
+        encoder.resize_token_embeddings(target)
     after = encoder.get_input_embeddings().weight.shape[0]
-    if after - before != len(SPECIAL_MARKERS):
-        raise RuntimeError(f"Embedding resize mismatch: {before} -> {after}")
+    if after != target:
+        raise RuntimeError(f"Embedding table length {after} does not match the tokenizer length {target}.")
     streams = seed_streams(seed, entity, predicate)
     generator = torch.Generator()
     generator.manual_seed(streams["marker_embedding_init"] % (2**31 - 1))
-    with torch.no_grad():
-        rows = torch.randn((len(SPECIAL_MARKERS), encoder.config.hidden_size), generator=generator)
-        encoder.get_input_embeddings().weight[-len(SPECIAL_MARKERS):].copy_(rows * encoder.config.initializer_range)
+    grown = after - before
+    if grown:
+        if grown != len(SPECIAL_MARKERS):
+            raise RuntimeError(f"Embedding resize mismatch: {before} -> {after}")
+        with torch.no_grad():
+            rows = torch.randn((grown, encoder.config.hidden_size), generator=generator)
+            encoder.get_input_embeddings().weight[-grown:].copy_(rows * encoder.config.initializer_range)
+    elif before != target:
+        raise RuntimeError(f"Embedding resize mismatch: {before} -> {after}")
     dropout = Dropout(0.1)
     head = Linear(encoder.config.hidden_size, len(classes))
     generator.manual_seed(streams["classifier_head"] % (2**31 - 1))
@@ -237,7 +278,9 @@ def _score_split(encoder, dropout, head, ids, lengths, rows, classes, dataset, s
             if dataset == "drugprot":
                 probabilities.extend(torch.sigmoid(logits).cpu().tolist())
             else:
-                chosen = torch.softmax(logits, dim=-1).argmax(dim=-1).tolist()
+                probabilities_tensor = torch.softmax(logits, dim=-1)
+                probabilities.extend(probabilities_tensor.cpu().tolist())
+                chosen = probabilities_tensor.argmax(dim=-1).tolist()
                 for index in chosen:
                     label = classes[index]
                     predicted.append([] if label == schema.no_relation_id else [label])
@@ -257,44 +300,81 @@ def _score_split(encoder, dropout, head, ids, lengths, rows, classes, dataset, s
             from schema_study.evaluation import summarize_counts
             scored_rows = [{"gold": gold, "predicted": labels, "status": "valid", "illegal_labels": []} for gold, labels in zip(gold_sets, predicted)]
             metric = summarize_counts(scored_rows, classes)["f1"]
-        return metric, selected_threshold, predicted
+        return metric, selected_threshold, predicted, maps
     predictions = [
         {"candidate_id": row["candidate_id"], "document_id": row["document_id"], "split": row["split"], "output_status": "valid", "predicted_labels": labels, "illegal_labels": []}
         for row, labels in zip(rows, predicted)
     ]
     scored = score_predictions(rows, predictions, schema, predicate, allowed_splits={row["split"] for row in rows}, data_version=VERSIONS[dataset], input_version="target_anchored_v1", prediction_version="formal", mapping_version=schema.schema_id)
-    return scored["summary"]["f1"], None, predicted
+    return scored["summary"]["f1"], None, predicted, probabilities
 
 
-def train(dataset: str, entity: str, predicate: str, seed: int) -> None:
-    import torch
+def _population(train_rows: list[dict], fraction: int, seed: int, negative_strategy: str | None) -> list[dict]:
+    from schema_study.production_records import negative_population, subset_document_ids
+
+    rows = train_rows
+    if fraction != 100:
+        documents = subset_document_ids([row["document_id"] for row in rows], fraction, seed)
+        allowed = set(documents)
+        rows = [row for row in rows if row["document_id"] in allowed]
+    if negative_strategy:
+        tagged = [{**row, "positive": bool(row.get("gold_labels"))} for row in rows]
+        rows = negative_population(tagged, negative_strategy, seed)["rows"]
+    return rows
+
+
+def _criterion(dataset: str, objective: str, target, torch):
     from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss
+
+    if dataset == "drugprot" and objective == "focal":
+        from schema_study.production_encoder import multilabel_focal_loss
+        return lambda logits, gold: multilabel_focal_loss(logits, gold)
+    if dataset == "drugprot" and objective == "class_weighted":
+        raise RuntimeError("DrugProt class weights use the multi-label positive weights and are not a categorical focal loss.")
+    if objective == "focal":
+        from schema_study.production_encoder import focal_loss
+        return lambda logits, gold: focal_loss(logits, gold.view(-1))
+    if objective == "class_weighted":
+        from schema_study.production_records import class_weight_from_counts
+        counts = torch.bincount(torch.as_tensor(target).reshape(-1)).tolist()
+        counts = [count if count else 1 for count in counts]
+        weight = torch.tensor(class_weight_from_counts(counts), dtype=torch.float32)
+        return lambda logits, gold: torch.nn.functional.cross_entropy(logits, gold.view(-1), weight=weight.to(logits.device))
+    return BCEWithLogitsLoss() if dataset == "drugprot" else CrossEntropyLoss()
+
+
+def train(dataset: str, entity: str, predicate: str, seed: int, model_name: str = "biomedbert", objective: str = "standard", fraction: int = 100, negative_strategy: str | None = None, learning_rate: float | None = None, output_dir: Path | None = None) -> dict:
+    import torch
     from transformers import get_linear_schedule_with_warmup
 
-    output = _output(dataset, entity, predicate, seed)
+    _bind_encoder_contexts(model_name)
+    output = Path(output_dir) if output_dir is not None else _output(dataset, entity, predicate, seed)
+    if "formal_20261115" in str(output) and os.environ.get("SCHEMA_STUDY_PROGRAMME") == "formal_matched_e0_e7":
+        raise RuntimeError("The matched programme must not write into formal_20261115.")
     output.mkdir(parents=True, exist_ok=True)
     last_path = output / "checkpoints/last/checkpoint.pt"
     if last_path.is_file():
         saved = torch.load(last_path, map_location="cpu", weights_only=False)
         if saved.get("completed_epochs", 0) >= 10:
             _record(output, "train", {"model_called": False, "reason": "training_already_complete", "calls": 0})
-            return
-    tokenizer = load_biomedbert_tokenizer(str(TOKENIZER_DIR))
-    observed = [tokenizer.convert_tokens_to_ids(marker) for marker in SPECIAL_MARKERS]
-    if observed != list(range(30522, 30522 + len(SPECIAL_MARKERS))):
-        raise RuntimeError("Marker ids differ from the accepted tokenizer.")
+            return {"completed_epochs": saved["completed_epochs"], "best_score": saved.get("best_score"), "updates": saved.get("optimizer_updates", 0)}
+    tokenizer = encoder_tokenizer(model_name)
     rows, classes, schema = _build_rows(dataset, entity, predicate, {"train", "dev"})
-    train_rows = [row for row in rows if row["split"] == "train"]
+    train_rows = _population([row for row in rows if row["split"] == "train"], fraction, seed, negative_strategy)
     dev_rows = [row for row in rows if row["split"] == "dev"]
     train_ids, train_lengths = _encode(tokenizer, train_rows)
     dev_ids, dev_lengths = _encode(tokenizer, dev_rows)
     train_target = _targets(dataset, train_rows, classes)
-    encoder, dropout, head, streams = _model(tokenizer, classes, seed, entity, predicate, torch)
+    encoder, dropout, head, streams = _model(tokenizer, classes, seed, entity, predicate, torch, model_name)
     optimizer, hyperparameters = _optimizer(encoder, head, torch)
+    if learning_rate is not None:
+        for group in optimizer.param_groups:
+            group["lr"] = learning_rate
+        hyperparameters = {**hyperparameters, "learning_rate": learning_rate}
     steps_per_epoch = (len(train_rows) + 15) // 16
     total_steps = steps_per_epoch * hyperparameters["max_epochs"]
     scheduler = get_linear_schedule_with_warmup(optimizer, max(1, int(total_steps * hyperparameters["warmup_ratio"])), total_steps)
-    criterion = BCEWithLogitsLoss() if dataset == "drugprot" else CrossEntropyLoss()
+    criterion = _criterion(dataset, objective, train_target, torch)
     order_rng = random.Random(streams["data_order"])
     book = {"completed_epochs": 0, "optimizer_updates": 0, "best_score": None, "best_epoch": None, "threshold": None}
     if last_path.is_file():
@@ -333,7 +413,25 @@ def train(dataset: str, entity: str, predicate: str, seed: int) -> None:
             scheduler.step()
             book["optimizer_updates"] += 1
             losses.append(float(loss.detach().float()))
-        metric, threshold, _labels = _score_split(encoder, dropout, head, dev_ids, dev_lengths, dev_rows, classes, dataset, schema, predicate, None, torch)
+            if book["optimizer_updates"] == 1 and "formal_20261115" not in str(output):
+                first = _package(encoder, dropout, head, optimizer, scheduler, book, order_rng, torch)
+                _save(output / "checkpoints/last/checkpoint.pt", first)
+                reloaded = torch.load(output / "checkpoints/last/checkpoint.pt", map_location="cpu", weights_only=False)
+                if not reloaded.get("encoder") or any(not torch.isfinite(tensor).all() for tensor in reloaded["encoder"].values()):
+                    raise RuntimeError("The first encoder checkpoint did not reload as finite weights.")
+                from schema_study.production_runtime import publish_scientific_status
+
+                publish_scientific_status(output, {
+                    "technical_preflight": True,
+                    "useful_computation_started": time.time(),
+                    "model_loaded": True,
+                    "device": "cuda",
+                    "optimiser_steps": 1,
+                    "loss_finite": True,
+                    "checkpoint_validated": True,
+                    "monitoring_guarantees_completion": False,
+                })
+        metric, threshold, _labels, _probabilities = _score_split(encoder, dropout, head, dev_ids, dev_lengths, dev_rows, classes, dataset, schema, predicate, None, torch)
         book["completed_epochs"] = epoch
         improved = book["best_score"] is None or metric > book["best_score"] or (metric == book["best_score"] and epoch < book["best_epoch"])
         if improved:
@@ -351,6 +449,28 @@ def train(dataset: str, entity: str, predicate: str, seed: int) -> None:
             }) + "\n")
         print(f"epoch {epoch} dev_f1 {metric:.6f} seconds {time.perf_counter() - started:.1f}", flush=True)
     _record(output, "train", {"model_called": True, "epochs": book["completed_epochs"], "updates": book["optimizer_updates"], "best_epoch": book["best_epoch"], "best_score": book["best_score"]})
+    if "formal_20261115" not in str(output):
+        from schema_study.production_runtime import publish_scientific_status
+
+        finished = book["completed_epochs"] >= hyperparameters["max_epochs"] and book["best_score"] is not None and (output / "checkpoints/best/checkpoint.pt").is_file()
+        started = time.time()
+        existing = output / "scientific_status.json"
+        if existing.is_file():
+            prior = json.loads(existing.read_text(encoding="utf-8"))
+            if prior.get("useful_computation_started") is not None:
+                started = prior["useful_computation_started"]
+        publish_scientific_status(output, {
+            "scientific": "training_completed" if finished else "valid_continuation_required",
+            "preflight_passed": book["optimizer_updates"] >= 1,
+            "technical_preflight": book["optimizer_updates"] >= 1,
+            "useful_computation_started": started,
+            "selection_recorded": book["best_score"] is not None and book["best_epoch"] is not None,
+            "checkpoint_validated": (output / "checkpoints/best/checkpoint.pt").is_file(),
+            "monitoring_guarantees_completion": False,
+            "steps": book["optimizer_updates"],
+            "total_steps": total_steps,
+        })
+    return {"completed_epochs": book["completed_epochs"], "best_score": book["best_score"], "updates": book["optimizer_updates"]}
 
 
 def _package(encoder, dropout, head, optimizer, scheduler, book, order_rng, torch) -> dict:
@@ -393,38 +513,53 @@ def _record(output: Path, kind: str, payload: dict) -> None:
     write_process_json(directory, "resource_usage.json", payload)
 
 
-def predict(dataset: str, entity: str, predicate: str, seed: int) -> None:
+def predict(dataset: str, entity: str, predicate: str, seed: int, model_name: str = "biomedbert", output_dir: Path | None = None, checkpoint: Path | None = None) -> dict:
     import torch
 
-    output = _output(dataset, entity, predicate, seed)
+    _bind_encoder_contexts(model_name)
+    output = Path(output_dir) if output_dir is not None else _output(dataset, entity, predicate, seed)
+    output.mkdir(parents=True, exist_ok=True)
     prediction_path = output / "predictions.jsonl"
     if prediction_path.is_file() and (output / "prediction_complete.json").is_file():
         _record(output, "predict", {"model_called": False, "reason": "predictions_already_complete"})
-        return
-    tokenizer = load_biomedbert_tokenizer(str(TOKENIZER_DIR))
+        return {"completed": True, "status": "inference_completed", "predictions_usable": True}
+    tokenizer = encoder_tokenizer(model_name)
     schema_name = "biored" if dataset != "drugprot" else "drugprot"
     schema = load_schema(CODE / "configs/schemas" / f"{schema_name}.yaml")
     classes = [label.stable_id for label in schema.level_labels(predicate)]
     if dataset != "drugprot":
         classes.append(schema.no_relation_id)
-    encoder, dropout, head, _streams = _model(tokenizer, classes, seed, entity, predicate, torch)
-    saved = torch.load(output / "checkpoints/best/checkpoint.pt", map_location="cpu", weights_only=False)
+    encoder, dropout, head, _streams = _model(tokenizer, classes, seed, entity, predicate, torch, model_name)
+    checkpoint_path = Path(checkpoint) if checkpoint is not None else output / "checkpoints/best/checkpoint.pt"
+    if not checkpoint_path.is_file():
+        return {"completed": False, "status": "valid_continuation_required", "reason": "selected checkpoint is absent"}
+    saved = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
     encoder.load_state_dict(saved["encoder"])
     dropout.load_state_dict(saved["dropout"])
     head.load_state_dict(saved["classifier"])
-    targets = [("biored", "test"), ("bc8", "bc8")] if dataset == "biored" else [("drugprot", "eval")]
+    if dataset == "biored":
+        targets = [("biored", "test"), ("bc8", "bc8")]
+    elif dataset == "bc8":
+        targets = [("bc8", "bc8")]
+    else:
+        targets = [("drugprot", "eval")]
+    populations: dict[str, int] = {}
+    expected_ids: dict[str, set[str]] = {}
+    written_rows: list[dict] = []
     with prediction_path.open("w", encoding="utf-8") as handle:
         for target_dataset, split in targets:
             rows, _target_classes, target_schema = _build_rows(target_dataset, entity, predicate, {split})
             if [label.stable_id for label in target_schema.level_labels(predicate)] + ([] if dataset == "drugprot" else [target_schema.no_relation_id]) != classes:
                 raise RuntimeError("Prediction label space does not match the trained head.")
             ids, lengths = _encode(tokenizer, rows)
-            _metric, _threshold, labels = _score_split(
+            _metric, _threshold, labels, probabilities = _score_split(
                 encoder, dropout, head, ids, lengths, rows, classes, "drugprot" if dataset == "drugprot" else "biored",
                 target_schema, predicate, saved["threshold"], torch,
             )
-            for row, predicted in zip(rows, labels):
-                handle.write(json.dumps({
+            populations[target_dataset] = populations.get(target_dataset, 0) + len(rows)
+            expected_ids.setdefault(target_dataset, set()).update(row["candidate_id"] for row in rows)
+            for row, predicted, scores in zip(rows, labels, probabilities):
+                record = {
                     "candidate_id": row["candidate_id"],
                     "document_id": row["document_id"],
                     "dataset": target_dataset,
@@ -434,17 +569,92 @@ def predict(dataset: str, entity: str, predicate: str, seed: int) -> None:
                     "seed": seed,
                     "output_status": "valid",
                     "predicted_labels": predicted,
+                    "label_probabilities": scores,
                     "illegal_labels": [],
                     "threshold": saved["threshold"],
                     "checkpoint": "best",
                     "best_epoch": saved["best_epoch"],
-                }, ensure_ascii=False) + "\n")
+                }
+                written_rows.append(record)
+                handle.write(json.dumps(record, ensure_ascii=False) + "\n")
+    from schema_study.programme_closure import publish_ledger_acceptance
+
+    for corpus, identifiers in expected_ids.items():
+        publish_ledger_acceptance(output, corpus, written_rows, identifiers)
     (output / "prediction_complete.json").write_text(json.dumps({"rows_written": True, "checkpoint": "best", "best_epoch": saved["best_epoch"]}) + "\n", encoding="utf-8")
     _record(output, "predict", {"model_called": True, "checkpoint": "best", "best_epoch": saved["best_epoch"]})
+    from schema_study.production_runtime import publish_scientific_status
+
+    publish_scientific_status(output, {
+        "scientific": "inference_completed",
+        "predictions_usable": prediction_path.is_file() and prediction_path.stat().st_size > 0 and all(populations.values()),
+        "population_complete": bool(populations) and all(count > 0 for count in populations.values()),
+        "populations": populations,
+        "dataset": dataset,
+        "checkpoint_validated": True,
+        "technical_preflight": True,
+        "useful_computation_started": time.time(),
+    })
+    return {"completed": True, "status": "inference_completed", "predictions_usable": True}
+
+
+def evaluate(task: dict) -> dict:
+    """Score the agreed final populations with the selected encoder checkpoint."""
+    checkpoint = Path(task["checkpoint_source"])
+    return predict(
+        task["dataset"],
+        task["entity"],
+        task.get("schema_predicate") or task["predicate"],
+        int(task["seed"]),
+        model_name=task.get("model") or "biomedbert",
+        output_dir=Path(task["output"]),
+        checkpoint=checkpoint,
+    )
+
+
+def _bind_encoder_contexts(model_name: str) -> None:
+    """Principal BiomedBERT keeps its verified windows. BioLinkBERT uses its own verified collection."""
+    apply_programme()
+    if model_name != "biolinkbert":
+        return
+    versions = {
+        "biored": "target_anchored_v2__biolinkbert_b71f5d70_matched_e0_e7",
+        "bc8": "target_anchored_v2__biolinkbert_b71f5d70_matched_e0_e7",
+        "drugprot": "target_anchored_v1__biolinkbert_b71f5d70",
+    }
+    for corpus, version in versions.items():
+        directory = STORAGE / "data/inputs" / corpus / version
+        ready = directory / "READY.json"
+        path = directory / "contexts.jsonl"
+        if not ready.is_file() or not path.is_file():
+            raise RuntimeError(f"BioLinkBERT contexts for {corpus} are not verified. The source windows were not truncated.")
+        CONTEXTS[corpus] = path
+
+
+_CONTEXT_OVERRIDE: dict[str, Path] = {}
+
+
+def apply_programme() -> str:
+    """Point a new run at the matched E0–E7 inputs without moving the frozen 2026-11-15 run."""
+    global ROOT
+    programme = os.environ.get("SCHEMA_STUDY_PROGRAMME", "formal_20261115")
+    if programme == "formal_matched_e0_e7":
+        ROOT = STORAGE / "studies/schema_granularity_v1/runs/formal/formal_matched_e0_e7"
+        CONTEXTS["biored"] = STORAGE / "data/inputs/biored/target_anchored_v2__biomedbert_e1354b7a_matched_e0_e7/contexts.jsonl"
+        CONTEXTS["bc8"] = STORAGE / "data/inputs/bc8/target_anchored_v2__biomedbert_e1354b7a_matched_e0_e7/contexts.jsonl"
+    for corpus, path in _CONTEXT_OVERRIDE.items():
+        CONTEXTS[corpus] = path
+    return programme
 
 
 def main() -> None:
     import sys
+    from schema_study.paths import get_paths
+    from schema_study.production_plan import gpu_authorised
+
+    if not gpu_authorised(get_paths().study, get_paths().code_root):
+        raise SystemExit(3)
+    apply_programme()
     if len(sys.argv) != 6 or sys.argv[1] not in {"train", "predict"}:
         raise SystemExit("Usage: formal_train train|predict dataset entity predicate seed")
     action, dataset, entity, predicate, seed = sys.argv[1:]
